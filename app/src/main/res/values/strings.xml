@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Team Posse Striking</string>
+
+    <string name="tab_home">홈</string>
+    <string name="tab_schedule">스케줄</string>
+    <string name="tab_attendance">출석</string>
+    <string name="tab_community">커뮤니티</string>
+    <string name="tab_profile">프로필</string>
+
+    <string name="gym_name">팀파시 스트라이킹</string>
+    <string name="gym_tagline">개인의 성장, 함께하는 진화</string>
+</resources>
