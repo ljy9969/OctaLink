@@ -6,9 +6,10 @@ Strava, Smashr를 참고. 궁극 목표는 **개인의 성장**.
 
 ## 진행 현황 (2026-05-08 기준)
 
-UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 배포 인프라(서명 키 + 개인정보처리방침 GitHub Pages 호스팅 + 체육관 정보 화면) + Play 콘솔 개발자 계정 등록 완료 + GitHub 저장소 연동. 다음은 Firebase 프로젝트 생성 + Repository 매핑 + 인증 연동 + Play Store 등록 자료(아이콘/그래픽/스크린샷/설명).
+UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 배포 인프라(서명 키 + 개인정보처리방침 GitHub Pages 호스팅 + 체육관 정보 화면) + Play 콘솔 개발자 계정 등록 완료 + GitHub 저장소 연동 + Play Store 등록 자산(아이콘 / 피처 그래픽) + 패키지 리네임(`com.unboundapex.octalink`). 다음은 Firebase 프로젝트 생성 + Repository 매핑 + 인증 연동 + 스크린샷 + 앱 설명.
 
-저장소: https://github.com/ljy9969/OctaLink
+저장소: https://github.com/ljy9969/OctaLink (브랜치: `main`, `teamposse` — USF4 자산 백업)
+패키지: `com.unboundapex.octalink` (applicationId 동일, Play Store 등록 후 변경 불가)
 
 | 탭 | 화면 | 상태 |
 |---|---|---|
@@ -67,7 +68,7 @@ UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정)
 # 1. local.properties에 다음 키 등록 (gitignored)
 HOLIDAY_API_KEY=<공공데이터 특일정보 serviceKey>
 
-# 2. Android Studio에서 d:\source\teamposse-app 열고 Run ▶
+# 2. Android Studio에서 d:\source\OctaLink 열고 Run ▶
 # 또는 CLI:
 ./gradlew :app:assembleDebug
 ```
@@ -99,7 +100,7 @@ gradlew :app:bundleRelease      :: AAB (Play Console 업로드용)
 app/src/main/
 ├── AndroidManifest.xml
 ├── assets/avatars/README.txt          # 캐릭터 이미지 드롭존 + 저작권 경고
-├── java/com/teamposse/striking/
+├── java/com/unboundapex/octalink/
 │   ├── MainActivity.kt                # installSplashScreen + HolidayRepository.init
 │   ├── navigation/PosseApp.kt         # 커스텀 Row 44dp 네비게이션 + NavHost
 │   ├── data/
@@ -169,19 +170,19 @@ app/src/main/
 
 배포 직전에 점검할 항목. 인프라 코드는 준비되어 있고, 실제 등록/호스팅/이미지만 운영자가 채우면 됨.
 
-- [ ] **`RELEASE_KEYSTORE_*` 4개 키 생성 + 백업** — `tools/generate-release-keystore.bat` 실행, 결과 `.jks` 를 비밀번호 매니저 + 외장 / 암호화 드라이브에 별도 보관 (분실 시 업데이트 영구 불가)
+- [x] **`RELEASE_KEYSTORE_*` 4개 키 생성 + 백업** — `app/teamposse-release.jks` 생성, AAB 빌드 검증 완료. 비밀번호 매니저 + 외장 / 암호화 드라이브 백업 권장 (분실 시 업데이트 영구 불가)
 - [x] **`docs/privacy-policy.html` 호스팅** — GitHub Pages 발행, `https://ljy9969.github.io/OctaLink/privacy-policy.html` 에서 렌더링 확인 완료
 - [x] **`GymInfo.PRIVACY_POLICY_URL` 갱신** — Pages URL 반영 완료
-- [ ] **앱 아이콘 512×512 PNG** — Play Store 등록용. 현재 `mipmap-*/ic_launcher_foreground.webp` 로 추출 가능 (Image Asset Studio)
-- [ ] **피처 그래픽 1024×500** — Play Store 페이지 상단 배너. 로고 + 슬로건 "개인의 성장, 함께하는 진화" 활용
-- [ ] **스크린샷 최소 2장** — 홈(로고 배너 + 피드) / 매치(불꽃 라인 트리) 추천
+- [x] **앱 아이콘 512×512 PNG** — `app/src/main/ic_launcher-playstore.png` (흰 배경 + 로고 92% 폭). 생성 스크립트: `tools/make-playstore-icon.py`
+- [x] **피처 그래픽 1024×500** — `app/src/main/feature_graphic3.png` (Canva 제작, 흰 배경 + 원본 로고 + 슬로건). 후보 4종 보존(`feature_graphic1.png` ~ `feature_graphic_v3.png`)
+- [ ] **스크린샷 최소 2장** — 홈(로고 배너 + 피드) / 매치(불꽃 라인 트리) 추천. 에뮬레이터(Pixel 8) 캡처 권장
 - [ ] **앱 설명** — 단문 80자 + 장문 4000자. 단문 예: "강남 MMA 체육관 회원 전용 출결·매치 관리 앱"
 - [x] **Play 콘솔 개발자 계정 등록** ($25) — 2026-05-08 본인 명의 개인 계정으로 완료
 - [ ] **콘텐츠 등급 IARC 설문** — 격투기 콘텐츠 12+ 가능성
 - [ ] **타겟 API Level 35** 업그레이드 — 2026-08-31부터 신규 앱 의무 (현재 34)
 - [ ] **체육관 측 상표 / 로고 사용 동의** — 카카오톡 등 텍스트 기록. "Team Posse Striking" 명칭과 `logo_teamposse.jpg` 사용 허락
 - [ ] **앱 내 비공식 표기** — "본 앱은 회원이 자체 제작한 비공식 도구입니다" 같은 푸터 추가 (체육관 공식 앱 오해 방지)
-- [ ] **USF4 캐릭터 이미지 폴백** — 캡콤 IP. 배포 빌드에서 제거 또는 자체 일러스트 / 유저 업로드 + 이니셜 폴백 중 선택
+- [x] **USF4 캐릭터 이미지 자산 백업** — `teamposse` 브랜치(원격 보존)로 보관. 배포 빌드 전 main에서 제거 + 자체 일러스트 / 유저 업로드 + 이니셜 폴백 중 선택
 
 ## 알려진 함정
 
@@ -207,8 +208,19 @@ app/src/main/
 - [x] (05-06) `백엔드 / 데이터 (메인)` **ViewModel + StateFlow 도입** — `SessionViewModel` / `TournamentViewModel` 도입, 옛 `CurrentUser` / `TournamentState` 싱글톤 제거. PosseApp 루트에서 hoist → 화면별 파라미터 전달
 - [x] (05-08) `배포 준비` **Play 콘솔 개발자 계정 등록** — $25 결제 + 신원 확인 완료
 - [x] (05-08) `배포 준비` **개인정보처리방침 호스팅** — GitHub Pages 발행, `GymInfo.PRIVACY_POLICY_URL = https://ljy9969.github.io/OctaLink/privacy-policy.html` 갱신, 브라우저 렌더링 확인 완료
+- [x] (05-08) `배포 준비` **앱 서명 키 생성 + 서명된 AAB 빌드** — `app/teamposse-release.jks` 발급, `gradlew :app:bundleRelease` 통과
+- [x] (05-08) `배포 준비` **앱 아이콘 + 피처 그래픽 확정** — `ic_launcher-playstore.png` 신규 + `feature_graphic3.png` 확정. 생성 스크립트 `tools/make-playstore-icon.py`, `tools/make-feature-graphic*.py`
+- [x] (05-08) `배포 준비` **앱 / 회사 / 개발자 네이밍 정리** — 앱 OctaLink, 회사 Unbound Apex Systems, 개발자 BlackCat Strike. 문서·UI·privacy-policy 일괄 갱신
+- [x] (05-08) `배포 준비` **GitHub 저장소 + 디렉토리 + 패키지 리네임** — repo `Team-Posse → OctaLink`, dir `teamposse-app → OctaLink`, package `com.teamposse.striking → com.unboundapex.octalink` (applicationId 동일)
+- [x] (05-08) `UX 디테일` **출석 30분 윈도우 게이팅** — `Schedule.kt:checkInWindow()` + `CheckInWindow` enum. 휴무 / 수업 종료 / 30분 초과 모두 비활성
 
 ### 남은 일
+- [ ] `배포 준비` **스크린샷 최소 2장** — 에뮬레이터 Pixel 8 캡처. 홈 / 매치 권장
+- [ ] `배포 준비` **앱 설명** — 단문 80자 + 장문 4000자
+- [ ] `배포 준비` **콘텐츠 등급 IARC 설문** — 격투기 콘텐츠 12+
+- [ ] `배포 준비` **타겟 API Level 35 업그레이드** — 2026-08-31 의무
+- [ ] `배포 준비` **체육관 측 상표 / 로고 사용 동의** — 텍스트 기록
+- [ ] `배포 준비` **앱 내 비공식 표기 푸터** — "본 앱은 회원이 자체 제작한 비공식 도구입니다"
 - [ ] `백엔드 / 데이터 (메인)` **Firebase 프로젝트 생성** — google-services.json 등록 + Auth/Firestore/FCM/Storage 활성화
 - [ ] `백엔드 / 데이터 (메인)` **Repository 추상화** — `*Doc` ↔ Firestore 직렬화 매핑. 화면은 인터페이스에만 의존
 - [ ] `백엔드 / 데이터 (메인)` **Firestore Security Rules 초안** — members read-all + write-self / attendance create-self / comments·scores·tournaments write-master
@@ -216,7 +228,7 @@ app/src/main/
 - [ ] `UX 디테일` **관장 권한 분리** — 한 줄 코멘트 작성, 스킬 점수 입력, 출결 검토 화면 (회원에게는 read-only). `Role.MASTER` 분기
 - [ ] `UX 디테일` **회원 가입 / 입관 신청 플로우** — 관장 승인 단계 (`MembershipStatus.PENDING → APPROVED`)
 - [ ] `백엔드 / 데이터 (메인)` **인증** — 카카오 OAuth → Firebase Custom Token 교환 (Cloud Functions or 자체 엔드포인트), 또는 네이버
-- [ ] `UX 디테일` **체크인 검증** — 시간(수업 30분 전) + 위치(GPS 체육관 반경) 옵션
+- [ ] `UX 디테일` **체크인 위치 검증** — GPS 체육관 반경 옵션 (시간 30분 윈도우는 05-08 완료)
 - [ ] `배포 준비` **푸시 알림 (FCM)** — 수업 리마인더, 한 줄 코멘트 도착, 대진표 업데이트
 - [ ] `UX 디테일` **커뮤니티 글 작성 / 영상 업로드** — Firebase Storage 또는 Cloudinary
 - [ ] `배포 준비` **저작권 정리** — USF4 캐릭터 이미지는 캡콤 IP라 배포 빌드에서 제거 또는 라이선스 취득 / 자체 일러스트 / 유저 업로드 + 이니셜 폴백 중 선택
