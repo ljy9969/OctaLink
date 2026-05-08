@@ -77,13 +77,12 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item {
-                PosseCard {
+                PosseCard(leftStripeColor = belt.ringColor) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AvatarTile(
                             avatar = avatar,
                             size = 88.dp,
-                            ringColor = belt.ringColor,
-                            ringWidth = 6.dp,
+                            ringColor = null,
                             modifier = Modifier
                                 .padding(start = 10.dp)
                                 .clickable { pickerOpen = true }

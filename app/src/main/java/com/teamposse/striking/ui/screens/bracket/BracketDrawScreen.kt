@@ -340,14 +340,14 @@ private fun MemberRow(member: Member, session: SessionState, checked: Boolean, o
         if (member.name == session.name) session.avatarId else member.avatarId
     PosseCard(
         modifier = Modifier.clickable { onToggle() },
-        padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+        padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+        leftStripeColor = member.belt.ringColor,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AvatarTile(
                 avatar = avatarById(effectiveAvatarId),
                 size = 40.dp,
-                ringColor = member.belt.ringColor,
-                ringWidth = 3.dp
+                ringColor = null,
             )
             Spacer(Modifier.width(10.dp))
             Column(

@@ -19,8 +19,13 @@ object GymInfo {
     /** 네이버 블로그 */
     const val BLOG_URL: String = "https://blog.naver.com/teamposse2007"
 
-    /** 개인정보처리방침 호스팅 URL — 배포 전 GitHub Pages 등으로 교체 */
-    const val PRIVACY_POLICY_URL: String = "https://teamposse.github.io/striking-app/privacy-policy.html"
+    /**
+     * 개인정보처리방침 호스팅 URL.
+     * GitHub Pages: Settings → Pages → Source: main branch / /docs folder
+     * 활성화 후 약 1분 내에 URL 발행. Play Store 등록용으로도 안정적.
+     */
+    const val PRIVACY_POLICY_URL: String =
+        "https://ljy9969.github.io/Team-Posse/privacy-policy.html"
 
     /** Play Store 출시 후 업데이트 */
     const val PLAY_STORE_URL: String = "https://play.google.com/store/apps/details?id=com.teamposse.striking"

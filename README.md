@@ -3,9 +3,11 @@
 MMA 체육관 **Team Posse Striking** (강남점) 회원 전용 앱.
 Strava, Smashr를 참고. 궁극 목표는 **개인의 성장**.
 
-## 진행 현황 (2026-05-06 기준)
+## 진행 현황 (2026-05-08 기준)
 
-UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 배포 준비 인프라(서명 키 + 개인정보처리방침 + 체육관 정보 화면). 다음은 Firebase 프로젝트 생성 + Repository 매핑 + 인증 연동.
+UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 배포 인프라(서명 키 + 개인정보처리방침 GitHub Pages 호스팅 + 체육관 정보 화면) + Play 콘솔 개발자 계정 등록 완료 + GitHub 저장소 연동. 다음은 Firebase 프로젝트 생성 + Repository 매핑 + 인증 연동 + Play Store 등록 자료(아이콘/그래픽/스크린샷/설명).
+
+저장소: https://github.com/ljy9969/Team-Posse
 
 | 탭 | 화면 | 상태 |
 |---|---|---|
@@ -25,7 +27,7 @@ UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정)
 - **레이아웃 스캐폴드:** `PosseScreen(title, subtitle, header)` + `PosseCard(modifier, padding)`
   - `header` 슬롯이 풀 너비 (홈 로고 배너용)
   - title이 있으면 같은 행에 우측 정렬 subtitle (`maxLines = 2` + `\n` 지원)
-- **하단 네비게이션:** 커스텀 Row 56dp · 아이콘만 중앙 정렬 · 활성 = primary, 비활성 = onSurfaceVariant
+- **하단 네비게이션:** 커스텀 Row 44dp · 아이콘만 중앙 정렬 · 활성 = primary, 비활성 = onSurfaceVariant
 - **칩 패턴:** 커뮤니티 TagBadge / Bracket ActionChip / Draw DrawActionChip / Belt+Weight 필터 칩 — 색 배경 + Bold 텍스트 + 클릭 영역 명확
 - **날짜 포맷 통일:** `M/D 요일` (예: `5/5 화`) — 홈 피드 / 커뮤니티 / 프로필 코멘트 / 출석 헤더 모두 동일
 
@@ -98,7 +100,7 @@ app/src/main/
 ├── assets/avatars/README.txt          # 캐릭터 이미지 드롭존 + 저작권 경고
 ├── java/com/teamposse/striking/
 │   ├── MainActivity.kt                # installSplashScreen + HolidayRepository.init
-│   ├── navigation/PosseApp.kt         # 커스텀 Row 56dp 네비게이션 + NavHost
+│   ├── navigation/PosseApp.kt         # 커스텀 Row 44dp 네비게이션 + NavHost
 │   ├── data/
 │   │   ├── AvatarCatalog.kt           # USF4 44명 카탈로그
 │   │   ├── BeltColors.kt              # 벨트 → 컬러 매핑
@@ -162,6 +164,24 @@ app/src/main/
 | 백엔드 | **Firebase (Firestore + Auth + FCM + Storage)**. 운영자 1인 + 회원 ~50명 규모에 자체 서버 비효율. 근거: `docs/backend-decision.md` |
 | 도메인 모델 | `data/schema/Schema.kt` — Member/ClassDef/Attendance/Comment/SkillScore/Tournament/Match 의 *Doc 클래스. 화면용 in-memory 모델과 분리 |
 
+## Play Store 출시 체크리스트
+
+배포 직전에 점검할 항목. 인프라 코드는 준비되어 있고, 실제 등록/호스팅/이미지만 운영자가 채우면 됨.
+
+- [ ] **`RELEASE_KEYSTORE_*` 4개 키 생성 + 백업** — `tools/generate-release-keystore.bat` 실행, 결과 `.jks` 를 비밀번호 매니저 + 외장 / 암호화 드라이브에 별도 보관 (분실 시 업데이트 영구 불가)
+- [x] **`docs/privacy-policy.html` 호스팅** — GitHub Pages 발행, `https://ljy9969.github.io/Team-Posse/privacy-policy.html` 에서 렌더링 확인 완료
+- [x] **`GymInfo.PRIVACY_POLICY_URL` 갱신** — Pages URL 반영 완료
+- [ ] **앱 아이콘 512×512 PNG** — Play Store 등록용. 현재 `mipmap-*/ic_launcher_foreground.webp` 로 추출 가능 (Image Asset Studio)
+- [ ] **피처 그래픽 1024×500** — Play Store 페이지 상단 배너. 로고 + 슬로건 "개인의 성장, 함께하는 진화" 활용
+- [ ] **스크린샷 최소 2장** — 홈(로고 배너 + 피드) / 매치(불꽃 라인 트리) 추천
+- [ ] **앱 설명** — 단문 80자 + 장문 4000자. 단문 예: "강남 MMA 체육관 회원 전용 출결·매치 관리 앱"
+- [x] **Play 콘솔 개발자 계정 등록** ($25) — 2026-05-08 본인 명의 개인 계정으로 완료
+- [ ] **콘텐츠 등급 IARC 설문** — 격투기 콘텐츠 12+ 가능성
+- [ ] **타겟 API Level 35** 업그레이드 — 2026-08-31부터 신규 앱 의무 (현재 34)
+- [ ] **체육관 측 상표 / 로고 사용 동의** — 카카오톡 등 텍스트 기록. "Team Posse Striking" 명칭과 `logo_teamposse.jpg` 사용 허락
+- [ ] **앱 내 비공식 표기** — "본 앱은 회원이 자체 제작한 비공식 도구입니다" 같은 푸터 추가 (체육관 공식 앱 오해 방지)
+- [ ] **USF4 캐릭터 이미지 폴백** — 캡콤 IP. 배포 빌드에서 제거 또는 자체 일러스트 / 유저 업로드 + 이니셜 폴백 중 선택
+
 ## 알려진 함정
 
 - **Image Asset Studio** 가 새 XML 파일 생성 시 라이선스 주석을 `<?xml?>` 선언 위에 삽입함 → mergeResources 빌드 실패. 마법사 사용 후 빌드 깨지면 신규 XML 첫 줄 확인.
@@ -177,18 +197,17 @@ app/src/main/
 
 쉽고 중요한 것부터 위 → 어렵거나 후순위는 아래.
 
-### 오늘(2026-05-06) 완료
-- [x] `배포 준비` **앱 서명 키** 인프라 — gradle release `signingConfig` + `tools/generate-release-keystore.bat` + README 가이드. keystore 파일 실제 생성/백업은 운영자 수동
-- [x] `배포 준비` **개인정보처리방침 페이지** — `docs/privacy-policy.html` (운영자 정보 채움 완료, GitHub Pages 등에 호스팅만 남음)
-- [x] `배포 준비` **체육관 정보 페이지** — `ui/screens/info/InfoScreen.kt` + 홈 화면 우상단 ⓘ 진입 버튼. 주소(네이버 지도) / 전화 / 메일 / 운영시간 / 정책 / 앱 버전
-- [x] `백엔드 / 데이터 (메인)` **데이터 모델** — `data/schema/Schema.kt` 7개 *Doc + Role/MembershipStatus/TournamentRound enum + Firestore Collections 경로 규약
-- [x] `백엔드 / 데이터 (메인)` **백엔드 선택** — Firebase Firestore 확정 (`docs/backend-decision.md`)
-- [x] `백엔드 / 데이터 (메인)` **ViewModel + StateFlow 도입** — `SessionViewModel` / `TournamentViewModel` 도입, 옛 `CurrentUser` / `TournamentState` 싱글톤 제거. PosseApp 루트에서 hoist → 화면별 파라미터 전달
+### 완료
+- [x] (05-06) `배포 준비` **앱 서명 키** 인프라 — gradle release `signingConfig` + `tools/generate-release-keystore.bat` + README 가이드. keystore 파일 실제 생성/백업은 운영자 수동
+- [x] (05-06) `배포 준비` **개인정보처리방침 페이지** — `docs/privacy-policy.html` (운영자 정보 채움 완료, GitHub Pages 등에 호스팅만 남음)
+- [x] (05-06) `배포 준비` **체육관 정보 페이지** — `ui/screens/info/InfoScreen.kt` + 홈 화면 우상단 ⓘ 진입 버튼. 주소(네이버 지도) / 전화 / 메일 / 운영시간 / 정책 / 앱 버전
+- [x] (05-06) `백엔드 / 데이터 (메인)` **데이터 모델** — `data/schema/Schema.kt` 7개 *Doc + Role/MembershipStatus/TournamentRound enum + Firestore Collections 경로 규약
+- [x] (05-06) `백엔드 / 데이터 (메인)` **백엔드 선택** — Firebase Firestore 확정 (`docs/backend-decision.md`)
+- [x] (05-06) `백엔드 / 데이터 (메인)` **ViewModel + StateFlow 도입** — `SessionViewModel` / `TournamentViewModel` 도입, 옛 `CurrentUser` / `TournamentState` 싱글톤 제거. PosseApp 루트에서 hoist → 화면별 파라미터 전달
+- [x] (05-08) `배포 준비` **Play 콘솔 개발자 계정 등록** — $25 결제 + 신원 확인 완료
+- [x] (05-08) `배포 준비` **개인정보처리방침 호스팅** — GitHub Pages 발행, `GymInfo.PRIVACY_POLICY_URL = https://ljy9969.github.io/Team-Posse/privacy-policy.html` 갱신, 브라우저 렌더링 확인 완료
 
 ### 남은 일
-
-- [ ] `배포 준비` **Play 콘솔 개발자 계정** ($25) — 결제만, 운영자 직접 가입
-- [ ] `배포 준비` **개인정보처리방침 호스팅** — `docs/privacy-policy.html` 을 GitHub Pages / Netlify 등에 올리고 `GymInfo.PRIVACY_POLICY_URL` 갱신
 - [ ] `백엔드 / 데이터 (메인)` **Firebase 프로젝트 생성** — google-services.json 등록 + Auth/Firestore/FCM/Storage 활성화
 - [ ] `백엔드 / 데이터 (메인)` **Repository 추상화** — `*Doc` ↔ Firestore 직렬화 매핑. 화면은 인터페이스에만 의존
 - [ ] `백엔드 / 데이터 (메인)` **Firestore Security Rules 초안** — members read-all + write-self / attendance create-self / comments·scores·tournaments write-master

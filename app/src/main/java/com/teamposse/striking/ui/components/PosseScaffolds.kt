@@ -4,9 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -107,6 +110,7 @@ fun PosseScreen(
 fun PosseCard(
     modifier: Modifier = Modifier,
     padding: PaddingValues = PaddingValues(16.dp),
+    leftStripeColor: Color? = null,
     content: @Composable () -> Unit
 ) {
     Surface(
@@ -116,9 +120,24 @@ fun PosseCard(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp
     ) {
-        Column(
-            modifier = Modifier.padding(padding),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) { content() }
+        if (leftStripeColor != null) {
+            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                Box(
+                    modifier = Modifier
+                        .width(8.dp)
+                        .fillMaxHeight()
+                        .background(leftStripeColor)
+                )
+                Column(
+                    modifier = Modifier.padding(padding),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) { content() }
+            }
+        } else {
+            Column(
+                modifier = Modifier.padding(padding),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) { content() }
+        }
     }
 }

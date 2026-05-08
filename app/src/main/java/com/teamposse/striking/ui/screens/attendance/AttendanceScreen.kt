@@ -26,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.teamposse.striking.data.Belt
+import com.teamposse.striking.data.CheckInWindow
 import com.teamposse.striking.data.avatarById
+import com.teamposse.striking.data.checkInWindow
 import com.teamposse.striking.data.session.SessionViewModel
 import com.teamposse.striking.data.currentOrNextClassLabel
 import com.teamposse.striking.data.isClosed
@@ -78,10 +80,10 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
     val dateLabel = remember(today) { shortDateLabel(today) }
     val closedToday = remember { isClosed(today) }
     val closedReason = remember { if (isHoliday(today)) "공휴일" else "일요일 정기 휴무" }
-    val classesEnded = remember(classLabel) {
-        classLabel == "오늘 수업 종료" || classLabel == "오늘 수업 없음"
-    }
-    val cantCheckIn = closedToday || classesEnded
+    val window = remember { checkInWindow() }
+    val classesEnded = window == CheckInWindow.AFTER_LAST_CLASS || window == CheckInWindow.NO_CLASS_TODAY
+    val tooEarly = window == CheckInWindow.BEFORE_WINDOW
+    val cantCheckIn = window != CheckInWindow.OPEN
 
     // 체크인 불가 시 상태 강제 해제
     if (cantCheckIn && checkedIn) checkedIn = false
@@ -106,8 +108,9 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                         when {
                             closedToday -> "오늘은 $closedReason 입니다. 🧘"
                             classesEnded -> "다음 수업에서 봐요! 👋"
+                            tooEarly -> "수업 시작 30분 전부터 가능. 🕰️"
                             checkedIn -> "오늘도 불태워봅시다! 🔥"
-                            else -> "수업 시작 30분 전부터 가능 🕰️"
+                            else -> "지금 체크인 가능합니다. ✅"
                         },
                         style = MaterialTheme.typography.titleMedium
                     )
@@ -130,6 +133,7 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                             when {
                                 closedToday -> "휴무일"
                                 classesEnded -> "수업 종료"
+                                tooEarly -> "대기"
                                 checkedIn -> "체크인 취소"
                                 else -> "체크인"
                             },
@@ -173,7 +177,8 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                         val isSelf = peer.name == session.name
                         PosseCard(
                             modifier = Modifier.weight(1f),
-                            padding = PaddingValues(12.dp)
+                            padding = PaddingValues(12.dp),
+                            leftStripeColor = peer.belt.ringColor,
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -182,8 +187,7 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                                 AvatarTile(
                                     avatar = avatarById(peer.avatarId),
                                     size = 40.dp,
-                                    ringColor = peer.belt.ringColor,
-                                    ringWidth = 3.dp
+                                    ringColor = null,
                                 )
                                 Spacer(Modifier.width(10.dp))
                                 Column(

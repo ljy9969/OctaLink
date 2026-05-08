@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 private val KST: ZoneId = ZoneId.of("Asia/Seoul")
 
@@ -88,4 +89,34 @@ fun currentOrNextClassLabel(now: LocalDateTime = LocalDateTime.now(KST)): String
     if (next != null) return "다음 ${next.start.format2digit()} ${next.name}"
 
     return "오늘 수업 종료"
+}
+
+/** 체크인 게이팅 상태. UI 가 분기 메시지/버튼 라벨에 사용. */
+enum class CheckInWindow { OPEN, CLOSED_DAY, NO_CLASS_TODAY, BEFORE_WINDOW, AFTER_LAST_CLASS }
+
+/**
+ * 출석 체크인 허용 여부.
+ * 규칙:
+ * - 휴무일 (일/공휴일) → CLOSED_DAY
+ * - 진행 중인 수업이 있으면 → OPEN
+ * - 다음 수업까지 30분 이내 → OPEN
+ * - 다음 수업까지 30분 초과 남음 → BEFORE_WINDOW
+ * - 오늘 수업이 끝났으면 → AFTER_LAST_CLASS
+ * - 오늘 수업 자체가 없으면 → NO_CLASS_TODAY
+ */
+fun checkInWindow(now: LocalDateTime = LocalDateTime.now(KST)): CheckInWindow {
+    val today = now.toLocalDate()
+    if (isClosed(today)) return CheckInWindow.CLOSED_DAY
+
+    val slots = slotsFor(today.dayOfWeek)
+    if (slots.isEmpty()) return CheckInWindow.NO_CLASS_TODAY
+
+    val time = now.toLocalTime()
+    if (slots.any { it.contains(time) }) return CheckInWindow.OPEN
+
+    val next = slots.firstOrNull { time < it.start }
+    if (next == null) return CheckInWindow.AFTER_LAST_CLASS
+
+    val minutesUntil = ChronoUnit.MINUTES.between(time, next.start)
+    return if (minutesUntil <= 30) CheckInWindow.OPEN else CheckInWindow.BEFORE_WINDOW
 }
