@@ -24,11 +24,11 @@ val hasReleaseSigning = listOf(
 ).all { !it.isNullOrBlank() }
 
 android {
-    namespace = "com.teamposse.striking"
+    namespace = "com.unboundapex.octalink"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.teamposse.striking"
+        applicationId = "com.unboundapex.octalink"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
