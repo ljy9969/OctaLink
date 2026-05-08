@@ -6,7 +6,7 @@ Strava, Smashr를 참고. 궁극 목표는 **개인의 성장**.
 
 ## 진행 현황 (2026-05-08 기준)
 
-UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 배포 인프라(서명 키 + 개인정보처리방침 GitHub Pages 호스팅 + 체육관 정보 화면) + Play 콘솔 개발자 계정 등록 완료 + GitHub 저장소 연동 + Play Store 등록 자산(아이콘 / 피처 그래픽) + 패키지 리네임(`com.unboundapex.octalink`). 다음은 Firebase 프로젝트 생성 + Repository 매핑 + 인증 연동 + 스크린샷 + 앱 설명.
+UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 배포 인프라(서명 키 + 개인정보처리방침 GitHub Pages 호스팅 + 체육관 정보 화면) + Play 콘솔 개발자 계정 등록 완료 + GitHub 저장소 연동 + Play Store 등록 자산(아이콘 / 피처 그래픽 / 폰 스크린샷 7종) + 패키지 리네임(`com.unboundapex.octalink`). 다음은 7"/10" 태블릿 스크린샷(Play 콘솔 필수) + Firebase 프로젝트 생성 + Repository 매핑 + 인증 연동 + 앱 설명.
 
 저장소: https://github.com/ljy9969/OctaLink (브랜치: `main`, `teamposse` — USF4 자산 백업)
 패키지: `com.unboundapex.octalink` (applicationId 동일, Play Store 등록 후 변경 불가)
@@ -76,13 +76,13 @@ HOLIDAY_API_KEY=<공공데이터 특일정보 serviceKey>
 ### 릴리즈 서명 (Play Store 업로드용)
 
 ```bat
-:: 1. keystore 생성 (한 번만, app\teamposse-release.jks 가 만들어짐)
+:: 1. keystore 생성 (한 번만, app\octalink-release.jks 가 만들어짐)
 tools\generate-release-keystore.bat
 
 :: 2. local.properties 에 다음 4줄 추가
-::    RELEASE_KEYSTORE_FILE=app/teamposse-release.jks
+::    RELEASE_KEYSTORE_FILE=app/octalink-release.jks
 ::    RELEASE_KEYSTORE_PASSWORD=<keystore password>
-::    RELEASE_KEY_ALIAS=teamposse-release
+::    RELEASE_KEY_ALIAS=octalink-release
 ::    RELEASE_KEY_PASSWORD=<key password>
 
 :: 3. 서명된 빌드
@@ -170,12 +170,13 @@ app/src/main/
 
 배포 직전에 점검할 항목. 인프라 코드는 준비되어 있고, 실제 등록/호스팅/이미지만 운영자가 채우면 됨.
 
-- [x] **`RELEASE_KEYSTORE_*` 4개 키 생성 + 백업** — `app/teamposse-release.jks` 생성, AAB 빌드 검증 완료. 비밀번호 매니저 + 외장 / 암호화 드라이브 백업 권장 (분실 시 업데이트 영구 불가)
+- [x] **`RELEASE_KEYSTORE_*` 4개 키 생성 + 백업** — `app/octalink-release.jks` (CN=OctaLink, O=Unbound Apex Systems). AAB 빌드 검증 완료. 비밀번호 매니저 + 외장 / 암호화 드라이브 백업 권장 (분실 시 업데이트 영구 불가)
 - [x] **`docs/privacy-policy.html` 호스팅** — GitHub Pages 발행, `https://ljy9969.github.io/OctaLink/privacy-policy.html` 에서 렌더링 확인 완료
 - [x] **`GymInfo.PRIVACY_POLICY_URL` 갱신** — Pages URL 반영 완료
 - [x] **앱 아이콘 512×512 PNG** — `app/src/main/ic_launcher-playstore.png` (흰 배경 + 로고 92% 폭). 생성 스크립트: `tools/make-playstore-icon.py`
 - [x] **피처 그래픽 1024×500** — `app/src/main/feature_graphic3.png` (Canva 제작, 흰 배경 + 원본 로고 + 슬로건). 후보 4종 보존(`feature_graphic1.png` ~ `feature_graphic_v3.png`)
-- [ ] **스크린샷 최소 2장** — 홈(로고 배너 + 피드) / 매치(불꽃 라인 트리) 추천. 에뮬레이터(Pixel 8) 캡처 권장
+- [x] **폰 스크린샷 7장** — `app/src/main/screenshots/01_home.png` ~ `07_profile.png` (홈/추첨/매치/커리큘럼/출석/커뮤니티/프로필). 에뮬레이터(Pixel 8) 캡처 완료
+- [ ] **7"/10" 태블릿 스크린샷** — Play 콘솔이 **필수(`*`)** 로 요구함(폰 스크린샷만으로는 스토어 등록 제출 불가). 7": 1024×7680 이내 16:9 또는 9:16 / 10": 1080×7680 이내. 태블릿 에뮬레이터(Nexus 7 / Pixel Tablet) 추가 후 같은 7개 화면 캡처
 - [ ] **앱 설명** — 단문 80자 + 장문 4000자. 단문 예: "강남 MMA 체육관 회원 전용 출결·매치 관리 앱"
 - [x] **Play 콘솔 개발자 계정 등록** ($25) — 2026-05-08 본인 명의 개인 계정으로 완료
 - [ ] **콘텐츠 등급 IARC 설문** — 격투기 콘텐츠 12+ 가능성
@@ -194,6 +195,7 @@ app/src/main/
 - `Text.softWrap = false`는 hard `\n`까지 무력화시킴 → 줄바꿈 필요 시 softWrap 기본값 유지하고 maxLines로만 제한.
 - 토너먼트 상위 매치가 미결정인데 round2 슬롯의 "?"를 부전승으로 자동 advance 하면 안 됨 — `propagateRound2Bye`에서 "더블 바이 vs 미결정 실경기" 구분 필수.
 - **Kotlin 블록 주석은 nested**: 백틱 ` 안의 `/*` 도 nested comment 시작으로 파싱됨 → 닫히지 않으면 EOF에서 "Unclosed comment" 에러. KDoc에 경로 예시 쓸 때 `/*` 패턴 회피.
+- **Play 콘솔 스토어 등록정보는 7"/10" 태블릿 스크린샷이 필수(`*`)** — 폰 스크린샷만 가지고는 "기본 스토어 등록정보 만들기" 저장 자체가 막힘. 폰만 타겟이어도 태블릿 에뮬레이터로 별도 캡처 필요.
 
 ## 내일 이어서 할 일
 
@@ -215,7 +217,8 @@ app/src/main/
 - [x] (05-08) `UX 디테일` **출석 30분 윈도우 게이팅** — `Schedule.kt:checkInWindow()` + `CheckInWindow` enum. 휴무 / 수업 종료 / 30분 초과 모두 비활성
 
 ### 남은 일
-- [ ] `배포 준비` **스크린샷 최소 2장** — 에뮬레이터 Pixel 8 캡처. 홈 / 매치 권장
+- [x] (05-08) `배포 준비` **폰 스크린샷 7종** — `app/src/main/screenshots/01_home.png` ~ `07_profile.png`. 홈/추첨/매치/커리큘럼/출석/커뮤니티/프로필 (Pixel 8 에뮬레이터)
+- [ ] `배포 준비` **7"/10" 태블릿 스크린샷** — Play 콘솔이 필수로 요구. 태블릿 에뮬레이터 추가 후 동일 7개 화면 캡처
 - [ ] `배포 준비` **앱 설명** — 단문 80자 + 장문 4000자
 - [ ] `배포 준비` **콘텐츠 등급 IARC 설문** — 격투기 콘텐츠 12+
 - [ ] `배포 준비` **타겟 API Level 35 업그레이드** — 2026-08-31 의무
