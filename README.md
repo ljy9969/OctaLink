@@ -1,13 +1,14 @@
-# Team Posse Striking — Android App
+# OctaLink — Android App
 
-MMA 체육관 **Team Posse Striking** (강남점) 회원 전용 앱.
+MMA 체육관 **Team Posse Striking 강남점** 회원 전용 앱 **OctaLink**.
+개발사: **Unbound Apex Systems** · 개발자: **BlackCat Strike** (이지연).
 Strava, Smashr를 참고. 궁극 목표는 **개인의 성장**.
 
 ## 진행 현황 (2026-05-08 기준)
 
 UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 배포 인프라(서명 키 + 개인정보처리방침 GitHub Pages 호스팅 + 체육관 정보 화면) + Play 콘솔 개발자 계정 등록 완료 + GitHub 저장소 연동. 다음은 Firebase 프로젝트 생성 + Repository 매핑 + 인증 연동 + Play Store 등록 자료(아이콘/그래픽/스크린샷/설명).
 
-저장소: https://github.com/ljy9969/Team-Posse
+저장소: https://github.com/ljy9969/OctaLink
 
 | 탭 | 화면 | 상태 |
 |---|---|---|
@@ -169,7 +170,7 @@ app/src/main/
 배포 직전에 점검할 항목. 인프라 코드는 준비되어 있고, 실제 등록/호스팅/이미지만 운영자가 채우면 됨.
 
 - [ ] **`RELEASE_KEYSTORE_*` 4개 키 생성 + 백업** — `tools/generate-release-keystore.bat` 실행, 결과 `.jks` 를 비밀번호 매니저 + 외장 / 암호화 드라이브에 별도 보관 (분실 시 업데이트 영구 불가)
-- [x] **`docs/privacy-policy.html` 호스팅** — GitHub Pages 발행, `https://ljy9969.github.io/Team-Posse/privacy-policy.html` 에서 렌더링 확인 완료
+- [x] **`docs/privacy-policy.html` 호스팅** — GitHub Pages 발행, `https://ljy9969.github.io/OctaLink/privacy-policy.html` 에서 렌더링 확인 완료
 - [x] **`GymInfo.PRIVACY_POLICY_URL` 갱신** — Pages URL 반영 완료
 - [ ] **앱 아이콘 512×512 PNG** — Play Store 등록용. 현재 `mipmap-*/ic_launcher_foreground.webp` 로 추출 가능 (Image Asset Studio)
 - [ ] **피처 그래픽 1024×500** — Play Store 페이지 상단 배너. 로고 + 슬로건 "개인의 성장, 함께하는 진화" 활용
@@ -205,7 +206,7 @@ app/src/main/
 - [x] (05-06) `백엔드 / 데이터 (메인)` **백엔드 선택** — Firebase Firestore 확정 (`docs/backend-decision.md`)
 - [x] (05-06) `백엔드 / 데이터 (메인)` **ViewModel + StateFlow 도입** — `SessionViewModel` / `TournamentViewModel` 도입, 옛 `CurrentUser` / `TournamentState` 싱글톤 제거. PosseApp 루트에서 hoist → 화면별 파라미터 전달
 - [x] (05-08) `배포 준비` **Play 콘솔 개발자 계정 등록** — $25 결제 + 신원 확인 완료
-- [x] (05-08) `배포 준비` **개인정보처리방침 호스팅** — GitHub Pages 발행, `GymInfo.PRIVACY_POLICY_URL = https://ljy9969.github.io/Team-Posse/privacy-policy.html` 갱신, 브라우저 렌더링 확인 완료
+- [x] (05-08) `배포 준비` **개인정보처리방침 호스팅** — GitHub Pages 발행, `GymInfo.PRIVACY_POLICY_URL = https://ljy9969.github.io/OctaLink/privacy-policy.html` 갱신, 브라우저 렌더링 확인 완료
 
 ### 남은 일
 - [ ] `백엔드 / 데이터 (메인)` **Firebase 프로젝트 생성** — google-services.json 등록 + Auth/Firestore/FCM/Storage 활성화

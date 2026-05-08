@@ -25,7 +25,7 @@ object GymInfo {
      * 활성화 후 약 1분 내에 URL 발행. Play Store 등록용으로도 안정적.
      */
     const val PRIVACY_POLICY_URL: String =
-        "https://ljy9969.github.io/Team-Posse/privacy-policy.html"
+        "https://ljy9969.github.io/OctaLink/privacy-policy.html"
 
     /** Play Store 출시 후 업데이트 */
     const val PLAY_STORE_URL: String = "https://play.google.com/store/apps/details?id=com.teamposse.striking"
