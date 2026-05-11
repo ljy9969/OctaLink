@@ -29,6 +29,7 @@ import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.CheckInWindow
 import com.unboundapex.octalink.data.avatarById
 import com.unboundapex.octalink.data.checkInWindow
+import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.data.currentOrNextClassLabel
 import com.unboundapex.octalink.data.isClosed
@@ -93,6 +94,27 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
+            // 운영진 전용 (관장+코치) — 출결 검토 진입점 (UI placeholder)
+            if (session.role.isStaff) {
+                item {
+                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
+                        Text(
+                            "운영진 모드",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            "▸ 회원별 일자별 출결 검토",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            "준비 중 — Firestore + Auth 도입 후 활성화",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             item {
                 PosseCard {
                     Text(

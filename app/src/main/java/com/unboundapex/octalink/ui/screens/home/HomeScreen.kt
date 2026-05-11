@@ -315,11 +315,11 @@ private fun HomeHeader() {
         contentAlignment = Alignment.Center
     ) {
         Image(
-            painter = painterResource(R.drawable.logo_teamposse),
-            contentDescription = "Team Posse Striking",
+            painter = painterResource(R.drawable.logo_octalink),
+            contentDescription = "OctaLink",
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .aspectRatio(966f / 300f),
+                .aspectRatio(1800f / 403f),
             contentScale = ContentScale.Fit,
             colorFilter = invertColorFilter
         )

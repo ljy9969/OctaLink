@@ -19,8 +19,26 @@ import java.time.LocalTime
  * 이 패키지의 *Doc 클래스는 영속화/네트워크 직렬화 단계에서만 사용.
  */
 
-/** 권한 역할. 관장 단독 평가 + 코멘트 작성 → MASTER 만 쓰기 권한, MEMBER는 read-only */
+/**
+ * 권한 역할 — 3단계 계층.
+ * - MASTER (관장): 전권. 스킬 점수 검토/확정 + 회원 가입 승인 + 권한 부여 등 최상위 권한
+ * - COACH (코치, 부관리자): 일상 운영. 회원 코멘트 작성 + 출결 검토 + 토너먼트 관리 + 공지 작성
+ *   추가로 스킬 점수 **입력(제안)** 가능 — 관장 검토 후 확정되는 워크플로
+ * - MEMBER (회원): 본인 출결/프로필/커뮤니티 글 작성. 평가/공지/관리 작업 불가
+ */
 enum class Role { MASTER, COACH, MEMBER }
+
+/**
+ * 스킬 점수 검토 상태.
+ * 코치 입력 → PROPOSED → 관장 검토 → APPROVED (또는 REJECTED 후 코치 재입력)
+ */
+enum class SkillScoreStatus { PROPOSED, APPROVED, REJECTED }
+
+/** 운영진(관장 + 코치). 일상 운영 작업 권한이 있는지. */
+val Role.isStaff: Boolean get() = this == Role.MASTER || this == Role.COACH
+
+/** 관장 단독. 스킬 평가 + 회원 가입 승인 등 최상위 권한이 있는지. */
+val Role.isMaster: Boolean get() = this == Role.MASTER
 
 /** 입관 신청 상태. PENDING → 관장 승인 → APPROVED, 거부 시 REJECTED */
 enum class MembershipStatus { PENDING, APPROVED, REJECTED, SUSPENDED, LEFT }
@@ -77,7 +95,8 @@ data class CommentDoc(
 data class SkillScoreDoc(
     val id: String,
     val memberId: String,
-    val byMasterId: String,
+    /** 입력자(코치 또는 관장). PROPOSED 상태에선 코치 ID, APPROVED 후엔 최종 검토한 관장 ID */
+    val byUserId: String,
     val striking: Float,
     val grappling: Float,
     val stamina: Float,
@@ -85,6 +104,11 @@ data class SkillScoreDoc(
     val mental: Float,
     val speed: Float,
     val evaluatedAt: Instant,
+    /** 검토 상태. 코치 입력 시 PROPOSED, 관장 확정 시 APPROVED, 반려 시 REJECTED */
+    val status: SkillScoreStatus = SkillScoreStatus.PROPOSED,
+    /** APPROVED/REJECTED 시점에 관장이 남기는 메타데이터 (선택) */
+    val reviewedByMasterId: String? = null,
+    val reviewedAt: Instant? = null,
 )
 
 /** 토너먼트 라운드 enum — TournamentDoc 로 그룹핑 */

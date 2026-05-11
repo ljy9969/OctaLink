@@ -20,7 +20,7 @@ private val PosseDarkScheme = darkColorScheme(
 )
 
 @Composable
-fun TeamPosseTheme(
+fun OctaLinkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {

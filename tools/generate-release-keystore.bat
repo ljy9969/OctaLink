@@ -1,13 +1,13 @@
 @echo off
 setlocal
 
-rem Team Posse Striking - release keystore generator
-rem Generates app/teamposse-release.jks (gitignored) using keytool.
+rem OctaLink - release keystore generator
+rem Generates app/octalink-release.jks (gitignored) using keytool.
 rem Run once. NEVER commit the resulting .jks file.
 
-set KEYSTORE_PATH=app\teamposse-release.jks
-set KEY_ALIAS=teamposse-release
-set DNAME=CN=Team Posse Striking, OU=Gangnam, O=Team Posse, L=Seoul, C=KR
+set KEYSTORE_PATH=app\octalink-release.jks
+set KEY_ALIAS=octalink-release
+set DNAME=CN=OctaLink, OU=BlackCat Strike, O=Unbound Apex Systems, L=Seoul, C=KR
 set VALIDITY_DAYS=10000
 
 if exist "%KEYSTORE_PATH%" (
@@ -52,7 +52,7 @@ echo [OK] Keystore created at %KEYSTORE_PATH%
 echo.
 echo Next steps:
 echo   1. Add the following lines to local.properties (gitignored):
-echo        RELEASE_KEYSTORE_FILE=app/teamposse-release.jks
+echo        RELEASE_KEYSTORE_FILE=app/octalink-release.jks
 echo        RELEASE_KEYSTORE_PASSWORD=^<keystore password you just typed^>
 echo        RELEASE_KEY_ALIAS=%KEY_ALIAS%
 echo        RELEASE_KEY_PASSWORD=^<key password you just typed^>

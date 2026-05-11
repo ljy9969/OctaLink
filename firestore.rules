@@ -1,0 +1,197 @@
+// OctaLink Firestore Security Rules — v1 초안 (2026-05-10)
+//
+// 권한 모델 (코드 sync: Schema.kt + RoleAllowlist.kt):
+//   MEMBER : 본인 출결/프로필/스킬 점수 read + 커뮤니티 글 작성
+//   COACH  : 운영진 일상 작업 (코멘트/출결검토/토너먼트/공지/스킬점수 입력 PROPOSED)
+//   MASTER : 전권 (스킬점수 검토·확정 / 회원 가입 승인 / 권한 부여)
+//
+// 컬렉션 경로 (Schema.kt Collections object 따름):
+//   members/{uid}                                  (회원 마스터)
+//   members/{uid}/attendance/{attendanceId}        (출석 서브컬렉션)
+//   members/{uid}/comments/{commentId}             (한 줄 코멘트, 본인 수신)
+//   members/{uid}/skillScores/{scoreId}            (스킬 점수 스냅샷)
+//   classDefs/{classId}                            (정기 클래스 정의)
+//   tournaments/{tournamentId}                     (토너먼트)
+//   tournaments/{tournamentId}/matches/{matchId}   (매치 서브컬렉션)
+//   posts/{postId}                                 (커뮤니티 글)
+//
+// 가입 플로우 (Cloud Function 권장):
+//   1. 카카오 OAuth → Firebase Custom Token 교환 → Auth signInWithCustomToken
+//   2. Cloud Function (auth onCreate trigger)이 server-side allowlist 조회
+//   3. allowlist masters/coaches → role 부여 + status APPROVED + members/{uid} 생성
+//      그 외 → role MEMBER + status PENDING → 관장 승인 대기
+//   클라이언트 직접 members 생성은 차단 (privilege escalation 방지)
+//
+// 배포:
+//   - 콘솔: Firebase Console → Firestore Database → 규칙 탭에 붙여넣기 → 게시
+//   - CLI:  firebase deploy --only firestore:rules
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ════════════════════════════════════════════════════════
+    // Helper 함수
+    // ════════════════════════════════════════════════════════
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function memberDoc() {
+      return get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
+    }
+
+    /** APPROVED 상태인 회원 (PENDING/REJECTED/SUSPENDED 차단) */
+    function isApproved() {
+      return isAuth() && memberDoc().status == 'APPROVED';
+    }
+
+    /** 관장 + 코치 (운영진) */
+    function isStaff() {
+      return isApproved() && (memberDoc().role == 'MASTER' || memberDoc().role == 'COACH');
+    }
+
+    /** 관장 단독 */
+    function isMaster() {
+      return isApproved() && memberDoc().role == 'MASTER';
+    }
+
+    function isSelf(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    /** 본인 프로필 수정 시 변경 허용 필드만 (role/status/id/createdAt/joinDate 보호) */
+    function memberSelfEditableOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['name', 'belt', 'avatarId', 'phone', 'updatedAt']);
+    }
+
+    // ════════════════════════════════════════════════════════
+    // members — 회원 마스터
+    // ════════════════════════════════════════════════════════
+    match /members/{uid} {
+      // 모든 APPROVED 회원이 명단 read 가능 (출석 동료 표시 등)
+      allow read: if isApproved();
+
+      // create는 Cloud Function (admin SDK)만. 클라이언트 직접 차단.
+      // → role/status를 클라이언트가 임의로 결정할 수 없게 막음
+      allow create: if false;
+
+      // update: 본인은 안전 필드만, 관장은 전체 가능
+      allow update: if (isSelf(uid) && memberSelfEditableOnly()) || isMaster();
+
+      allow delete: if isMaster();
+
+      // ─────────────────────────────────────
+      // attendance 서브컬렉션
+      // ─────────────────────────────────────
+      match /attendance/{attendanceId} {
+        allow read: if isSelf(uid) || isStaff();
+
+        // 본인만 자기 출석 체크인
+        allow create: if isSelf(uid)
+          && request.resource.data.memberId == uid;
+
+        // 정정/삭제는 운영진만 (오기록 처리)
+        allow update, delete: if isStaff();
+      }
+
+      // ─────────────────────────────────────
+      // comments 서브컬렉션 (관장→회원 단방향, 본인 수신 전용)
+      // ─────────────────────────────────────
+      match /comments/{commentId} {
+        // 본인이 받은 것 + 운영진(작성/검토용) read
+        allow read: if isSelf(uid) || isStaff();
+
+        // 운영진만 작성. byMasterId는 작성자 본인이어야 함 (위조 방지)
+        allow create: if isStaff()
+          && request.resource.data.toMemberId == uid
+          && request.resource.data.byMasterId == request.auth.uid;
+
+        // 본인이 작성한 코멘트만 수정/삭제 가능
+        allow update, delete: if isStaff()
+          && resource.data.byMasterId == request.auth.uid;
+      }
+
+      // ─────────────────────────────────────
+      // skillScores 서브컬렉션 (코치 입력 PROPOSED → 관장 APPROVED)
+      // ─────────────────────────────────────
+      match /skillScores/{scoreId} {
+        allow read: if isSelf(uid) || isStaff();
+
+        // 운영진(코치+관장) 모두 PROPOSED 상태로 입력 가능
+        allow create: if isStaff()
+          && request.resource.data.memberId == uid
+          && request.resource.data.byUserId == request.auth.uid
+          && request.resource.data.status == 'PROPOSED';
+
+        // 관장만 PROPOSED → APPROVED/REJECTED 전환. 점수 자체는 immutable.
+        allow update: if isMaster()
+          && resource.data.status == 'PROPOSED'
+          && request.resource.data.status in ['APPROVED', 'REJECTED']
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'reviewedByMasterId', 'reviewedAt']);
+
+        allow delete: if isMaster();
+      }
+    }
+
+    // ════════════════════════════════════════════════════════
+    // classDefs — 정기 클래스 정의
+    // ════════════════════════════════════════════════════════
+    match /classDefs/{classId} {
+      allow read: if isApproved();
+      allow write: if isMaster();  // 운영 일정 변경은 관장만
+    }
+
+    // ════════════════════════════════════════════════════════
+    // tournaments — 토너먼트
+    // ════════════════════════════════════════════════════════
+    match /tournaments/{tournamentId} {
+      allow read: if isApproved();
+      allow create, update, delete: if isStaff();
+
+      // ─────────────────────────────────────
+      // matches 서브컬렉션
+      // ─────────────────────────────────────
+      match /matches/{matchId} {
+        allow read: if isApproved();
+        allow create, update, delete: if isStaff();
+      }
+    }
+
+    // ════════════════════════════════════════════════════════
+    // posts — 커뮤니티 글 (공지/기록/팁/질문)
+    // ════════════════════════════════════════════════════════
+    match /posts/{postId} {
+      allow read: if isApproved();
+
+      // 글 작성: 모든 회원. 공지 태그(tag='공지')는 운영진만.
+      allow create: if isApproved()
+        && request.resource.data.authorId == request.auth.uid
+        && (request.resource.data.tag != '공지' || isStaff());
+
+      // 수정: 본인 글만 (authorId/createdAt 보호) + 공지 태그 변경은 운영진만
+      // 운영진은 모더레이션을 위해 다른 글도 수정 가능
+      allow update: if (
+        resource.data.authorId == request.auth.uid
+        && request.resource.data.authorId == resource.data.authorId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (request.resource.data.tag != '공지' || isStaff())
+      ) || isStaff();
+
+      // 삭제: 본인 글 + 운영진 (모더레이션)
+      allow delete: if isApproved()
+        && (resource.data.authorId == request.auth.uid || isStaff());
+    }
+
+    // ════════════════════════════════════════════════════════
+    // 매칭 안 된 모든 경로 명시적 거부 (allowlist 모델)
+    // ════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

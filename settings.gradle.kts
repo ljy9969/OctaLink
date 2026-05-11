@@ -16,5 +16,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TeamPosseStriking"
+rootProject.name = "OctaLink"
 include(":app")

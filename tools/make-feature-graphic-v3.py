@@ -13,7 +13,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
-LOGO_SRC = ROOT / "app" / "src" / "main" / "res" / "drawable-nodpi" / "logo_teamposse.jpg"
+LOGO_SRC = ROOT / "app" / "src" / "main" / "res" / "drawable-nodpi" / "logo_octalink.png"
 OUT = ROOT / "app" / "src" / "main" / "feature_graphic_v3.png"
 
 FONT_PATH = "C:/Windows/Fonts/malgunbd.ttf"

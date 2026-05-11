@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 val localProperties = Properties().apply {
@@ -25,12 +26,12 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.unboundapex.octalink"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.unboundapex.octalink"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
         vectorDrawables { useSupportLibrary = true }
@@ -72,7 +73,7 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.13.1")
@@ -88,6 +89,18 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+
+    // Firebase BOM — 모든 Firebase 라이브러리 버전 일괄 관리
+    // 주의: BOM 33.0+ 부터 `-ktx` 접미사 라이브러리 폐지 (KTX 확장이 메인 라이브러리에 통합).
+    //       firebase-xxx-ktx → firebase-xxx 로 이름 변경됨
+    implementation(platform("com.google.firebase:firebase-bom:34.13.0"))
+
+    // Firebase products (BOM이 버전 결정, 이름에서 -ktx 제거)
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-analytics")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

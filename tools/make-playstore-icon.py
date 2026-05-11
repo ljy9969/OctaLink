@@ -1,8 +1,8 @@
 """
 Play Store 512x512 icon generator.
 
-기존 ic_launcher-playstore.png 는 검은 프레임이 두꺼워 192x192 등 축소 시 로고가 작아 보임.
-이 스크립트는 흰 배경 + 로고 92% 폭 배치로 로고가 시각적으로 우세한 버전을 생성.
+OctaLink 마크 단독(옥타곤+슬래시) 을 흰 배경에 중앙 배치.
+런처/아이콘 컨텍스트는 워드마크가 작아 가독성 떨어지므로 마크만 사용.
 
 실행:
     python tools/make-playstore-icon.py
@@ -14,11 +14,11 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-LOGO_SRC = ROOT / "app" / "src" / "main" / "res" / "drawable-nodpi" / "logo_teamposse.jpg"
+LOGO_SRC = ROOT / "app" / "src" / "main" / "res" / "drawable-nodpi" / "mark_octalink.png"
 OUT = ROOT / "app" / "src" / "main" / "ic_launcher-playstore.png"
 
 CANVAS_SIZE = 512
-LOGO_WIDTH_RATIO = 0.92  # 로고가 캔버스 가로의 92% 차지
+LOGO_WIDTH_RATIO = 0.78  # 마크 단독은 정사각이라 살짝 여백 줌
 BG_COLOR = (255, 255, 255, 255)  # 순백 (Bone 톤보다 깔끔하게)
 
 

@@ -229,6 +229,18 @@ fun InfoScreen(onBack: () -> Unit) {
                     }
                 }
             }
+
+            item {
+                Text(
+                    "본 앱은 ${GymInfo.NAME} ${GymInfo.BRANCH} 회원이 자체 제작한 비공식 도구이므로 체육관 공식 앱이 아닙니다.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
         }
     }
 }

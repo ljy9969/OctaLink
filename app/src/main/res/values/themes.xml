@@ -1,14 +1,16 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.TeamPosseStriking" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.OctaLink" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/ink</item>
-        <item name="android:statusBarColor">@color/ink</item>
-        <item name="android:navigationBarColor">@color/ink</item>
+        <!--
+          API 35+ edge-to-edge에선 system bar 색상이 ignored되고 컨텐츠가 status/nav 영역까지 그려짐.
+          MainActivity.enableEdgeToEdge() + Compose insets로 처리.
+        -->
     </style>
 
-    <style name="Theme.TeamPosseStriking.Starting" parent="Theme.SplashScreen">
+    <style name="Theme.OctaLink.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/ink</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
-        <item name="windowSplashScreenIconBackgroundColor">@color/ink</item>
-        <item name="postSplashScreenTheme">@style/Theme.TeamPosseStriking</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/bone</item>
+        <item name="postSplashScreenTheme">@style/Theme.OctaLink</item>
     </style>
 </resources>

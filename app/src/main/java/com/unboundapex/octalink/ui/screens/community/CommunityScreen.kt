@@ -1,6 +1,7 @@
 package com.unboundapex.octalink.ui.screens.community
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,11 +16,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.unboundapex.octalink.data.schema.isStaff
+import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 
@@ -32,12 +37,43 @@ private val posts = listOf(
 )
 
 @Composable
-fun CommunityScreen() {
+fun CommunityScreen(sessionVm: SessionViewModel) {
+    val session by sessionVm.state.collectAsState()
     PosseScreen(title = "Community", subtitle = "팀원들의 기록과 응원") {
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
+            // 글 작성 진입점 — 모든 회원 + 운영진은 공지 작성 추가
+            item {
+                PosseCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ComposeAction(
+                            label = "+ 글 쓰기",
+                            modifier = Modifier.weight(1f),
+                            onClick = {},
+                        )
+                        if (session.role.isStaff) {
+                            ComposeAction(
+                                label = "+ 공지 작성",
+                                modifier = Modifier.weight(1f),
+                                onClick = {},
+                                tagBg = MaterialTheme.colorScheme.primary,
+                                tagFg = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "준비 중 — Firestore + Auth 도입 후 활성화",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             items(posts) { p ->
                 PosseCard {
                     Row(
@@ -66,6 +102,27 @@ fun CommunityScreen() {
             }
         }
     }
+}
+
+@Composable
+private fun ComposeAction(
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    tagBg: Color = MaterialTheme.colorScheme.surfaceVariant,
+    tagFg: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = tagFg,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(tagBg)
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 12.dp),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
 }
 
 @Composable

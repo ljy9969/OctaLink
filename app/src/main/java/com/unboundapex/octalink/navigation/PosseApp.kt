@@ -118,7 +118,7 @@ fun PosseApp() {
             }
             composable(Route.Curriculum.path) { CurriculumScreen() }
             composable(Route.Attendance.path) { AttendanceScreen(sessionVm = sessionVm) }
-            composable(Route.Community.path) { CommunityScreen() }
+            composable(Route.Community.path) { CommunityScreen(sessionVm = sessionVm) }
             composable(Route.Profile.path) {
                 ProfileScreen(sessionVm = sessionVm)
             }

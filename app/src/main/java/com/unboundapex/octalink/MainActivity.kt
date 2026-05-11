@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.unboundapex.octalink.data.HolidayRepository
 import com.unboundapex.octalink.navigation.PosseApp
-import com.unboundapex.octalink.ui.theme.TeamPosseTheme
+import com.unboundapex.octalink.ui.theme.OctaLinkTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         HolidayRepository.init(applicationContext)
         setContent {
-            TeamPosseTheme { PosseApp() }
+            OctaLinkTheme { PosseApp() }
         }
     }
 }

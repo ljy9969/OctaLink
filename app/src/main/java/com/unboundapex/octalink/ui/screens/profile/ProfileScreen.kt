@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.avatarById
+import com.unboundapex.octalink.data.schema.isMaster
+import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.AvatarPickerSheet
 import com.unboundapex.octalink.ui.components.AvatarTile
@@ -170,6 +172,55 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                     }
                 }
             }
+
+            // 운영진 전용 (관장 + 코치) — 일상 운영 작업
+            if (session.role.isStaff) {
+                item {
+                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
+                        Text(
+                            "운영진 전용",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        StaffAction(label = "회원 한 줄 코멘트 작성") {}
+                        StaffAction(label = "출결 검토 — 회원별 일자별 출석 이력") {}
+                        StaffAction(label = "토너먼트 추첨/대진 관리") {}
+                        StaffAction(label = "공지 작성 (커뮤니티)") {}
+                        StaffAction(label = "스킬 점수 입력 (제안 → 관장 검토)") {}
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "준비 중 — Firestore + Auth 도입 후 활성화",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // 관장 전용 — 평가/관리 최상위 권한
+            if (session.role.isMaster) {
+                item {
+                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
+                        Text(
+                            "관장 전용",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        StaffAction(label = "스킬 점수 검토/확정 (PROPOSED → APPROVED)") {}
+                        StaffAction(label = "회원 가입 승인 (PENDING → APPROVED)") {}
+                        StaffAction(label = "권한 부여 (회원 → 코치 승격)") {}
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "준비 중 — Firestore + Auth 도입 후 활성화",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
         }
     }
 
@@ -181,6 +232,23 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                 sessionVm.updateAvatar(it.id)
                 pickerOpen = false
             }
+        )
+    }
+}
+
+@Composable
+private fun StaffAction(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "▸ $label",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
         )
     }
 }
