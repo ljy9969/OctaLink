@@ -20,13 +20,19 @@ import java.time.LocalTime
  */
 
 /**
- * 권한 역할 — 3단계 계층.
- * - MASTER (관장): 전권. 스킬 점수 검토/확정 + 회원 가입 승인 + 권한 부여 등 최상위 권한
+ * 권한 역할 — 4단계 계층.
+ * - CREATOR (앱 제작자): 최상위 + 단독. **회원 역할 부여(코치 승격) 권한을 단독 보유**.
+ *   MASTER의 모든 권한 자동 포함 (스킬 검토 / 회원 승인 / 운영진 작업)
+ * - MASTER (관장): 운영 전권. 스킬 점수 검토/확정 + 회원 가입 승인.
+ *   **단, 코치 승격은 CREATOR만 가능** (관장 계정 탈취 시 무차별 권한 상승 차단)
  * - COACH (코치, 부관리자): 일상 운영. 회원 코멘트 작성 + 출결 검토 + 토너먼트 관리 + 공지 작성
  *   추가로 스킬 점수 **입력(제안)** 가능 — 관장 검토 후 확정되는 워크플로
  * - MEMBER (회원): 본인 출결/프로필/커뮤니티 글 작성. 평가/공지/관리 작업 불가
+ *
+ * **CREATOR 격리의 이유:** 앱 제작자만이 코드(`RoleAllowlist.kt`) + Firebase Console 두 채널
+ * 모두 접근 가능. 관장 모바일 계정이 탈취되더라도 무권한 사용자가 코치로 승격되는 공격 차단.
  */
-enum class Role { MASTER, COACH, MEMBER }
+enum class Role { CREATOR, MASTER, COACH, MEMBER }
 
 /**
  * 스킬 점수 검토 상태.
@@ -34,11 +40,14 @@ enum class Role { MASTER, COACH, MEMBER }
  */
 enum class SkillScoreStatus { PROPOSED, APPROVED, REJECTED }
 
-/** 운영진(관장 + 코치). 일상 운영 작업 권한이 있는지. */
-val Role.isStaff: Boolean get() = this == Role.MASTER || this == Role.COACH
+/** 앱 제작자 단독. 회원 역할 부여(코치 승격) 등 최상위 권한. */
+val Role.isCreator: Boolean get() = this == Role.CREATOR
 
-/** 관장 단독. 스킬 평가 + 회원 가입 승인 등 최상위 권한이 있는지. */
-val Role.isMaster: Boolean get() = this == Role.MASTER
+/** 관장급 이상 (MASTER + CREATOR). 스킬 검토 + 회원 가입 승인 등 운영 최상위. */
+val Role.isMaster: Boolean get() = this == Role.MASTER || this == Role.CREATOR
+
+/** 운영진(관장 + 코치 + 창조자). 일상 운영 작업 권한이 있는지. */
+val Role.isStaff: Boolean get() = this == Role.MASTER || this == Role.COACH || this == Role.CREATOR
 
 /** 입관 신청 상태. PENDING → 관장 승인 → APPROVED, 거부 시 REJECTED */
 enum class MembershipStatus { PENDING, APPROVED, REJECTED, SUSPENDED, LEFT }

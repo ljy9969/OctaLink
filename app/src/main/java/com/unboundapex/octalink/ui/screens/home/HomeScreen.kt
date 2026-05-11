@@ -89,6 +89,7 @@ private val invertColorFilter = ColorFilter.colorMatrix(
 fun HomeScreen(onOpenBracket: () -> Unit, onOpenInfo: () -> Unit = {}) {
     PosseScreen(
         subtitle = "개인의 성장, 함께하는 진화",
+        subtitleEmphasis = listOf("성장", "진화"),
         header = { HomeHeader() }
     ) {
         LazyColumn(
@@ -310,7 +311,7 @@ private fun HomeHeader() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp)
+            .padding(top = 4.dp)
             .clipToBounds(),
         contentAlignment = Alignment.Center
     ) {

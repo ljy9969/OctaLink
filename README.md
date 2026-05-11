@@ -146,6 +146,8 @@ app/src/main/
 │       ├── community/CommunityScreen.kt   # 컬러 칩 태그 + 우측 시각
 │       ├── profile/ProfileScreen.kt   # 캐릭터 + 헥사곤 + 승률 + 코멘트
 │       ├── info/InfoScreen.kt         # 체육관 정보 (주소/전화/운영시간/정책/앱 버전)
+│       ├── admin/AdminScreen.kt       # 운영진/관장/창조자 공통 진입 (하단 nav "운영" 탭, isStaff만 표시)
+│       ├── creator/CreatorScreen.kt   # 창조자 전용 — 회원 역할 부여 (AdminScreen에서 진입)
 │       └── bracket/
 │           ├── BracketScreen.kt       # 트리(EIGHT/FOUR/FINAL_ONLY) + 직접 클릭 advance + 불꽃 라인
 │           └── BracketDrawScreen.kt   # 추첨 (체급/벨트 필터, 회원 선택, 모달)
@@ -184,8 +186,8 @@ firestore.indexes.json                        # 복합 쿼리 인덱스 (현재 
 | 캐릭터 | USF4 44명 중 선택. 모든 아바타 흰 배경으로 통일 |
 | 벨트 표시 | 아바타 링 색 / 매치 카드 스트라이프 색 (텍스트 ❌) |
 | 스킬 차트 평가 | **코치 입력 (PROPOSED) → 관장 검토 → 확정 (APPROVED)** 워크플로. 자기/상호 평가 ❌. `SkillScoreDoc.status` enum (PROPOSED/APPROVED/REJECTED) |
-| 권한 3단계 | MEMBER (회원, 본인 출결/프로필/커뮤니티 글) · COACH (부관리자, 일상 운영) · MASTER (관장, 전권). `Role.isStaff = MASTER+COACH`, `Role.isMaster = MASTER`. UI는 두 카드로 분리 (운영진 전용 / 관장 전용) |
-| 역할 결정 정책 | **사용자 직접 선택 ❌**. `data/RoleAllowlist.kt`의 사전 등록 명단(masters/coaches)을 카카오 OAuth 표시 이름으로 매칭해 자동 부여. 명단에 있으면 가입 승인 단계 skip + APPROVED 즉시 부여. 그 외엔 MEMBER + PENDING으로 등록되어 관장 승인 대기. 명단 변경은 코드 수정 + 새 빌드 배포 필요 (추후 Firestore + Cloud Functions 로 런타임 업데이트 가능하게 확장) |
+| 권한 4단계 | MEMBER (회원, 본인 출결/프로필/커뮤니티 글) · COACH (부관리자, 일상 운영) · MASTER (관장, 운영 전권 — 단 권한 부여 ❌) · **CREATOR (앱 제작자, 회원 역할 부여 단독 + MASTER 권한 자동 포함)**. `Role.isStaff = MASTER+COACH+CREATOR`, `Role.isMaster = MASTER+CREATOR`, `Role.isCreator = CREATOR`. UI 진입점은 **하단 nav "운영" 탭** (`AdminScreen`, isStaff에게만 동적 표시), 그 안에서 권한별 카드 노출 + 창조자는 권한 부여 페이지(`CreatorScreen`)로 진입. 창조자 권한 격리 이유: 관장 계정 탈취 시 무차별 코치 승격 공격 차단 |
+| 역할 결정 정책 | **사용자 직접 선택 ❌**. `data/RoleAllowlist.kt`의 사전 등록 명단(creators/masters/coaches)을 카카오 OAuth 표시 이름으로 매칭해 자동 부여. 우선순위 CREATOR → MASTER → COACH → MEMBER. 명단에 있으면 가입 승인 단계 skip + APPROVED 즉시 부여. 그 외엔 MEMBER + PENDING으로 등록되어 관장 승인 대기. 명단 변경은 **코드 수정 + 새 빌드 배포 필요** — 앱 제작자만 코드 + Firebase 양 채널 접근 가능 (SPOF 보호). 추후 Firestore + Cloud Functions 로 런타임 업데이트 가능하게 확장 |
 | 시간대 | 모든 시간 연산은 KST(`Asia/Seoul`) 강제 |
 | 날짜 표기 | `M/D 요일` 통일 (예: `5/5 화`). 연도 생략 |
 | 탭 네비게이션 | saveState/restoreState=false → 탭 클릭 시 항상 루트로 |
@@ -267,12 +269,14 @@ firestore.indexes.json                        # 복합 쿼리 인덱스 (현재 
 - [x] (05-10) `UX 디테일` **관장/코치/회원 권한 3단계 분리 (UI)** — `Role` enum 문서화 + `Role.isStaff` (MASTER+COACH) / `Role.isMaster` (MASTER) 확장 함수. `SkillScoreDoc.status` enum (PROPOSED/APPROVED/REJECTED) 추가 (코치 입력 → 관장 검토 워크플로). UI 분기: **운영진 전용** 카드 (회원 코멘트 / 출결 검토 / 토너먼트 관리 / 공지 작성 / 스킬 점수 입력 - 코치+관장 가능) + **관장 전용** 카드 (스킬 점수 검토·확정 / 회원 가입 승인 / 권한 부여). `CommunityScreen`에 글 쓰기 버튼(전원) + 공지 작성 버튼(운영진).
 - [x] (05-10) `보안` **역할 결정 보안 강화** — `data/RoleAllowlist.kt` 사전 등록 명단(masters/coaches) 도입. `SessionState.role`이 이름 → allowlist 자동 매핑으로 결정. 사용자 직접 변경 불가능 (Profile의 디버그 역할 토글 삭제, `SessionViewModel.updateRole()` 메서드 제거). 명단 등록자는 카카오 OAuth 가입 시 PENDING 단계 skip → 즉시 APPROVED. 명단 외엔 MEMBER + PENDING으로 관장 승인 대기. 권한 부여는 코드 수정 + 새 빌드 배포 필요
 - [x] (05-10) `백엔드 / 데이터 (메인)` **Firestore Security Rules 초안** — `firestore.rules` 작성. 권한 모델(MEMBER/COACH/MASTER) → 데이터 레이어 강제. members write는 Cloud Function 전용(privilege escalation 차단), 본인 프로필은 안전 필드(name/belt/avatarId/phone)만 수정. 출석/코멘트/스킬/토너먼트/posts 모두 권한별 read·write 분리 + skillScores PROPOSED→APPROVED 전환은 관장만(점수 자체 immutable). 매칭 안 된 경로는 명시적 거부(allowlist 모델). 배포: Firebase Console 붙여넣기 또는 `firebase deploy --only firestore:rules`. `firebase.json` + `firestore.indexes.json` 같이 생성
+- [x] (05-11) `보안` **권한 4단계 확장 — CREATOR 분리** — 관장 계정 탈취 시 무차별 권한 상승 공격 차단 위해 회원 역할 부여(코치 승격) 권한을 앱 제작자 단독(`CREATOR`)으로 격리. `Role.CREATOR` enum 추가 + `Role.isCreator` / `isMaster`(MASTER+CREATOR) / `isStaff`(3개 포함) 확장 함수 갱신. `RoleAllowlist.creators` Set 신규(이지연만), masters에서 이지연 제거. `firestore.rules` v2: `isCreator()` 함수 + `roleUnchanged()` + members update 3단계 분기 (본인 안전 필드 / 관장 role 외 / 창조자 전체). delete는 CREATOR만. Repository 도입 후 `db.collection('members').document(uid).update('role', ...)` 실제 호출
+- [x] (05-11) `UX 디테일` **운영 진입점을 별도 nav 탭으로 분리** — 이전엔 Profile 하단에 운영진/관장/창조자 카드 누적 → 하단 nav에 "운영" 탭(`AdminScreen`) 신규. `isStaff` 회원에게만 동적 표시(MEMBER에는 안 보임). AdminScreen에서 권한별 카드 분기(운영진 공통 / 관장 / 창조자). 창조자 카드의 "권한 부여 페이지" 버튼 → `CreatorScreen` 진입. CreatorScreen mock 회원 6명(이지연·김파시 제외) + 벨트 5단계 모두 포함(WHITE/BLUE/PURPLE/BROWN/BLACK) + 체급/벨트 내림차순 정렬 + 가입일 표시 제거(체급·벨트만)
+- [x] (05-11) `백엔드 / 데이터 (메인)` **Repository 추상화 + 가입 플로우 + Auth 인터페이스 (Phase 1 — InMemory)** — `data/repo/` 패키지 신규. (1) `AuthRepository` + `KakaoIdentity` / `MemberRepository` + `SignupRequest` 인터페이스 정의. (2) `inmemory/InMemoryAuthRepository` (mock 카카오 - 이지연 자동 로그인 + signInWithKakao() 호출 시 새 fake uid 발급으로 신규 가입 시뮬레이션), `inmemory/InMemoryMemberRepository` (signup → RoleAllowlist 매칭 즉시 APPROVED / 그 외 PENDING, setStatus/setRole/updateProfile), `inmemory/MockSeed` (이지연 CREATOR + 김파시 MASTER + 6명 APPROVED + 2명 PENDING). (3) `RepositoryProvider` 싱글톤 — MainActivity 에서 1회 init. (4) `SessionViewModel` 재작성 — auth.currentUid + members.observeByAuthProviderId 합성으로 `SessionState.Phase` (LOADING/UNAUTHENTICATED/PENDING_SIGNUP/AUTHENTICATED) + member.status 분기. (5) `ui/screens/onboarding/OnboardingScreens.kt` 신규 — `LoginScreen`(카카오 로그인 버튼) / `SignupScreen`(이름·벨트·체급·아바타·연락처 폼) / `PendingApprovalScreen` / `RejectedScreen`. (6) `PosseApp` 라우팅 분기 (phase + status 별) — APPROVED 가 아닌 단계는 메인 앱 접근 차단. (7) `AdminScreen` 의 "회원 가입 승인" 카드 활성화 — `MemberApprovalViewModel` 로 PENDING 큐 + 승인/거부 액션. (8) `CreatorScreen` 의 mock 명단 제거 → `RoleGrantViewModel` 로 실제 MemberRepository 데이터 + setRole() 실제 동작. (9) Profile 에 로그아웃 버튼 (가입 플로우 테스트용). **Phase 2 (deferred):** 실제 카카오 SDK 통합 + Firebase Custom Token 교환 Cloud Function + `FirestoreXxxRepository` 실제 구현체 — UI/VM 변경 없이 RepositoryProvider 만 교체
 
 ### 남은 일
 
-- [ ] `UX 디테일` **회원 가입 / 입관 신청 플로우** — 관장 승인 단계 (`MembershipStatus.PENDING → APPROVED`). 인증 + Firestore 의존
-- [ ] `백엔드 / 데이터 (메인)` **Repository 추상화** — `*Doc` ↔ Firestore 직렬화 매핑. 화면은 인터페이스에만 의존
-- [ ] `백엔드 / 데이터 (메인)` **인증** — 카카오 OAuth → Firebase Custom Token 교환 (Cloud Functions or 자체 엔드포인트), 또는 네이버. 가장 큰 덩어리, Firebase 직후 시도 권장
+- [ ] `백엔드 / 데이터 (메인)` **카카오 OAuth + Cloud Functions (Phase 2)** — 실제 `com.kakao.sdk:user` 의존성 + 카카오 Developers 앱 등록(네이티브 앱 키) + `KakaoAuthRepository` 구현체. Firebase Cloud Function `kakaoSignIn(accessToken)` — 카카오 토큰 검증 → Firebase Auth Custom Token 발급 → `signInWithCustomToken`. 가입 onCreate 트리거가 server-side allowlist 조회 → role 결정해서 `members/{uid}` 생성
+- [ ] `백엔드 / 데이터 (메인)` **FirestoreXxxRepository 구현체 (Phase 2)** — `MemberDoc` ↔ Firestore Map 직렬화 + `members/{uid}` 컬렉션 매핑. AttendanceRepository / SkillScoreRepository 등 후속 컬렉션도 동일 패턴 확장
 - [ ] `UX 디테일` **토너먼트 히스토리** — 종료된 토너먼트 보관 + 회원별 전적 누적
 - [ ] `배포 준비` **푸시 알림 (FCM)** — 수업 리마인더, 한 줄 코멘트 도착, 대진표 업데이트
 - [ ] `UX 디테일` **체크인 위치 검증** — GPS 체육관 반경 옵션 (시간 30분 윈도우는 05-08 완료, 옵션)

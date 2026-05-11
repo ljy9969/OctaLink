@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
+        android:name=".OctaLinkApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -30,5 +31,20 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- 카카오 로그인 OAuth 콜백 핸들러 (Custom URL scheme). -->
+        <!-- scheme 형식: kakao{NATIVE_APP_KEY}://oauth — build.gradle.kts manifestPlaceholder 로 주입 -->
+        <activity
+            android:name="com.kakao.sdk.auth.AuthCodeHandlerActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="oauth"
+                    android:scheme="kakao${KAKAO_NATIVE_APP_KEY}" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

@@ -12,6 +12,7 @@ val localProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 val holidayApiKey: String = localProperties.getProperty("HOLIDAY_API_KEY", "")
+val kakaoNativeAppKey: String = localProperties.getProperty("KAKAO_NATIVE_APP_KEY", "")
 
 val releaseKeystoreFile: String? = localProperties.getProperty("RELEASE_KEYSTORE_FILE")
 val releaseKeystorePassword: String? = localProperties.getProperty("RELEASE_KEYSTORE_PASSWORD")
@@ -36,6 +37,9 @@ android {
         versionName = "0.1.0"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
+        buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")
+        // AndroidManifest 의 카카오 AuthCodeHandlerActivity intent-filter scheme 에 주입
+        manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = kakaoNativeAppKey
     }
 
     signingConfigs {
@@ -101,6 +105,13 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-analytics")
+    // Cloud Functions Callable — Kakao 토큰 ↔ Firebase Custom Token 교환용
+    implementation("com.google.firebase:firebase-functions")
+
+    // 카카오 로그인 SDK (v2-user) — Kakao OAuth → Firebase Custom Token 교환 진입점
+    implementation("com.kakao.sdk:v2-user:2.20.6")
+    // suspend 코루틴 어댑터용 — Tasks.await() 등에서 사용
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

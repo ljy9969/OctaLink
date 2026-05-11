@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.unboundapex.octalink.data.HolidayRepository
 import com.unboundapex.octalink.navigation.PosseApp
 import com.unboundapex.octalink.ui.theme.OctaLinkTheme
 
@@ -14,7 +13,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        HolidayRepository.init(applicationContext)
+        // 초기화는 OctaLinkApplication.onCreate 로 이전 (HolidayRepository / RepositoryProvider / KakaoSdk)
         setContent {
             OctaLinkTheme { PosseApp() }
         }

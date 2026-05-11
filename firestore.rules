@@ -1,9 +1,11 @@
-// OctaLink Firestore Security Rules — v1 초안 (2026-05-10)
+// OctaLink Firestore Security Rules — v2 (2026-05-11, CREATOR 추가)
 //
-// 권한 모델 (코드 sync: Schema.kt + RoleAllowlist.kt):
-//   MEMBER : 본인 출결/프로필/스킬 점수 read + 커뮤니티 글 작성
-//   COACH  : 운영진 일상 작업 (코멘트/출결검토/토너먼트/공지/스킬점수 입력 PROPOSED)
-//   MASTER : 전권 (스킬점수 검토·확정 / 회원 가입 승인 / 권한 부여)
+// 권한 모델 4단계 (코드 sync: Schema.kt + RoleAllowlist.kt):
+//   MEMBER  : 본인 출결/프로필/스킬 점수 read + 커뮤니티 글 작성
+//   COACH   : 운영진 일상 작업 (코멘트/출결검토/토너먼트/공지/스킬점수 입력 PROPOSED)
+//   MASTER  : 운영 전권 (스킬점수 검토·확정 / 회원 가입 승인). 단 권한 부여는 ❌
+//   CREATOR : 앱 제작자. MASTER 전 권한 + 회원 역할 부여(코치 승격) **단독**.
+//             관장 계정 탈취 시 권한 상승 공격 차단 위해 격리
 //
 // 컬렉션 경로 (Schema.kt Collections object 따름):
 //   members/{uid}                                  (회원 마스터)
@@ -48,14 +50,19 @@ service cloud.firestore {
       return isAuth() && memberDoc().status == 'APPROVED';
     }
 
-    /** 관장 + 코치 (운영진) */
+    /** 운영진 (관장 + 코치 + 창조자) */
     function isStaff() {
-      return isApproved() && (memberDoc().role == 'MASTER' || memberDoc().role == 'COACH');
+      return isApproved() && memberDoc().role in ['MASTER', 'COACH', 'CREATOR'];
     }
 
-    /** 관장 단독 */
+    /** 관장급 이상 (MASTER + CREATOR) — 스킬 검토 / 회원 가입 승인 등 운영 최상위 */
     function isMaster() {
-      return isApproved() && memberDoc().role == 'MASTER';
+      return isApproved() && memberDoc().role in ['MASTER', 'CREATOR'];
+    }
+
+    /** 앱 제작자 단독 — 회원 역할 부여(코치 승격) 등 최상위 권한 */
+    function isCreator() {
+      return isApproved() && memberDoc().role == 'CREATOR';
     }
 
     function isSelf(uid) {
@@ -68,21 +75,35 @@ service cloud.firestore {
         .hasOnly(['name', 'belt', 'avatarId', 'phone', 'updatedAt']);
     }
 
+    /** 역할(role) 필드 변경 여부 — 관장은 role 못 바꾸도록 강제 */
+    function roleUnchanged() {
+      return request.resource.data.role == resource.data.role;
+    }
+
     // ════════════════════════════════════════════════════════
     // members — 회원 마스터
     // ════════════════════════════════════════════════════════
     match /members/{uid} {
-      // 모든 APPROVED 회원이 명단 read 가능 (출석 동료 표시 등)
+      // 모든 APPROVED 회원이 명단 read 가능 (출석 동료 표시 등, 창조자 페이지 회원 리스트도 동일 read 사용)
       allow read: if isApproved();
 
       // create는 Cloud Function (admin SDK)만. 클라이언트 직접 차단.
       // → role/status를 클라이언트가 임의로 결정할 수 없게 막음
       allow create: if false;
 
-      // update: 본인은 안전 필드만, 관장은 전체 가능
-      allow update: if (isSelf(uid) && memberSelfEditableOnly()) || isMaster();
+      // update 권한 3단계:
+      //   1. 본인: 안전 필드만 (name/belt/avatarId/phone/updatedAt)
+      //   2. 관장: role 외 모든 필드 (status APPROVED 승인, 정보 정정 등). **role 변경 ❌**
+      //   3. 창조자: 전체 필드 (role 변경 포함, 회원 → 코치 승격 등)
+      allow update: if (
+        isSelf(uid) && memberSelfEditableOnly()
+      ) || (
+        isMaster() && roleUnchanged()
+      ) || (
+        isCreator()
+      );
 
-      allow delete: if isMaster();
+      allow delete: if isCreator();
 
       // ─────────────────────────────────────
       // attendance 서브컬렉션

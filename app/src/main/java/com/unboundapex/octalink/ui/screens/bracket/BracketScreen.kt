@@ -1,12 +1,17 @@
 package com.unboundapex.octalink.ui.screens.bracket
 
 import androidx.compose.animation.animateColor
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -36,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -44,6 +51,7 @@ import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.Match
 import com.unboundapex.octalink.data.tournament.TournamentUiState
 import com.unboundapex.octalink.data.tournament.TournamentViewModel
+import com.unboundapex.octalink.ui.components.ConfettiOverlay
 import com.unboundapex.octalink.ui.components.PosseScreen
 
 private val matchHeight: Dp = 64.dp
@@ -91,50 +99,57 @@ fun BracketScreen(
             BracketMode.FINAL_ONLY -> listOf("결승")
         }
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ActionChip(
-                    text = "새 추첨",
-                    bg = MaterialTheme.colorScheme.primary,
-                    fg = MaterialTheme.colorScheme.onPrimary,
-                    onClick = onOpenDraw,
-                )
-                Spacer(Modifier.weight(1f))
-                ActionChip(
-                    text = "초기화",
-                    bg = Color(0xFFFBC02D),
-                    fg = Color(0xFF1A1A1A),
-                    onClick = { tournamentVm.reset() },
-                )
-            }
-            Spacer(Modifier.height(48.dp))
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ActionChip(
+                        text = "새 추첨",
+                        bg = MaterialTheme.colorScheme.primary,
+                        fg = MaterialTheme.colorScheme.onPrimary,
+                        onClick = onOpenDraw,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    ActionChip(
+                        text = "초기화",
+                        bg = Color(0xFFFBC02D),
+                        fg = Color(0xFF1A1A1A),
+                        onClick = { tournamentVm.reset() },
+                    )
+                }
+                Spacer(Modifier.height(48.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(columnGap)
-            ) {
-                labels.forEach { RoundLabel(it, Modifier.weight(1f)) }
-            }
-            Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(columnGap)
+                ) {
+                    labels.forEach { RoundLabel(it, Modifier.weight(1f)) }
+                }
+                Spacer(Modifier.height(12.dp))
 
-            when (mode) {
-                BracketMode.EIGHT -> BracketTree(state = state, vm = tournamentVm)
-                BracketMode.FOUR -> BracketTreeFour(state = state, vm = tournamentVm)
-                BracketMode.FINAL_ONLY -> BracketTreeFinalOnly(state = state, vm = tournamentVm)
-            }
+                when (mode) {
+                    BracketMode.EIGHT -> BracketTree(state = state, vm = tournamentVm)
+                    BracketMode.FOUR -> BracketTreeFour(state = state, vm = tournamentVm)
+                    BracketMode.FINAL_ONLY -> BracketTreeFinalOnly(state = state, vm = tournamentVm)
+                }
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                ChampionBanner(final = state.final)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ChampionBanner(final = state.final)
+                }
             }
+            // 챔피언 확정 순간 1회 폭죽 — final.winner가 null→non-null로 바뀔 때 trigger
+            ConfettiOverlay(
+                triggerKey = state.final.winner,
+                modifier = Modifier.matchParentSize(),
+            )
         }
     }
 }
@@ -602,11 +617,39 @@ private fun ColumnScope.FighterRow(
 
 @Composable
 private fun ChampionBanner(final: Match) {
+    val winner = final.winner
+    val crowned = winner != null
+    val nameScale = remember { Animatable(1f) }
+
+    LaunchedEffect(winner) {
+        if (winner != null) {
+            nameScale.snapTo(0.55f)
+            nameScale.animateTo(
+                targetValue = 1.25f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow,
+                ),
+            )
+            nameScale.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+            )
+        } else {
+            nameScale.snapTo(1f)
+        }
+    }
+
+    val gold = Color(0xFFFFD54F)
+    val borderColor = if (crowned) gold.copy(alpha = 0.65f) else Color.Transparent
+    val nameColor = if (crowned) gold else MaterialTheme.colorScheme.onSurface
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(12.dp))
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -619,7 +662,7 @@ private fun ChampionBanner(final: Match) {
         )
         Spacer(Modifier.height(4.dp))
         val champ = when {
-            final.winner != null -> final.winner!!
+            winner != null -> winner
             final.red != "?" && final.blue != "?" -> "${final.red} vs ${final.blue}"
             final.red != "?" -> "${final.red} 결승 진출\n상대 미정"
             final.blue != "?" -> "${final.blue} 결승 진출\n상대 미정"
@@ -628,8 +671,13 @@ private fun ChampionBanner(final: Match) {
         Text(
             champ,
             style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
+            color = nameColor,
+            fontWeight = if (crowned) FontWeight.ExtraBold else FontWeight.Normal,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.graphicsLayer {
+                scaleX = nameScale.value
+                scaleY = nameScale.value
+            }
         )
     }
 }

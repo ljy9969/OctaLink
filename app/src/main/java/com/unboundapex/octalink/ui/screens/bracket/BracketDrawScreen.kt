@@ -41,7 +41,9 @@ import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.Member
 import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.avatarById
-import com.unboundapex.octalink.data.memberPool
+import com.unboundapex.octalink.data.repo.RepositoryProvider
+import com.unboundapex.octalink.data.schema.MembershipStatus
+import com.unboundapex.octalink.data.schema.Role
 import com.unboundapex.octalink.data.session.SessionState
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.data.tournament.TournamentViewModel
@@ -61,8 +63,31 @@ fun BracketDrawScreen(
     var beltFilter by remember { mutableStateOf<Belt?>(null) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
 
-    val filtered = remember(weightFilter, beltFilter) {
-        memberPool
+    // 추첨 풀 = APPROVED 회원 전원 (시드 40명 + 가입 승인된 신규 회원). 가입 플로우에서 새로 승인된
+    // 회원이 즉시 합류됨. MemberDoc → Member 어댑터: BracketDrawScreen 의 기존 시그니처 유지.
+    val approvedFlow = remember {
+        RepositoryProvider.members.observeByStatus(MembershipStatus.APPROVED)
+    }
+    val approvedDocs by approvedFlow.collectAsState(initial = emptyList())
+
+    // 관장(MASTER)은 추첨 대상에서 제외 — 토너먼트를 운영하는 쪽이지 본인이 출전하지 않음.
+    // CREATOR/COACH 는 회원 자격으로 훈련 중인 경우가 많아 추첨 풀 유지.
+    val drawPool: List<Member> = remember(approvedDocs) {
+        approvedDocs
+            .filter { it.role != Role.MASTER }
+            .map { doc ->
+                Member(
+                    id = doc.id,
+                    name = doc.name,
+                    belt = doc.belt,
+                    weightClass = doc.weightClass,
+                    avatarId = doc.avatarId,
+                )
+            }
+    }
+
+    val filtered = remember(weightFilter, beltFilter, drawPool) {
+        drawPool
             .filter { m ->
                 (weightFilter == null || m.weightClass == weightFilter) &&
                     (beltFilter == null || m.belt == beltFilter)

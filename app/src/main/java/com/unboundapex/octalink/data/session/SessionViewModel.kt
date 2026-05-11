@@ -1,49 +1,138 @@
 package com.unboundapex.octalink.data.session
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.unboundapex.octalink.data.Belt
-import com.unboundapex.octalink.data.RoleAllowlist
+import com.unboundapex.octalink.data.WeightClass
+import com.unboundapex.octalink.data.repo.RepositoryProvider
+import com.unboundapex.octalink.data.repo.SignupRequest
+import com.unboundapex.octalink.data.repo.inmemory.InMemoryAuthRepository
+import com.unboundapex.octalink.data.schema.MemberDoc
+import com.unboundapex.octalink.data.schema.MembershipStatus
 import com.unboundapex.octalink.data.schema.Role
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
- * 현재 로그인한 회원 세션 상태.
+ * 현재 로그인 세션 — [com.unboundapex.octalink.data.repo.AuthRepository.currentUid] (uid) +
+ * [com.unboundapex.octalink.data.repo.MemberRepository] (profile) 합성 결과.
  *
- * `CurrentUser` 싱글톤(Compose mutableStateOf)에서 단일 source-of-truth `StateFlow`로 이전.
- * 추후 Firebase Auth 연동 시 토큰 갱신/로그아웃 트리거가 이 VM에 모이게 된다.
- *
- * **역할(role) 결정 정책:** 사용자가 직접 변경 불가. 카카오 OAuth 회원 가입 시
- * 카카오 표시 이름이 [RoleAllowlist] 의 masters/coaches 목록에 있으면 자동으로
- * MASTER/COACH 부여 + 가입 승인 단계 skip. 그 외엔 MEMBER + PENDING 상태로 등록되어
- * 관장 승인 대기. MVP는 mock 세션이라 이름으로부터 자동 결정.
+ * UI 는 [SessionState.phase] 로 분기:
+ * - LOADING: 초기 uid resolve 대기 (구현상 In-memory 는 거의 즉시 통과)
+ * - UNAUTHENTICATED: uid == null. 로그인 화면 노출.
+ * - PENDING_SIGNUP: uid 있는데 MemberDoc 없음. 가입 폼 필요.
+ * - AUTHENTICATED: MemberDoc 존재. [member.status] 로 PENDING/APPROVED/REJECTED 분기.
  */
 data class SessionState(
-    val name: String = "이지연",
-    val belt: Belt = Belt.WHITE,
-    val avatarId: String = "rose",
-    val role: Role = RoleAllowlist.roleOf(name),
-)
+    val phase: Phase = Phase.LOADING,
+    /** 카카오 OAuth 식별자 — PENDING_SIGNUP 단계에서 가입 폼 제출 시 사용 */
+    val authProviderId: String? = null,
+    val member: MemberDoc? = null,
+) {
+    enum class Phase { LOADING, UNAUTHENTICATED, PENDING_SIGNUP, AUTHENTICATED }
+
+    // 기존 화면 호환용 단축 접근자 — member 가 없으면 안전 기본값 반환
+    val name: String get() = member?.name ?: ""
+    val belt: Belt get() = member?.belt ?: Belt.WHITE
+    val avatarId: String get() = member?.avatarId ?: "ryu"
+    val role: Role get() = member?.role ?: Role.MEMBER
+    val status: MembershipStatus get() = member?.status ?: MembershipStatus.PENDING
+}
 
 class SessionViewModel : ViewModel() {
+    private val auth = RepositoryProvider.auth
+    private val members = RepositoryProvider.members
+
     private val _state = MutableStateFlow(SessionState())
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    fun updateAvatar(avatarId: String) = _state.update { it.copy(avatarId = avatarId) }
-    fun updateBelt(belt: Belt) = _state.update { it.copy(belt = belt) }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val uidWithMember = auth.currentUid.flatMapLatest { uid ->
+        if (uid == null) flowOf(null to null)
+        else members.observeByAuthProviderId(uid).map { uid to it }
+    }
 
-    /**
-     * 이름 변경 시 [RoleAllowlist] 조회로 역할도 동기 갱신.
-     * Firebase Auth 도입 후엔 가입/로그인 플로우에서만 호출됨.
-     */
-    fun updateName(name: String) = _state.update {
-        it.copy(name = name, role = RoleAllowlist.roleOf(name))
+    init {
+        viewModelScope.launch {
+            uidWithMember.collect { (uid, member) ->
+                _state.value = when {
+                    uid == null -> SessionState(phase = SessionState.Phase.UNAUTHENTICATED)
+                    member == null -> SessionState(
+                        phase = SessionState.Phase.PENDING_SIGNUP,
+                        authProviderId = uid,
+                    )
+                    else -> SessionState(
+                        phase = SessionState.Phase.AUTHENTICATED,
+                        authProviderId = uid,
+                        member = member,
+                    )
+                }
+            }
+        }
+    }
+
+    fun signInWithKakao() {
+        viewModelScope.launch { auth.signInWithKakao() }
+    }
+
+    fun signOut() {
+        viewModelScope.launch { auth.signOut() }
     }
 
     /**
-     * 역할 직접 변경은 ❌ — 사용자가 임의로 권한을 올릴 수 없도록 막음.
-     * 운영자는 [RoleAllowlist] 코드 수정 + 새 빌드 배포로 권한 부여.
+     * 개발용 단축 로그인 — mock 인증 단계에서만 의미 있음. 실제 카카오 SDK 도입 시 제거.
+     * In-memory Auth 가 아니면 무시.
      */
+    fun debugSignInAsCreator() = debugSetUid(InMemoryAuthRepository.MOCK_CREATOR_UID)
+    fun debugSignInAsMaster() = debugSetUid(InMemoryAuthRepository.MOCK_MASTER_UID)
+
+    private fun debugSetUid(uid: String) {
+        viewModelScope.launch {
+            (auth as? InMemoryAuthRepository)?.setCurrentUid(uid)
+        }
+    }
+
+    /** PENDING_SIGNUP 단계에서 가입 폼 제출. authProviderId 는 현재 상태에서 가져옴. */
+    fun completeSignup(
+        name: String,
+        belt: Belt,
+        weightClass: WeightClass,
+        avatarId: String,
+        phone: String? = null,
+    ) {
+        val authId = state.value.authProviderId ?: return
+        viewModelScope.launch {
+            members.signup(
+                SignupRequest(
+                    authProviderId = authId,
+                    name = name,
+                    belt = belt,
+                    weightClass = weightClass,
+                    avatarId = avatarId,
+                    phone = phone,
+                )
+            )
+        }
+    }
+
+    fun updateAvatar(avatarId: String) {
+        val memberId = state.value.member?.id ?: return
+        viewModelScope.launch { members.updateProfile(memberId, avatarId = avatarId) }
+    }
+
+    fun updateBelt(belt: Belt) {
+        val memberId = state.value.member?.id ?: return
+        viewModelScope.launch { members.updateProfile(memberId, belt = belt) }
+    }
+
+    fun updateName(name: String) {
+        val memberId = state.value.member?.id ?: return
+        viewModelScope.launch { members.updateProfile(memberId, name = name) }
+    }
 }
