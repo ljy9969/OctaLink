@@ -17,5 +17,8 @@ module.exports = {
     "object-curly-spacing": ["error", "always"],
     "require-jsdoc": "off",
     "valid-jsdoc": "off",
+    // Windows checkout 은 CRLF, *nix 는 LF — git core.autocrlf 영향. Cloud Functions 는 어차피
+    // Linux 컨테이너에서 실행되므로 lint 단에서 줄바꿈 강제 불필요.
+    "linebreak-style": "off",
   },
 };

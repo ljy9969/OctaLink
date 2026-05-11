@@ -13,3 +13,5 @@ captures/
 *.keystore
 *.jks
 google-services.json
+firebase-debug.log
+firebase-debug.*.log
