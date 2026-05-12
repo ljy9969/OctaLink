@@ -55,6 +55,11 @@ class InMemoryMemberRepository(
             joinDate = LocalDate.now(),
             phone = req.phone,
             authProviderId = req.authProviderId,
+            email = req.email,
+            gender = req.gender,
+            ageRange = req.ageRange,
+            birthday = req.birthday,
+            birthyear = req.birthyear,
             createdAt = now,
             updatedAt = now,
         )
@@ -72,6 +77,10 @@ class InMemoryMemberRepository(
         _members.value = _members.value.map {
             if (it.id == memberId) it.copy(role = role, updatedAt = Instant.now()) else it
         }
+    }
+
+    override suspend fun leaveMembership(memberId: String) {
+        setStatus(memberId, MembershipStatus.LEFT)
     }
 
     override suspend fun updateProfile(

@@ -1,7 +1,9 @@
 package com.unboundapex.octalink
 
 import android.app.Application
+import android.util.Log
 import com.kakao.sdk.common.KakaoSdk
+import com.kakao.sdk.common.util.Utility
 import com.unboundapex.octalink.data.HolidayRepository
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 
@@ -14,11 +16,15 @@ import com.unboundapex.octalink.data.repo.RepositoryProvider
  *
  * MainActivity 의 onCreate 보다 먼저 실행되므로 Compose 가 RepositoryProvider 를 읽을 때
  * 초기화 보장됨. 이전 MainActivity 내 init 호출은 제거됨.
+ *
+ * **startup 시 KeyHash 출력** — 카카오 콘솔에 등록해야 하는 SHA-1 base64 키해시를 logcat 에
+ * 항상 찍어둠. debug/release 빌드별로 다른 값이 나오니 각각 등록 필요.
  */
 class OctaLinkApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         KakaoSdk.init(this, BuildConfig.KAKAO_NATIVE_APP_KEY)
+        Log.d("OctaLink.KeyHash", "Kakao KeyHash to register: ${Utility.getKeyHash(this)}")
         HolidayRepository.init(applicationContext)
         RepositoryProvider.init(applicationContext)
     }

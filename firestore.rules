@@ -84,8 +84,11 @@ service cloud.firestore {
     // members — 회원 마스터
     // ════════════════════════════════════════════════════════
     match /members/{uid} {
-      // 모든 APPROVED 회원이 명단 read 가능 (출석 동료 표시 등, 창조자 페이지 회원 리스트도 동일 read 사용)
-      allow read: if isApproved();
+      // get: 본인 own doc 은 unconditional (가입 부트스트랩 — 아직 MemberDoc 없는 신규 카카오 가입자도
+      //      자기 doc 존재 여부 확인 가능). 그 외엔 APPROVED 회원만.
+      // list: APPROVED 회원만 (출석 동료 표시 / 창조자 페이지 / draw 풀 등 list 쿼리)
+      allow get: if isSelf(uid) || isApproved();
+      allow list: if isApproved();
 
       // create는 Cloud Function (admin SDK)만. 클라이언트 직접 차단.
       // → role/status를 클라이언트가 임의로 결정할 수 없게 막음
@@ -109,14 +112,17 @@ service cloud.firestore {
       // attendance 서브컬렉션
       // ─────────────────────────────────────
       match /attendance/{attendanceId} {
-        allow read: if isSelf(uid) || isStaff();
+        // 모든 APPROVED 회원이 read 가능 — 동료 출석 표시(AttendanceScreen) +
+        // collectionGroup 쿼리("오늘 출석한 사람 전체") 통과 필요.
+        // 본인 / 운영진은 자신 / 모든 회원의 출결 검토 가능 (read 권한 동일)
+        allow read: if isApproved();
 
-        // 본인만 자기 출석 체크인
-        allow create: if isSelf(uid)
+        // 본인만 자기 출석 체크인 (memberId 위조 방지)
+        allow create, update: if isSelf(uid)
           && request.resource.data.memberId == uid;
 
-        // 정정/삭제는 운영진만 (오기록 처리)
-        allow update, delete: if isStaff();
+        // 본인이 자기 체크인 취소 + 운영진은 다른 회원 출결 정정/삭제
+        allow delete: if isSelf(uid) || isStaff();
       }
 
       // ─────────────────────────────────────

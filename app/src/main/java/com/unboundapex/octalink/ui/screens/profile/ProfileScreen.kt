@@ -66,6 +66,7 @@ private val coachComments = listOf(
 fun ProfileScreen(sessionVm: SessionViewModel) {
     val session by sessionVm.state.collectAsState()
     var pickerOpen by remember { mutableStateOf(false) }
+    var leaveConfirmOpen by remember { mutableStateOf(false) }
     val avatar = avatarById(session.avatarId)
     val belt = session.belt
     val joinDate = remember { LocalDate.of(2026, 1, 1) }
@@ -180,13 +181,72 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        "다른 카카오 계정으로 가입 신청 테스트 가능",
+                        "세션 종료. 데이터는 보존되며 다음 로그인 시 복원",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            item {
+                PosseCard(modifier = Modifier.clickable { leaveConfirmOpen = true }) {
+                    Text(
+                        "회원 탈퇴",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = androidx.compose.ui.graphics.Color(0xFFC8102E),
+                    )
+                    Text(
+                        "앱 이용 중단. 도장 명단 완전 삭제는 관장님께 별도 요청",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         }
+    }
+
+    if (leaveConfirmOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { leaveConfirmOpen = false },
+            title = {
+                Text(
+                    "정말 탈퇴하시겠습니까?",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            },
+            text = {
+                Text(
+                    "• 즉시 앱 이용이 중단됩니다\n" +
+                        "• 출석/스킬/한 줄 코멘트 등 과거 기록은 운영 자료로 보존됩니다\n" +
+                        "• 도장 명단에서 완전 삭제는 관장님께 별도 요청해주세요\n" +
+                        "• 같은 카카오 계정으로 재가입 시 새 회원으로 처리됩니다",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                Text(
+                    "탈퇴",
+                    color = androidx.compose.ui.graphics.Color(0xFFC8102E),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable {
+                            leaveConfirmOpen = false
+                            sessionVm.leaveMembership()
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
+            dismissButton = {
+                Text(
+                    "취소",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable { leaveConfirmOpen = false }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
+        )
     }
 
     if (pickerOpen) {

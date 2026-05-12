@@ -18,14 +18,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.unboundapex.octalink.data.Belt
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.data.CheckInWindow
 import com.unboundapex.octalink.data.avatarById
 import com.unboundapex.octalink.data.checkInWindow
@@ -42,22 +40,6 @@ import com.unboundapex.octalink.ui.components.PosseScreen
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-private data class CheckedIn(
-    val name: String,
-    val belt: Belt,
-    val avatarId: String,
-    val time: String,
-)
-
-private val alreadyCheckedIn = listOf(
-    CheckedIn("박정호", Belt.BLUE, "ken", "18:42"),
-    CheckedIn("김상혁", Belt.PURPLE, "akuma", "18:48"),
-    CheckedIn("정유진", Belt.WHITE, "chun_li", "18:51"),
-    CheckedIn("신예린", Belt.WHITE, "cammy", "18:55"),
-    CheckedIn("한도윤", Belt.BLUE, "ryu", "18:58"),
-    CheckedIn("최민서", Belt.BLUE, "guile", "19:01"),
-)
-
 private fun shortDateLabel(date: LocalDate): String {
     val day = when (date.dayOfWeek) {
         java.time.DayOfWeek.MONDAY -> "월"
@@ -72,10 +54,13 @@ private fun shortDateLabel(date: LocalDate): String {
 }
 
 @Composable
-fun AttendanceScreen(sessionVm: SessionViewModel) {
+fun AttendanceScreen(
+    sessionVm: SessionViewModel,
+    attendanceVm: AttendanceViewModel = viewModel(),
+) {
     val session by sessionVm.state.collectAsState()
-    var checkedIn by remember { mutableStateOf(false) }
-    val nowLabel = remember { LocalTime.now(ZoneId.of("Asia/Seoul")).format(DateTimeFormatter.ofPattern("HH:mm")) }
+    val todayPeers by attendanceVm.todayPeers.collectAsState()
+
     val classLabel = remember { currentOrNextClassLabel() }
     val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
     val dateLabel = remember(today) { shortDateLabel(today) }
@@ -86,8 +71,14 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
     val tooEarly = window == CheckInWindow.BEFORE_WINDOW
     val cantCheckIn = window != CheckInWindow.OPEN
 
-    // 체크인 불가 시 상태 강제 해제
-    if (cantCheckIn && checkedIn) checkedIn = false
+    // 내 체크인 여부 = todayPeers 에 session.member.id 가 포함되어 있는지
+    val myMemberId = session.member?.id
+    val mySelfCheckIn = todayPeers.firstOrNull { it.member.id == myMemberId }
+    val checkedIn = mySelfCheckIn != null
+    val myCheckInTimeLabel = mySelfCheckIn?.attendance?.checkInAt?.let {
+        it.atZone(ZoneId.of("Asia/Seoul")).toLocalTime()
+            .format(DateTimeFormatter.ofPattern("HH:mm"))
+    } ?: LocalTime.now(ZoneId.of("Asia/Seoul")).format(DateTimeFormatter.ofPattern("HH:mm"))
 
     PosseScreen(title = "Attendance", subtitle = "$dateLabel\n$classLabel") {
         LazyColumn(
@@ -138,8 +129,12 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(
-                        onClick = { checkedIn = !checkedIn },
-                        enabled = !cantCheckIn,
+                        onClick = {
+                            val memberId = myMemberId ?: return@Button
+                            if (checkedIn) attendanceVm.cancelCheckIn(memberId)
+                            else attendanceVm.checkIn(memberId, classDefId = "default")
+                        },
+                        enabled = !cantCheckIn && myMemberId != null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(72.dp),
@@ -165,23 +160,15 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                     if (checkedIn && !cantCheckIn) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "체크인 시각 $nowLabel · 연속 출석 8일째 💪",
+                            "체크인 시각 $myCheckInTimeLabel 🔥",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
-            val displayList = when {
-                cantCheckIn -> emptyList()
-                checkedIn -> alreadyCheckedIn + CheckedIn(
-                    name = session.name,
-                    belt = session.belt,
-                    avatarId = session.avatarId,
-                    time = nowLabel,
-                )
-                else -> alreadyCheckedIn
-            }
+            // 출석 동료 리스트 — todayPeers 는 이미 본인 포함 (collectionGroup 쿼리 결과)
+            val displayList = if (cantCheckIn) emptyList() else todayPeers
 
             if (!cantCheckIn) {
                 item {
@@ -196,18 +183,22 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
             items(displayList.chunked(2)) { pair ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     pair.forEach { peer ->
-                        val isSelf = peer.name == session.name
+                        val isSelf = peer.member.id == myMemberId
+                        val timeLabel = peer.attendance.checkInAt
+                            .atZone(ZoneId.of("Asia/Seoul"))
+                            .toLocalTime()
+                            .format(DateTimeFormatter.ofPattern("HH:mm"))
                         PosseCard(
                             modifier = Modifier.weight(1f),
                             padding = PaddingValues(12.dp),
-                            leftStripeColor = peer.belt.ringColor,
+                            leftStripeColor = peer.member.belt.ringColor,
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 AvatarTile(
-                                    avatar = avatarById(peer.avatarId),
+                                    avatar = avatarById(peer.member.avatarId),
                                     size = 40.dp,
                                     ringColor = null,
                                 )
@@ -217,7 +208,7 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
                                     Text(
-                                        if (isSelf) "${peer.name} (나)" else peer.name,
+                                        if (isSelf) "${peer.member.name} (나)" else peer.member.name,
                                         style = MaterialTheme.typography.titleMedium,
                                         color = if (isSelf) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurface,
@@ -225,7 +216,7 @@ fun AttendanceScreen(sessionVm: SessionViewModel) {
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                     Text(
-                                        peer.time,
+                                        timeLabel,
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,

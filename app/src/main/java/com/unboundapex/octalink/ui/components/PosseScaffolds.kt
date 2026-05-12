@@ -154,6 +154,8 @@ fun PosseCard(
     modifier: Modifier = Modifier,
     padding: PaddingValues = PaddingValues(16.dp),
     leftStripeColor: Color? = null,
+    /** 그라데이션 스트라이프 — [leftStripeColor] 보다 우선. 둘 다 null 이면 스트라이프 없음. */
+    leftStripeBrush: androidx.compose.ui.graphics.Brush? = null,
     content: @Composable () -> Unit
 ) {
     Surface(
@@ -163,13 +165,20 @@ fun PosseCard(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp
     ) {
-        if (leftStripeColor != null) {
+        val hasStripe = leftStripeBrush != null || leftStripeColor != null
+        if (hasStripe) {
             Row(modifier = Modifier.height(IntrinsicSize.Min)) {
                 Box(
                     modifier = Modifier
                         .width(8.dp)
                         .fillMaxHeight()
-                        .background(leftStripeColor)
+                        .let { mod ->
+                            when {
+                                leftStripeBrush != null -> mod.background(leftStripeBrush)
+                                leftStripeColor != null -> mod.background(leftStripeColor)
+                                else -> mod
+                            }
+                        }
                 )
                 Column(
                     modifier = Modifier.padding(padding),

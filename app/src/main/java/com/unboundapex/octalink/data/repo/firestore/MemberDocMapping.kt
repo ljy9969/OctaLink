@@ -31,6 +31,11 @@ internal fun MemberDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "joinDate" to joinDate.toString(),
     "phone" to phone,
     "authProviderId" to authProviderId,
+    "email" to email,
+    "gender" to gender,
+    "ageRange" to ageRange,
+    "birthday" to birthday,
+    "birthyear" to birthyear,
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
     "updatedAt" to Timestamp(updatedAt.epochSecond, updatedAt.nano),
 )
@@ -54,6 +59,11 @@ internal fun DocumentSnapshot.toMemberDoc(): MemberDoc? {
         }.getOrDefault(LocalDate.now()),
         phone = getString("phone"),
         authProviderId = getString("authProviderId"),
+        email = getString("email"),
+        gender = getString("gender"),
+        ageRange = getString("ageRange"),
+        birthday = getString("birthday"),
+        birthyear = getString("birthyear"),
         createdAt = (get("createdAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
         updatedAt = (get("updatedAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
     )

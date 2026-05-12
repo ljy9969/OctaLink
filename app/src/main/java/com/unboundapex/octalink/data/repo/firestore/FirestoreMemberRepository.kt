@@ -48,10 +48,15 @@ class FirestoreMemberRepository : MemberRepository {
         awaitClose { sub.remove() }
     }
 
+    /**
+     * Cloud Function `completeSignup` 이 `members/{uid}` 형식으로 doc 생성하므로
+     * authProviderId == doc id 가 항상 성립. collection list 쿼리 대신 직접 doc get.
+     *
+     * 이렇게 하면 firestore.rules 의 `allow get: if isSelf(uid)` 만으로 부트스트랩 통과 가능
+     * (list 쿼리는 isApproved 필요라 신규 가입자는 막힘).
+     */
     override fun observeByAuthProviderId(authProviderId: String): Flow<MemberDoc?> =
-        col.whereEqualTo("authProviderId", authProviderId).limit(1)
-            .snapshotsAsList()
-            .map { it.firstOrNull() }
+        observeById(authProviderId)
 
     /**
      * 가입 폼 제출 → `completeSignup` Cloud Function 호출 (server-side 가 RoleAllowlist 매칭 +
@@ -69,6 +74,11 @@ class FirestoreMemberRepository : MemberRepository {
                     "weightClass" to req.weightClass.name,
                     "avatarId" to req.avatarId,
                     "phone" to req.phone,
+                    "email" to req.email,
+                    "gender" to req.gender,
+                    "ageRange" to req.ageRange,
+                    "birthday" to req.birthday,
+                    "birthyear" to req.birthyear,
                 )
             )
             .await()
@@ -95,6 +105,16 @@ class FirestoreMemberRepository : MemberRepository {
                 "updatedAt" to FieldValue.serverTimestamp(),
             )
         ).await()
+    }
+
+    /**
+     * 본인 탈퇴 — Cloud Function `leaveMembership` 이 server-side 로 status=LEFT 갱신.
+     * 클라이언트가 직접 update 하지 않는 이유: audit trail + 미래 cascade delete 확장 여지.
+     */
+    override suspend fun leaveMembership(memberId: String) {
+        functions.getHttpsCallable("leaveMembership")
+            .call(emptyMap<String, Any>())
+            .await()
     }
 
     override suspend fun updateProfile(

@@ -44,6 +44,7 @@ fun CreatorScreen(
     vm: RoleGrantViewModel = viewModel(),
 ) {
     val members by vm.grantable.collectAsState()
+    val seedStatus by vm.seedStatus.collectAsState()
 
     PosseScreen(title = "Creator", subtitle = "앱 제작자 전용 — 회원 역할 부여") {
         LazyColumn(
@@ -63,6 +64,39 @@ fun CreatorScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+
+            // 개발용 — 테스트 데이터 시드 (운영 출시 전 제거)
+            item {
+                PosseCard(leftStripeColor = Color(0xFFFBC02D)) {
+                    Text(
+                        "개발용 — 테스트 시드",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color(0xFFFBC02D),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "회원 5명(박정호/최민서/김상혁/한도윤/신예린) + 오늘 출석 5건. 멱등.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "▸ 테스트 데이터 시드 생성",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .clickable { vm.seedTestData() }
+                            .padding(vertical = 6.dp),
+                    )
+                    seedStatus?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
 

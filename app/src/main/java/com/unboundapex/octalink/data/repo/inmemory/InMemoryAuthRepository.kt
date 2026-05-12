@@ -18,12 +18,16 @@ class InMemoryAuthRepository(
     private val _currentUid = MutableStateFlow(initialUid)
     override val currentUid: StateFlow<String?> = _currentUid.asStateFlow()
 
+    private val _currentDisplayName = MutableStateFlow(displayNameOfMock(initialUid))
+    override val currentDisplayName: StateFlow<String?> = _currentDisplayName.asStateFlow()
+
     private var fakeKakaoCounter = 0
 
     override suspend fun signInWithKakao(): Result<KakaoIdentity> {
         fakeKakaoCounter++
         val id = "kakao:mock-${System.currentTimeMillis()}-$fakeKakaoCounter"
         _currentUid.value = id
+        _currentDisplayName.value = ""
         return Result.success(
             KakaoIdentity(
                 authProviderId = id,
@@ -35,15 +39,23 @@ class InMemoryAuthRepository(
 
     override suspend fun signOut() {
         _currentUid.value = null
+        _currentDisplayName.value = null
     }
 
     /** 디버그/테스트용 — 명시적으로 uid 전환. */
     fun setCurrentUid(uid: String?) {
         _currentUid.value = uid
+        _currentDisplayName.value = displayNameOfMock(uid)
     }
 
     companion object {
         const val MOCK_CREATOR_UID = "kakao:mock-jeeyeon"
         const val MOCK_MASTER_UID = "kakao:mock-pasi"
+
+        private fun displayNameOfMock(uid: String?): String? = when (uid) {
+            MOCK_CREATOR_UID -> "이지연"
+            MOCK_MASTER_UID -> "김파시"
+            else -> null
+        }
     }
 }

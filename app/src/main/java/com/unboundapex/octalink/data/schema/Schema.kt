@@ -64,6 +64,12 @@ data class MemberDoc(
     val joinDate: LocalDate,
     val phone: String? = null,
     val authProviderId: String? = null,
+    /** 카카오 비즈앱 동의 항목들 — 가입 시 1회 채워지고 이후 운영자가 수정/보강 */
+    val email: String? = null,
+    val gender: String? = null,        // "MALE" / "FEMALE" (Kakao SDK Gender enum.name)
+    val ageRange: String? = null,      // "AGE_20_29" 등 Kakao SDK AgeRange enum.name
+    val birthday: String? = null,      // "MMDD" 형식 (예: "1130")
+    val birthyear: String? = null,     // "YYYY" 형식 (예: "1995")
     val createdAt: Instant,
     val updatedAt: Instant,
 )

@@ -66,10 +66,11 @@ fun AdminScreen(
             contentPadding = PaddingValues(bottom = 24.dp),
         ) {
             // 운영진 공통 (COACH + MASTER + CREATOR) — 미구현 placeholder들
+            // 스트라이프: 코치 블루 (운영진 공통의 가장 낮은 권한 색)
             if (role.isStaff) {
                 item {
-                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
-                        Text("운영진 공통", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    PosseCard(leftStripeColor = StripeStaff) {
+                        Text("운영진 공통", style = MaterialTheme.typography.titleMedium, color = StripeStaff)
                         Spacer(Modifier.height(4.dp))
                         StaffAction("회원 한 줄 코멘트 작성") {}
                         StaffAction("출결 검토 — 회원별 일자별 출석 이력") {}
@@ -82,15 +83,15 @@ fun AdminScreen(
                 }
             }
 
-            // 관장 — 회원 가입 승인 큐 (활성)
+            // 관장 — 회원 가입 승인 큐 (액션 필요 카드 — 앰버 스트라이프)
             if (role.isMaster) {
                 item {
-                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
+                    PosseCard(leftStripeColor = StripeApprovalQueue) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "회원 가입 승인",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = StripeApprovalQueue,
                                 modifier = Modifier.weight(1f),
                             )
                             PendingBadge(count = pendingMembers.size)
@@ -113,9 +114,10 @@ fun AdminScreen(
                         }
                     }
                 }
+                // 관장 전용 — 관장 빨강
                 item {
-                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
-                        Text("관장 전용", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    PosseCard(leftStripeColor = StripeMaster) {
+                        Text("관장 전용", style = MaterialTheme.typography.titleMedium, color = StripeMaster)
                         Spacer(Modifier.height(4.dp))
                         StaffAction("스킬 점수 검토/확정 (PROPOSED → APPROVED)") {}
                         Spacer(Modifier.height(4.dp))
@@ -124,11 +126,12 @@ fun AdminScreen(
                 }
             }
 
-            // 창조자 단독 (CREATOR) — 회원 역할 부여 페이지 진입
+            // 창조자 단독 (CREATOR) — 회원 역할 부여 페이지 진입.
+            // 블랙홀 그라데이션 스트라이프 (보라→블랙→어선 디스크 주황) — 가장 강한 권한의 시각 시그니처
             if (role.isCreator) {
                 item {
-                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
-                        Text("창조자 전용", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    PosseCard(leftStripeBrush = StripeCreatorBrush) {
+                        Text("창조자 전용", style = MaterialTheme.typography.titleMedium, color = StripeCreatorAccent)
                         Spacer(Modifier.height(4.dp))
                         StaffAction("권한 부여 페이지 (회원 → 코치/관장 승격)") {
                             onOpenCreator()
@@ -141,6 +144,24 @@ fun AdminScreen(
         }
     }
 }
+
+// AdminScreen 카드 스트라이프 색상 — 권한 계층에 따라 시각적 구분
+private val StripeStaff = Color(0xFF1E88E5)           // 코치 블루 — 운영진 공통 카드
+private val StripeApprovalQueue = Color(0xFFFBC02D)   // 앰버 — 액션 필요한 가입 승인 큐
+private val StripeMaster = Color(0xFFC8102E)          // 관장 빨강 — 관장 전용
+
+// 창조자 전용 — 블랙홀 그라데이션 (앰버 인접색 회피)
+// 위에서부터: 이벤트 호라이즌 보라 → 특이점 검정 → 어센션 디스크 주황. 8dp 폭 vertical gradient
+private val StripeCreatorBrush = androidx.compose.ui.graphics.Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.00f to Color(0xFF7B1FA2),  // 보라 (event horizon)
+        0.35f to Color(0xFF1A0033),  // 거의 검정 (보라 끝)
+        0.55f to Color(0xFF000000),  // 순검정 (특이점)
+        0.75f to Color(0xFF3E0606),  // 어두운 적색 (디스크 안쪽)
+        1.00f to Color(0xFFFF6F00),  // 주황 (accretion disk)
+    )
+)
+private val StripeCreatorAccent = Color(0xFFAB47BC)   // 보라 — 타이틀 텍스트 (그라데이션 상단과 매칭)
 
 @Composable
 private fun PendingMemberRow(

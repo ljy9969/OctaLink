@@ -4,9 +4,9 @@ MMA 체육관 **Team Posse Striking 강남점** 회원 전용 앱 **OctaLink**.
 개발사: **Unbound Apex Systems** · 개발자: **BlackCat Strike** (이지연).
 Strava, Smashr를 참고. 궁극 목표는 **개인의 성장**.
 
-## 진행 현황 (2026-05-10 기준)
+## 진행 현황 (2026-05-12 기준)
 
-**Play Store 출시 직전 단계.** UI 완성 + 백엔드 골격(스키마 + ViewModel/StateFlow + Firestore 결정) + 자체 OctaLink 브랜딩 완료(옥타곤+슬래시 마크 + 워드마크) + Play 콘솔 기본 스토어 등록정보 거의 완료(아이콘 / 피처 그래픽 / 폰 8장 / 7" 태블릿 8장 / 10" 태블릿 8장 / 앱 설명 / IARC 12+) + 타겟 API 35 코드 마이그레이션. 다음은 Play 콘솔 "앱 콘텐츠" 잔여 폼(앱 액세스 / 광고 / 데이터 보안 / 타겟 고객층) + 작업 PC에서 빌드 검증 + Firebase 백엔드 연동.
+**Phase 2 카카오 OAuth + Firestore 활성화 완료.** Firebase Blaze 전환 + Cloud Functions(`kakaoSignIn` / `completeSignup`) 배포 + Firestore Rules 배포 + RepositoryProvider Phase 2 토글 모두 끝. **카카오 로그인 → 가입 폼(Kakao nickname 자동 prefill) → Cloud Function 으로 `members/{uid}` 생성 → role 자동 부여 → 메인 앱 진입** end-to-end 검증 완료(이지연 → CREATOR + APPROVED Firestore 문서 생성 확인). 사전 단계로 권한 4단계(CREATOR 분리) + AdminScreen 별도 nav 탭 + 토너먼트 챔피언 폭죽/이름 강조 + 한글 IME 입력 호환 + draw 풀에서 관장 제외 등 UX 디테일 정리. **Play Store 출시 직전 단계.** UI 완성 + 자체 OctaLink 브랜딩 완료(옥타곤+슬래시 마크 + 워드마크) + Play 콘솔 기본 스토어 등록정보 거의 완료(아이콘 / 피처 그래픽 / 폰 8장 / 7" 태블릿 8장 / 10" 태블릿 8장 / 앱 설명 / IARC 12+) + 타겟 API 35 코드 마이그레이션. 다음은 Play 콘솔 "앱 콘텐츠" 잔여 폼(앱 액세스 / 광고 / 데이터 보안 / 타겟 고객층) + AttendanceRepository 등 후속 Repository 확장.
 
 저장소: https://github.com/ljy9969/OctaLink (브랜치: `main`, `teamposse` — USF4 자산 백업)
 패키지: `com.unboundapex.octalink` (applicationId 동일, Play Store 등록 후 변경 불가)
@@ -113,8 +113,9 @@ app/src/main/
 ├── AndroidManifest.xml
 ├── assets/avatars/README.txt          # 캐릭터 이미지 드롭존 + 저작권 경고
 ├── java/com/unboundapex/octalink/
-│   ├── MainActivity.kt                # installSplashScreen + HolidayRepository.init
-│   ├── navigation/PosseApp.kt         # 커스텀 Row 44dp 네비게이션 + NavHost
+│   ├── MainActivity.kt                # installSplashScreen + setContent (init은 Application으로 이전)
+│   ├── OctaLinkApplication.kt         # KakaoSdk.init + HolidayRepository.init + RepositoryProvider.init
+│   ├── navigation/PosseApp.kt         # 세션 phase + status 라우팅 + 커스텀 Row nav + NavHost
 │   ├── data/
 │   │   ├── AvatarCatalog.kt           # USF4 44명 카탈로그
 │   │   ├── BeltColors.kt              # 벨트 → 컬러 매핑
@@ -122,10 +123,24 @@ app/src/main/
 │   │   ├── HolidayRepository.kt       # 공공데이터 API + 캐시
 │   │   ├── Curriculum.kt              # 평일 5일 그룹 수업 커리큘럼
 │   │   ├── Match.kt                   # 매치 in-memory 모델
-│   │   ├── Member.kt                  # 회원 풀 40명 (5체급 × 8명) + WeightClass
+│   │   ├── Member.kt                  # 회원 풀 40명 (MockSeed 입력, BracketDraw는 Repository 경유)
+│   │   ├── RoleAllowlist.kt           # creators/masters/coaches 사전 등록 명단
 │   │   ├── Schedule.kt                # 운영 스케줄 + currentOrNextClassLabel
-│   │   ├── schema/Schema.kt           # Firestore 영속화 도메인 모델 (*Doc)
-│   │   ├── session/SessionViewModel.kt   # 현재 회원 세션 (StateFlow)
+│   │   ├── repo/                      # ── Repository 추상화 패키지 ──
+│   │   │   ├── AuthRepository.kt          # 인증 인터페이스 + KakaoIdentity
+│   │   │   ├── MemberRepository.kt        # 회원 CRUD 인터페이스 + SignupRequest
+│   │   │   ├── RepositoryProvider.kt      # 싱글톤 컨테이너 (Phase 1 InMemory / Phase 2 토글)
+│   │   │   ├── inmemory/                  # Phase 1 — 현재 활성
+│   │   │   │   ├── InMemoryAuthRepository.kt   # mock 카카오 (이지연 자동 로그인)
+│   │   │   │   ├── InMemoryMemberRepository.kt # MutableStateFlow 기반 CRUD
+│   │   │   │   └── MockSeed.kt                 # 40명 + 김파시 + 2 PENDING 시드
+│   │   │   ├── kakao/                     # Phase 2 — 배포 대기
+│   │   │   │   └── KakaoAuthRepository.kt # 카카오 SDK → Cloud Function → Firebase Custom Token
+│   │   │   └── firestore/                 # Phase 2 — 배포 대기
+│   │   │       ├── FirestoreMemberRepository.kt # members/{uid} callbackFlow + completeSignup 호출
+│   │   │       └── MemberDocMapping.kt          # MemberDoc ↔ Firestore Map
+│   │   ├── schema/Schema.kt           # Firestore 영속화 도메인 모델 (*Doc, Role 4단계 enum 포함)
+│   │   ├── session/SessionViewModel.kt   # auth + member 합성 → SessionState.Phase 분기
 │   │   └── tournament/TournamentViewModel.kt # 토너먼트 상태 + 부전승 자동 처리
 │   ├── messaging/
 │   │   └── OctaLinkMessagingService.kt # FCM 메시지/토큰 핸들러 (현재 로그만, 알림 표시는 추후)
@@ -138,19 +153,25 @@ app/src/main/
 │   │   ├── AvatarTile.kt              # 원형 아바타 + 벨트 링 + 흰 배경 통일
 │   │   ├── AvatarPickerSheet.kt       # 4열 그리드 ModalBottomSheet
 │   │   ├── CageIcon.kt                # MMA 옥타곤 케이지 (Canvas, top-view)
-│   │   └── PosseScaffolds.kt          # PosseScreen / PosseCard
+│   │   ├── ConfettiOverlay.kt         # 챔피언 확정 시 3연발 색종이 폭죽 (Canvas + withFrameNanos)
+│   │   └── PosseScaffolds.kt          # PosseScreen / PosseCard (subtitleEmphasis 지원)
 │   └── ui/screens/
-│       ├── home/HomeScreen.kt         # 로고 배너 + 정권 임팩트 + 통계/미션/케이지/피드 + ⓘ Info 진입
+│       ├── home/HomeScreen.kt         # 로고 배너 + 정권 임팩트 + 성장/진화 강조 + 통계/미션/케이지/피드
 │       ├── curriculum/CurriculumScreen.kt # 평일 5일 커리큘럼 카드 + 오늘 하이라이트
 │       ├── attendance/AttendanceScreen.kt # 체크인 토글 + 동료 2열 + 본인 카드
 │       ├── community/CommunityScreen.kt   # 컬러 칩 태그 + 우측 시각
-│       ├── profile/ProfileScreen.kt   # 캐릭터 + 헥사곤 + 승률 + 코멘트
+│       ├── profile/ProfileScreen.kt   # 캐릭터 + 헥사곤 + 승률 + 코멘트 + 로그아웃
 │       ├── info/InfoScreen.kt         # 체육관 정보 (주소/전화/운영시간/정책/앱 버전)
-│       ├── admin/AdminScreen.kt       # 운영진/관장/창조자 공통 진입 (하단 nav "운영" 탭, isStaff만 표시)
-│       ├── creator/CreatorScreen.kt   # 창조자 전용 — 회원 역할 부여 (AdminScreen에서 진입)
+│       ├── onboarding/OnboardingScreens.kt # LoginScreen / SignupScreen / PendingApprovalScreen / RejectedScreen
+│       ├── admin/                      # 운영 탭 진입점 (하단 nav, isStaff만 노출)
+│       │   ├── AdminScreen.kt             # 권한별 카드 분기 + 가입 승인 큐 (활성)
+│       │   └── MemberApprovalViewModel.kt # PENDING 목록 + 승인/거부 액션
+│       ├── creator/                    # 창조자 전용
+│       │   ├── CreatorScreen.kt           # 회원 역할 부여 UI
+│       │   └── RoleGrantViewModel.kt      # APPROVED 회원 목록 + setRole 액션
 │       └── bracket/
-│           ├── BracketScreen.kt       # 트리(EIGHT/FOUR/FINAL_ONLY) + 직접 클릭 advance + 불꽃 라인
-│           └── BracketDrawScreen.kt   # 추첨 (체급/벨트 필터, 회원 선택, 모달)
+│           ├── BracketScreen.kt       # 트리 + 직접 클릭 advance + 불꽃 라인 + 챔피언 폭죽
+│           └── BracketDrawScreen.kt   # 추첨 (MemberRepository APPROVED 풀, MASTER 제외)
 └── res/
     ├── drawable-nodpi/
     │   ├── logo_octalink.png               # 마스터 로고 (홈 배너용 워드마크)
@@ -171,8 +192,15 @@ screenshots/                                  # Play Store 등록 자산
 
 (프로젝트 루트)
 firestore.rules                               # Firestore Security Rules (권한 강제)
-firebase.json                                 # Firebase CLI 설정
+firebase.json                                 # Firebase CLI 설정 (firestore + functions)
 firestore.indexes.json                        # 복합 쿼리 인덱스 (현재 비어있음, 필요 시 추가)
+functions/                                    # Cloud Functions (Node 20 + TypeScript)
+├── package.json                                  # firebase-admin + firebase-functions deps
+├── tsconfig.json
+├── .eslintrc.js
+└── src/index.ts                                  # kakaoSignIn + completeSignup (region: asia-northeast3)
+tools/                                        # 빌드/디자인 보조 스크립트 + 단발 export
+└── kakao_icon_128.png                            # 카카오 Developers 콘솔 앱 아이콘 (128px, 6.8KB)
 ```
 
 ## 결정된 사항
@@ -272,11 +300,15 @@ firestore.indexes.json                        # 복합 쿼리 인덱스 (현재 
 - [x] (05-11) `보안` **권한 4단계 확장 — CREATOR 분리** — 관장 계정 탈취 시 무차별 권한 상승 공격 차단 위해 회원 역할 부여(코치 승격) 권한을 앱 제작자 단독(`CREATOR`)으로 격리. `Role.CREATOR` enum 추가 + `Role.isCreator` / `isMaster`(MASTER+CREATOR) / `isStaff`(3개 포함) 확장 함수 갱신. `RoleAllowlist.creators` Set 신규(이지연만), masters에서 이지연 제거. `firestore.rules` v2: `isCreator()` 함수 + `roleUnchanged()` + members update 3단계 분기 (본인 안전 필드 / 관장 role 외 / 창조자 전체). delete는 CREATOR만. Repository 도입 후 `db.collection('members').document(uid).update('role', ...)` 실제 호출
 - [x] (05-11) `UX 디테일` **운영 진입점을 별도 nav 탭으로 분리** — 이전엔 Profile 하단에 운영진/관장/창조자 카드 누적 → 하단 nav에 "운영" 탭(`AdminScreen`) 신규. `isStaff` 회원에게만 동적 표시(MEMBER에는 안 보임). AdminScreen에서 권한별 카드 분기(운영진 공통 / 관장 / 창조자). 창조자 카드의 "권한 부여 페이지" 버튼 → `CreatorScreen` 진입. CreatorScreen mock 회원 6명(이지연·김파시 제외) + 벨트 5단계 모두 포함(WHITE/BLUE/PURPLE/BROWN/BLACK) + 체급/벨트 내림차순 정렬 + 가입일 표시 제거(체급·벨트만)
 - [x] (05-11) `백엔드 / 데이터 (메인)` **Repository 추상화 + 가입 플로우 + Auth 인터페이스 (Phase 1 — InMemory)** — `data/repo/` 패키지 신규. (1) `AuthRepository` + `KakaoIdentity` / `MemberRepository` + `SignupRequest` 인터페이스 정의. (2) `inmemory/InMemoryAuthRepository` (mock 카카오 - 이지연 자동 로그인 + signInWithKakao() 호출 시 새 fake uid 발급으로 신규 가입 시뮬레이션), `inmemory/InMemoryMemberRepository` (signup → RoleAllowlist 매칭 즉시 APPROVED / 그 외 PENDING, setStatus/setRole/updateProfile), `inmemory/MockSeed` (이지연 CREATOR + 김파시 MASTER + 6명 APPROVED + 2명 PENDING). (3) `RepositoryProvider` 싱글톤 — MainActivity 에서 1회 init. (4) `SessionViewModel` 재작성 — auth.currentUid + members.observeByAuthProviderId 합성으로 `SessionState.Phase` (LOADING/UNAUTHENTICATED/PENDING_SIGNUP/AUTHENTICATED) + member.status 분기. (5) `ui/screens/onboarding/OnboardingScreens.kt` 신규 — `LoginScreen`(카카오 로그인 버튼) / `SignupScreen`(이름·벨트·체급·아바타·연락처 폼) / `PendingApprovalScreen` / `RejectedScreen`. (6) `PosseApp` 라우팅 분기 (phase + status 별) — APPROVED 가 아닌 단계는 메인 앱 접근 차단. (7) `AdminScreen` 의 "회원 가입 승인" 카드 활성화 — `MemberApprovalViewModel` 로 PENDING 큐 + 승인/거부 액션. (8) `CreatorScreen` 의 mock 명단 제거 → `RoleGrantViewModel` 로 실제 MemberRepository 데이터 + setRole() 실제 동작. (9) Profile 에 로그아웃 버튼 (가입 플로우 테스트용). **Phase 2 (deferred):** 실제 카카오 SDK 통합 + Firebase Custom Token 교환 Cloud Function + `FirestoreXxxRepository` 실제 구현체 — UI/VM 변경 없이 RepositoryProvider 만 교체
+- [x] (05-11) `UX 디테일` **MockSeed 풀 확장 + draw 풀 MASTER 제외** — `memberPool` 40명을 MockSeed 로 흡수(이지연 CREATOR + 김파시 MASTER + 38 MEMBER + 2 PENDING). `BracketDrawScreen` 정적 `memberPool` 의존 제거 → `MemberRepository.observeByStatus(APPROVED)` 구독 + `MemberDoc → Member` 어댑팅. 가입 승인된 신규 회원이 즉시 추첨 풀에 합류. 관장(MASTER)은 추첨 대상이 아니라 운영자이므로 풀에서 제외(`role != MASTER` 필터)
+- [x] (05-11) `UX 디테일` **HomeScreen subtitle 성장/진화 강조 + 토너먼트 챔피언 폭죽** — `PosseScreen.subtitleEmphasis: List<String>` 파라미터 신규 → `AnnotatedString` 으로 키워드만 primary 색 + ExtraBold 인라인 렌더링. HomeScreen 의 "개인의 성장, 함께하는 진화" 에서 "성장"/"진화" 강조. titleSmall + onSurface 로 폰트 강화 + 로고와 간격 -16dp 오프셋. `ConfettiOverlay.kt` 신규 — 3연발 색종이 폭죽(35입자/burst, 부채꼴 솟구침 + 중력 낙하 + 회전 + 페이드, ~6초 자동 종료). `BracketScreen.ChampionBanner` 챔피언 확정 시 이름 0.55x → 1.25x bouncy spring → 1.0x + 골드(#FFD54F) ExtraBold 전환 + 골드 보더
+- [x] (05-11) `버그 / 호환성` **SignupScreen 한글 IME 입력 지원** — `OutlinedTextField` String 기반 + `onValueChange` 안 변환(`.take(20)`)이 한글 조합 영역(composition region)을 매 키마다 리셋시켜 첫 자모 입력이 무시되는 Compose 알려진 이슈. `TextFieldValue` 사용 + onValueChange 변환 완전 제거(길이 제한은 제출 시점 `.take(20)` 으로 이전) + `KeyboardType.Text` 명시. 전화번호 필드는 숫자 전용(`KeyboardType.Number` + `filter { isDigit() }` + 최대 11자리)
+- [x] (05-11) `백엔드 / 데이터 (메인)` **Phase 2 카카오 OAuth + Cloud Functions + Firestore 스캐폴드 (배포 대기)** — 실제 통합 구현체 작성 완료, RepositoryProvider 토글 두 줄로 활성화 가능 상태. (1) 카카오 Developers 앱 등록(OctaLink, ID 1453976, 비즈앱) + 카카오 로그인 활성화 + 닉네임 필수 동의 + 네이티브 앱 키 발급 → `local.properties` 의 `KAKAO_NATIVE_APP_KEY`. (2) `app/build.gradle.kts`: BuildConfig + `manifestPlaceholders["KAKAO_NATIVE_APP_KEY"]` + `com.kakao.sdk:v2-user:2.20.6` + `firebase-functions` + `kotlinx-coroutines-play-services:1.8.1`. (3) `AndroidManifest.xml`: `OctaLinkApplication` Application 클래스 신규 + `com.kakao.sdk.auth.AuthCodeHandlerActivity` intent-filter(`kakao${KAKAO_NATIVE_APP_KEY}://oauth`). (4) `OctaLinkApplication.onCreate` 에서 `KakaoSdk.init` + `RepositoryProvider.init(context)` 1회 — MainActivity 의 init 제거. (5) `data/repo/kakao/KakaoAuthRepository.kt`: `UserApiClient.loginWithKakaoTalk` / `loginWithKakaoAccount` → Cloud Function `kakaoSignIn` → `FirebaseAuth.signInWithCustomToken` 4단계. uid 형식 `kakao:{kakaoUserId}` 가 MemberDoc.authProviderId 와 매칭. (6) `data/repo/firestore/FirestoreMemberRepository.kt` + `MemberDocMapping.kt`: `members/{uid}` 컬렉션 callbackFlow 기반 observe + `Timestamp` ↔ `Instant` / enum `.name` 매핑. signup 은 client create 차단으로 `completeSignup` Cloud Function 호출 패턴. (7) `functions/` 디렉토리 신규(TypeScript, Node 20): `kakaoSignIn(accessToken)` — Kakao `/v2/user/me` 토큰 검증 → Firebase Auth user ensure → Custom Token 발급. `completeSignup(name, belt, weightClass, avatarId, phone)` — server-side RoleAllowlist 매칭(이지연 CREATOR / 김파시 MASTER) → `members/{uid}` 문서 생성. (8) `firebase.json` 에 functions 섹션 + `predeploy` 린트/빌드. **활성화 절차:** 집 PC 에서 Blaze 전환 → `cd functions; npm install; firebase deploy --only functions` + `firebase deploy --only firestore:rules` → `RepositoryProvider.kt` 의 Phase 2 두 줄 토글 → 빌드 → logcat 키해시 → 카카오 콘솔 등록
+- [x] (05-12) `백엔드 / 데이터 (배포)` **Phase 2 활성화 완료 + 부트스트랩/Cloud Run 권한 함정 해결 + KakaoIdentity prefill** — 활성화 풀 스택. (1) Firebase Blaze 플랜 전환 (Cloud Functions 외부 fetch 위해 필수). (2) Cloud Build 서비스 계정(`{프로젝트번호}-compute@developer.gserviceaccount.com`)에 IAM 역할 부여 — `Cloud Build SA` + `Artifact Registry Writer` + `Logs Writer` + `Service Account Token Creator`(`createCustomToken` 의 signBlob 권한). (3) `cd functions; npm install; npm run build` 후 `firebase deploy --only functions` 배포. (4) Cloud Functions Gen 2 가 Cloud Run 으로 deployed 라서 `kakaosignin` / `completesignup` 서비스에 `allUsers + roles/run.invoker` 부여 필요(클라이언트는 로그인 전이라 인증 헤더 없음, 함수 자체가 카카오 토큰 검증). (5) `firebase deploy --only firestore:rules`. (6) `RepositoryProvider.init()` 의 InMemory → KakaoAuthRepository + FirestoreMemberRepository 두 줄 토글. (7) Firebase Console 키해시 안내 부족 → `OctaLinkApplication.onCreate` 에 `Utility.getKeyHash(this)` 로그 추가 → 카카오 콘솔의 키해시 필드는 자동 등록(SDK 자기 자동 갱신) 으로 별도 등록 안 함. (8) **부트스트랩 룰 함정**: 신규 가입자가 자기 `members/{uid}` 문서 없는데 `isApproved()` → `memberDoc()` → `get()` 시 evaluation error 발생해 모든 read 거부 → 앱 크래시. 수정: `firestore.rules` 의 members read 를 `allow get: if isSelf(uid) || isApproved();` + `allow list: if isApproved();` 로 분리해 self 가 자기 doc 부재 케이스도 통과하게 변경. (9) `FirestoreMemberRepository.observeByAuthProviderId` 를 collection list 쿼리 → 직접 doc get(`observeById`) 으로 단순화 (Cloud Function 이 doc id = uid 로 생성하므로 동일). (10) `SessionViewModel` `combine(uid, displayName, member)` flow + `.catch{}` 로 Firestore 예외 시 UNAUTHENTICATED 폴백(앱 죽지 않음). (11) `AuthRepository.currentDisplayName` 인터페이스 추가, `KakaoAuthRepository` 가 `firebaseAuth.currentUser?.displayName` 추적(Cloud Function 이 Auth user 생성 시 nickname 세팅) → 앱 재시작 시 `signInWithKakao()` 호출 없이도 SignupScreen 의 이름 필드 prefill. (12) `SignupScreen` 에 두 `LaunchedEffect` 추가 — kakao nickname/phone 으로 prefill (사용자 입력 시작 시 덮어쓰지 않음, phone 은 `권한 없음` 상태라 현재 null). **end-to-end 검증**: 이지연 카카오 가입 → SignupScreen 자동 이름 입력 → 제출 → `completeSignup` Cloud Function → Firestore `members/kakao:4891520650` 문서 생성 (role=CREATOR, status=APPROVED) → 메인 앱 진입
 
 ### 남은 일
 
-- [ ] `백엔드 / 데이터 (메인)` **카카오 OAuth + Cloud Functions (Phase 2)** — 실제 `com.kakao.sdk:user` 의존성 + 카카오 Developers 앱 등록(네이티브 앱 키) + `KakaoAuthRepository` 구현체. Firebase Cloud Function `kakaoSignIn(accessToken)` — 카카오 토큰 검증 → Firebase Auth Custom Token 발급 → `signInWithCustomToken`. 가입 onCreate 트리거가 server-side allowlist 조회 → role 결정해서 `members/{uid}` 생성
-- [ ] `백엔드 / 데이터 (메인)` **FirestoreXxxRepository 구현체 (Phase 2)** — `MemberDoc` ↔ Firestore Map 직렬화 + `members/{uid}` 컬렉션 매핑. AttendanceRepository / SkillScoreRepository 등 후속 컬렉션도 동일 패턴 확장
+- [ ] `백엔드 / 데이터` **AttendanceRepository / SkillScoreRepository / CommentRepository / TournamentRepository (Phase 2 확장)** — MemberRepository 패턴 재사용. 동일 인터페이스 + InMemory + Firestore 구현체 쌍. Phase 2 활성화 후 추가
 - [ ] `UX 디테일` **토너먼트 히스토리** — 종료된 토너먼트 보관 + 회원별 전적 누적
 - [ ] `배포 준비` **푸시 알림 (FCM)** — 수업 리마인더, 한 줄 코멘트 도착, 대진표 업데이트
 - [ ] `UX 디테일` **체크인 위치 검증** — GPS 체육관 반경 옵션 (시간 30분 윈도우는 05-08 완료, 옵션)

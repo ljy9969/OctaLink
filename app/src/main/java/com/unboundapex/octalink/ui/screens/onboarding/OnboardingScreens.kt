@@ -21,6 +21,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -120,6 +123,9 @@ private fun DebugLoginChip(label: String, onClick: () -> Unit) {
  */
 @Composable
 fun SignupScreen(sessionVm: SessionViewModel) {
+    val session by sessionVm.state.collectAsState()
+    val kakaoIdentity = session.kakaoIdentity
+
     // 한글 IME 조합 보존을 위해 TextFieldValue 사용 (String 기반은 onValueChange 콜백 시
     // composition region 이 리셋되어 한글 첫 자모 입력이 무시되는 알려진 이슈가 있음)
     var nameValue by remember { mutableStateOf(TextFieldValue("")) }
@@ -128,6 +134,23 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     var weightClass by remember { mutableStateOf(WeightClass.LIGHT) }
     var avatarId by remember { mutableStateOf("ryu") }
     var pickerOpen by remember { mutableStateOf(false) }
+
+    // 카카오에서 받은 nickname/phone 으로 prefill — 단, 사용자가 이미 입력 시작했으면 덮어쓰지 않음
+    LaunchedEffect(kakaoIdentity?.displayName) {
+        val nickname = kakaoIdentity?.displayName.orEmpty()
+        if (nickname.isNotBlank() && nameValue.text.isEmpty()) {
+            nameValue = TextFieldValue(nickname, selection = TextRange(nickname.length))
+        }
+    }
+    LaunchedEffect(kakaoIdentity?.phoneNumber) {
+        val raw = kakaoIdentity?.phoneNumber.orEmpty()
+        if (raw.isNotBlank() && phone.isEmpty()) {
+            // 카카오 phone_number 는 "+82 10-1234-5678" 형식 — 숫자만 추출해서 11자 cap
+            phone = raw.filter { it.isDigit() }
+                .let { if (it.startsWith("82")) "0" + it.drop(2) else it }
+                .take(11)
+        }
+    }
 
     val avatar = avatarById(avatarId)
     val name = nameValue.text

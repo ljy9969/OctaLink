@@ -40,9 +40,16 @@ interface MemberRepository {
         belt: Belt? = null,
         avatarId: String? = null,
     )
+
+    /**
+     * 본인 회원 탈퇴 — [com.unboundapex.octalink.data.schema.MembershipStatus.LEFT] 로 전환.
+     * 도장 명단(MemberDoc) 자체 삭제는 CREATOR/MASTER 권한 (별도 요청).
+     * Cloud Function `leaveMembership` 호출 (server-side audit trail).
+     */
+    suspend fun leaveMembership(memberId: String)
 }
 
-/** 가입 폼 입력 결과. */
+/** 가입 폼 입력 결과 — 폼에서 사용자가 입력한 값 + 카카오 동의 항목에서 가져온 값 합산. */
 data class SignupRequest(
     val authProviderId: String,
     val name: String,
@@ -50,4 +57,10 @@ data class SignupRequest(
     val weightClass: WeightClass,
     val avatarId: String,
     val phone: String? = null,
+    /** 카카오 동의 항목에서 가져온 부가 정보 — null 가능, 권한/미동의 시 비어옴 */
+    val email: String? = null,
+    val gender: String? = null,
+    val ageRange: String? = null,
+    val birthday: String? = null,
+    val birthyear: String? = null,
 )

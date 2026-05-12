@@ -1,6 +1,7 @@
 package com.unboundapex.octalink.data.repo.kakao
 
 import android.content.Context
+import android.util.Log
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.functions
@@ -16,6 +17,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+private const val TAG = "OctaLink.KakaoAuth"
 
 /**
  * 실제 카카오 OAuth + Firebase Custom Token 통합 [AuthRepository] 구현.
@@ -42,16 +45,24 @@ class KakaoAuthRepository(
     private val _currentUid = MutableStateFlow(firebaseAuth.currentUser?.uid)
     override val currentUid: StateFlow<String?> = _currentUid.asStateFlow()
 
+    private val _currentDisplayName = MutableStateFlow(firebaseAuth.currentUser?.displayName)
+    override val currentDisplayName: StateFlow<String?> = _currentDisplayName.asStateFlow()
+
     init {
-        // Firebase Auth 상태 변경(앱 재시작 시 자동 복원 포함) → uid Flow 갱신
+        // Firebase Auth 상태 변경(앱 재시작 시 자동 복원 포함) → uid/displayName Flow 갱신.
+        // displayName 은 Cloud Function `kakaoSignIn` 이 사용자 생성/갱신 시 Kakao nickname 으로 세팅.
         firebaseAuth.addAuthStateListener { auth ->
             _currentUid.value = auth.currentUser?.uid
+            _currentDisplayName.value = auth.currentUser?.displayName
         }
     }
 
     override suspend fun signInWithKakao(): Result<KakaoIdentity> = runCatching {
         // 1) 카카오 OAuth 토큰 획득 — 카톡 앱 우선, 없으면 웹 계정 로그인
-        val oAuthToken = if (UserApiClient.instance.isKakaoTalkLoginAvailable(context)) {
+        Log.d(TAG, "[1/4] Kakao OAuth 시작")
+        val kakaoTalkAvailable = UserApiClient.instance.isKakaoTalkLoginAvailable(context)
+        Log.d(TAG, "[1/4] kakaoTalkAvailable=$kakaoTalkAvailable")
+        val oAuthToken = if (kakaoTalkAvailable) {
             awaitKakaoLogin { cb ->
                 UserApiClient.instance.loginWithKakaoTalk(context, callback = cb)
             }
@@ -60,8 +71,10 @@ class KakaoAuthRepository(
                 UserApiClient.instance.loginWithKakaoAccount(context, callback = cb)
             }
         }
+        Log.d(TAG, "[1/4] accessToken 획득 (len=${oAuthToken.accessToken.length})")
 
         // 2) Cloud Function 으로 카카오 accessToken → Firebase Custom Token 교환
+        Log.d(TAG, "[2/4] Cloud Function kakaoSignIn 호출")
         val callResult = functions
             .getHttpsCallable("kakaoSignIn")
             .call(mapOf("accessToken" to oAuthToken.accessToken))
@@ -69,19 +82,33 @@ class KakaoAuthRepository(
         @Suppress("UNCHECKED_CAST")
         val data = callResult.data as Map<String, Any>
         val customToken = data["customToken"] as String
+        Log.d(TAG, "[2/4] customToken 수신 (len=${customToken.length})")
 
         // 3) Firebase Auth 에 Custom Token 으로 로그인
+        Log.d(TAG, "[3/4] signInWithCustomToken")
         firebaseAuth.signInWithCustomToken(customToken).await()
+        Log.d(TAG, "[3/4] Firebase signed in. uid=${firebaseAuth.currentUser?.uid}")
 
-        // 4) 카카오 사용자 정보 (닉네임) 조회 — SessionViewModel 의 가입 폼 prefill 용
+        // 4) 카카오 사용자 정보 조회 — SessionViewModel 의 가입 폼 prefill + MemberDoc 저장 용도
+        Log.d(TAG, "[4/4] Kakao user.me")
         val user = awaitKakaoMe()
+        val acct = user.kakaoAccount
+        val realName = acct?.name
+        val nickname = acct?.profile?.nickname
+        Log.d(TAG, "[4/4] name=$realName, nickname=$nickname")
 
         KakaoIdentity(
             authProviderId = firebaseAuth.currentUser!!.uid,
-            displayName = user.kakaoAccount?.profile?.nickname.orEmpty(),
-            phoneNumber = user.kakaoAccount?.phoneNumber,
+            // 비즈앱 동의 후 `name` (실명) 우선. 미동의 / 닉네임-only 환경 fallback.
+            displayName = realName ?: nickname.orEmpty(),
+            phoneNumber = acct?.phoneNumber,
+            email = acct?.email,
+            gender = acct?.gender?.name,
+            ageRange = acct?.ageRange?.name,
+            birthday = acct?.birthday,
+            birthyear = acct?.birthyear,
         )
-    }
+    }.onFailure { Log.e(TAG, "signInWithKakao 실패", it) }
 
     override suspend fun signOut() {
         awaitKakaoLogout()
