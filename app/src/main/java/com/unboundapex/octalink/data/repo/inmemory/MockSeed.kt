@@ -31,7 +31,7 @@ internal object MockSeed {
                 name = "김파시",
                 belt = Belt.BLACK,
                 weightClass = WeightClass.MIDDLE,
-                avatarId = "akuma",
+                avatarId = "m_middle",
                 role = Role.MASTER,
                 authProviderId = InMemoryAuthRepository.MOCK_MASTER_UID,
             )
@@ -62,7 +62,7 @@ internal object MockSeed {
                 name = "장지훈",
                 belt = Belt.WHITE,
                 weightClass = WeightClass.LIGHT,
-                avatarId = "dan",
+                avatarId = "m_light",
                 status = MembershipStatus.PENDING,
                 joinDate = LocalDate.of(2026, 5, 10),
             )
@@ -73,7 +73,7 @@ internal object MockSeed {
                 name = "오현지",
                 belt = Belt.WHITE,
                 weightClass = WeightClass.FEATHER,
-                avatarId = "sakura",
+                avatarId = "f_feather",
                 status = MembershipStatus.PENDING,
                 joinDate = LocalDate.of(2026, 5, 11),
             )

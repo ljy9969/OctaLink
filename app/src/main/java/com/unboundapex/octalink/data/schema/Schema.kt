@@ -1,6 +1,7 @@
 package com.unboundapex.octalink.data.schema
 
 import com.unboundapex.octalink.data.Belt
+import com.unboundapex.octalink.data.SkillSet
 import com.unboundapex.octalink.data.WeightClass
 import java.time.Instant
 import java.time.LocalDate
@@ -70,6 +71,8 @@ data class MemberDoc(
     val ageRange: String? = null,      // "AGE_20_29" 등 Kakao SDK AgeRange enum.name
     val birthday: String? = null,      // "MMDD" 형식 (예: "1130")
     val birthyear: String? = null,     // "YYYY" 형식 (예: "1995")
+    /** 6축 스킬 최신 스냅샷. null 이면 미평가. 관장이 [SkillSet] 으로 입력/갱신. */
+    val skills: SkillSet? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

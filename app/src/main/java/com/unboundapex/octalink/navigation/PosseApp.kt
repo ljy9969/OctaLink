@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -48,6 +50,7 @@ import com.unboundapex.octalink.ui.screens.creator.CreatorScreen
 import com.unboundapex.octalink.ui.screens.curriculum.CurriculumScreen
 import com.unboundapex.octalink.ui.screens.home.HomeScreen
 import com.unboundapex.octalink.ui.screens.info.InfoScreen
+import com.unboundapex.octalink.ui.screens.onboarding.LeftScreen
 import com.unboundapex.octalink.ui.screens.onboarding.LoginScreen
 import com.unboundapex.octalink.ui.screens.onboarding.PendingApprovalScreen
 import com.unboundapex.octalink.ui.screens.onboarding.RejectedScreen
@@ -77,7 +80,15 @@ fun PosseApp() {
     // 세션 단계별 진입 분기 — APPROVED 가 아닌 모든 단계는 메인 앱 진입 차단
     when (session.phase) {
         SessionState.Phase.LOADING -> {
-            // InMemory 환경에선 거의 즉시 통과 — 빈 배경만
+            // 카카오 로그인 진행 중 / 초기 uid resolve 대기 — 깜빡임 방지를 위한 중앙 스피너
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
             return
         }
         SessionState.Phase.UNAUTHENTICATED -> {
@@ -95,9 +106,13 @@ fun PosseApp() {
                     PendingApprovalScreen(sessionVm = sessionVm)
                     return
                 }
-                MembershipStatus.REJECTED,
-                MembershipStatus.SUSPENDED,
                 MembershipStatus.LEFT -> {
+                    // 자진 탈퇴 — 재가입 CTA 제공
+                    LeftScreen(sessionVm = sessionVm)
+                    return
+                }
+                MembershipStatus.REJECTED,
+                MembershipStatus.SUSPENDED -> {
                     RejectedScreen(sessionVm = sessionVm)
                     return
                 }

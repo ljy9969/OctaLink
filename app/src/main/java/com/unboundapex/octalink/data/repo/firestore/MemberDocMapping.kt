@@ -3,6 +3,7 @@ package com.unboundapex.octalink.data.repo.firestore
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.unboundapex.octalink.data.Belt
+import com.unboundapex.octalink.data.SkillSet
 import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.schema.MemberDoc
 import com.unboundapex.octalink.data.schema.MembershipStatus
@@ -36,6 +37,16 @@ internal fun MemberDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "ageRange" to ageRange,
     "birthday" to birthday,
     "birthyear" to birthyear,
+    "skills" to skills?.let {
+        mapOf(
+            "striking" to it.striking,
+            "grappling" to it.grappling,
+            "stamina" to it.stamina,
+            "technique" to it.technique,
+            "mental" to it.mental,
+            "speed" to it.speed,
+        )
+    },
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
     "updatedAt" to Timestamp(updatedAt.epochSecond, updatedAt.nano),
 )
@@ -49,7 +60,7 @@ internal fun DocumentSnapshot.toMemberDoc(): MemberDoc? {
         name = name,
         belt = runCatching { Belt.valueOf(beltName) }.getOrDefault(Belt.WHITE),
         weightClass = runCatching { WeightClass.valueOf(wcName) }.getOrDefault(WeightClass.LIGHT),
-        avatarId = getString("avatarId") ?: "ryu",
+        avatarId = getString("avatarId") ?: "m_light",
         role = runCatching { Role.valueOf(getString("role") ?: "MEMBER") }.getOrDefault(Role.MEMBER),
         status = runCatching {
             MembershipStatus.valueOf(getString("status") ?: "PENDING")
@@ -64,6 +75,16 @@ internal fun DocumentSnapshot.toMemberDoc(): MemberDoc? {
         ageRange = getString("ageRange"),
         birthday = getString("birthday"),
         birthyear = getString("birthyear"),
+        skills = (get("skills") as? Map<*, *>)?.let { map ->
+            SkillSet(
+                striking  = (map["striking"]  as? Number)?.toFloat() ?: 0f,
+                grappling = (map["grappling"] as? Number)?.toFloat() ?: 0f,
+                stamina   = (map["stamina"]   as? Number)?.toFloat() ?: 0f,
+                technique = (map["technique"] as? Number)?.toFloat() ?: 0f,
+                mental    = (map["mental"]    as? Number)?.toFloat() ?: 0f,
+                speed     = (map["speed"]     as? Number)?.toFloat() ?: 0f,
+            )
+        },
         createdAt = (get("createdAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
         updatedAt = (get("updatedAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
     )

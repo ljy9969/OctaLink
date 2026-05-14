@@ -24,25 +24,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.unboundapex.octalink.data.Belt
+import com.unboundapex.octalink.data.SkillSet
 import com.unboundapex.octalink.data.avatarById
 import com.unboundapex.octalink.data.session.SessionViewModel
-import com.unboundapex.octalink.ui.components.AvatarPickerSheet
 import com.unboundapex.octalink.ui.components.AvatarTile
 import com.unboundapex.octalink.ui.components.HexagonSkillChart
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
-import com.unboundapex.octalink.ui.components.SkillStat
 import java.time.LocalDate
 import java.time.Period
-
-private val skills = listOf(
-    SkillStat("스트라이킹", 0.72f),
-    SkillStat("그래플링", 0.45f),
-    SkillStat("체력", 0.80f),
-    SkillStat("기술", 0.58f),
-    SkillStat("멘탈", 0.66f),
-    SkillStat("스피드", 0.70f),
-)
 
 private data class Comment(val date: String, val coach: String, val text: String)
 
@@ -65,11 +55,13 @@ private val coachComments = listOf(
 @Composable
 fun ProfileScreen(sessionVm: SessionViewModel) {
     val session by sessionVm.state.collectAsState()
-    var pickerOpen by remember { mutableStateOf(false) }
     var leaveConfirmOpen by remember { mutableStateOf(false) }
     val avatar = avatarById(session.avatarId)
     val belt = session.belt
-    val joinDate = remember { LocalDate.of(2026, 1, 1) }
+    val skills = (session.member?.skills ?: SkillSet.EMPTY).toStats()
+    // 실제 도장 입관일 — Firestore `members/{uid}.joinDate` 에서 (가입 폼에서 사용자가 입력).
+    // 아직 회원 doc 이 없는 LOADING 단계 폴백은 오늘 (이번 달 입관 표시).
+    val joinDate = session.member?.joinDate ?: LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
     val membership = remember(joinDate) { membershipLabel(joinDate) }
 
     PosseScreen(title = "Profile", subtitle = "${session.name} · ${belt.displayName} 벨트 · $membership") {
@@ -82,11 +74,9 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AvatarTile(
                             avatar = avatar,
+                            belt = belt,
                             size = 88.dp,
-                            ringColor = null,
-                            modifier = Modifier
-                                .padding(start = 10.dp)
-                                .clickable { pickerOpen = true }
+                            modifier = Modifier.padding(start = 10.dp),
                         )
                         Spacer(Modifier.width(16.dp))
                         Column(
@@ -99,13 +89,6 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                                 "${avatar.displayName} · ${belt.displayName} 벨트",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "탭해서 캐릭터 변경",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable { pickerOpen = true }
                             )
                         }
                     }
@@ -249,15 +232,5 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
         )
     }
 
-    if (pickerOpen) {
-        AvatarPickerSheet(
-            selectedId = session.avatarId,
-            onDismiss = { pickerOpen = false },
-            onSelect = {
-                sessionVm.updateAvatar(it.id)
-                pickerOpen = false
-            }
-        )
-    }
 }
 

@@ -2,6 +2,8 @@ package com.unboundapex.octalink.data.repo.inmemory
 
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.RoleAllowlist
+import com.unboundapex.octalink.data.SkillSet
+import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.repo.MemberRepository
 import com.unboundapex.octalink.data.repo.SignupRequest
 import com.unboundapex.octalink.data.schema.MemberDoc
@@ -52,7 +54,7 @@ class InMemoryMemberRepository(
             avatarId = req.avatarId,
             role = role,
             status = status,
-            joinDate = LocalDate.now(),
+            joinDate = req.joinDate,
             phone = req.phone,
             authProviderId = req.authProviderId,
             email = req.email,
@@ -83,18 +85,32 @@ class InMemoryMemberRepository(
         setStatus(memberId, MembershipStatus.LEFT)
     }
 
+    override suspend fun rejoinMembership(memberId: String) {
+        _members.value = _members.value.map { m ->
+            if (m.id != memberId || m.status != MembershipStatus.LEFT) return@map m
+            val newRole = RoleAllowlist.roleOf(m.name)
+            val newStatus = if (RoleAllowlist.skipApproval(m.name)) MembershipStatus.APPROVED
+                            else MembershipStatus.PENDING
+            m.copy(role = newRole, status = newStatus, updatedAt = Instant.now())
+        }
+    }
+
     override suspend fun updateProfile(
         memberId: String,
         name: String?,
         belt: Belt?,
+        weightClass: WeightClass?,
         avatarId: String?,
+        skills: SkillSet?,
     ) {
         _members.value = _members.value.map { m ->
             if (m.id != memberId) return@map m
             m.copy(
                 name = name ?: m.name,
                 belt = belt ?: m.belt,
+                weightClass = weightClass ?: m.weightClass,
                 avatarId = avatarId ?: m.avatarId,
+                skills = skills ?: m.skills,
                 updatedAt = Instant.now(),
             )
         }

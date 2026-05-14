@@ -199,8 +199,8 @@ fun AttendanceScreen(
                             ) {
                                 AvatarTile(
                                     avatar = avatarById(peer.member.avatarId),
+                                    belt = peer.member.belt,
                                     size = 40.dp,
-                                    ringColor = null,
                                 )
                                 Spacer(Modifier.width(10.dp))
                                 Column(

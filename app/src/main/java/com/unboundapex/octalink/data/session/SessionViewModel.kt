@@ -4,11 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.WeightClass
+import com.unboundapex.octalink.data.avatarFor
 import com.unboundapex.octalink.data.repo.KakaoIdentity
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.repo.SignupRequest
-import com.unboundapex.octalink.data.repo.inmemory.InMemoryAuthRepository
 import com.unboundapex.octalink.data.schema.MemberDoc
+import com.unboundapex.octalink.data.util.PiiMask
 import com.unboundapex.octalink.data.schema.MembershipStatus
 import com.unboundapex.octalink.data.schema.Role
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,7 +46,11 @@ data class SessionState(
     // 기존 화면 호환용 단축 접근자 — member 가 없으면 안전 기본값 반환
     val name: String get() = member?.name ?: ""
     val belt: Belt get() = member?.belt ?: Belt.WHITE
-    val avatarId: String get() = member?.avatarId ?: "ryu"
+    // 캐릭터는 성별 + 체급에서 자동 파생. MemberDoc.avatarId 는 가입 시점 스냅샷이라
+    // 체급/성별 갱신 후에도 옛 값을 가질 수 있으므로 렌더 시점에서 재계산.
+    val avatarId: String get() = member?.let {
+        avatarFor(it.gender, it.weightClass).id
+    } ?: "m_light"
     val role: Role get() = member?.role ?: Role.MEMBER
     val status: MembershipStatus get() = member?.status ?: MembershipStatus.PENDING
 }
@@ -101,6 +106,10 @@ class SessionViewModel : ViewModel() {
     }
 
     fun signInWithKakao() {
+        // 카카오 SDK 호출 시작 즉시 LOADING — Kakao auth + Firebase signIn + Firestore snapshot 도착
+        // 시점까지의 갭에서 LoginScreen 이 재노출되는 깜빡임을 차단. uid 갱신 후 init flow 가
+        // PENDING_SIGNUP/AUTHENTICATED 로 자연스럽게 전환.
+        _state.value = _state.value.copy(phase = SessionState.Phase.LOADING)
         viewModelScope.launch {
             val result = auth.signInWithKakao()
             if (result.isFailure) {
@@ -109,11 +118,20 @@ class SessionViewModel : ViewModel() {
                     "signInWithKakao failed",
                     result.exceptionOrNull(),
                 )
+                // 실패 → 로그인 화면 복귀
+                _state.value = _state.value.copy(phase = SessionState.Phase.UNAUTHENTICATED)
             } else {
                 val identity = result.getOrNull()
-                android.util.Log.i("OctaLink.Auth", "signInWithKakao success: $identity")
-                // SignupScreen 폼 prefill 용 — flow 가 PENDING_SIGNUP 상태 emit 한 후
-                // identity 가 도착해도 keepIdentity 로직이 다음 emission 까지 보존
+                // PII 는 PiiMask 거쳐 마스킹. 원본 KakaoIdentity.toString 직접 출력 금지.
+                android.util.Log.i(
+                    "OctaLink.Auth",
+                    "signInWithKakao success: uid=${PiiMask.id(identity?.authProviderId)}, " +
+                        "name=${PiiMask.name(identity?.displayName)}, " +
+                        "hasPhone=${identity?.phoneNumber?.isNotBlank() == true}, " +
+                        "hasEmail=${identity?.email?.isNotBlank() == true}",
+                )
+                // SignupScreen 폼 prefill 용 — phase 는 그대로 LOADING 유지하다 uidWithMember 가
+                // 다음 emission 으로 갱신
                 if (identity != null) {
                     _state.value = _state.value.copy(kakaoIdentity = identity)
                 }
@@ -139,15 +157,15 @@ class SessionViewModel : ViewModel() {
     }
 
     /**
-     * 개발용 단축 로그인 — mock 인증 단계에서만 의미 있음. 실제 카카오 SDK 도입 시 제거.
-     * In-memory Auth 가 아니면 무시.
+     * LEFT 상태에서 재가입 — Cloud Function 이 RoleAllowlist 재평가 후
+     * APPROVED (allowlist) / PENDING (일반 회원) 으로 status 갱신. Firestore snapshot 이
+     * member.status 변경을 emit 하면 PosseApp 라우팅이 자동으로 적절한 화면 (Approved/Pending) 으로 전환.
      */
-    fun debugSignInAsCreator() = debugSetUid(InMemoryAuthRepository.MOCK_CREATOR_UID)
-    fun debugSignInAsMaster() = debugSetUid(InMemoryAuthRepository.MOCK_MASTER_UID)
-
-    private fun debugSetUid(uid: String) {
+    fun rejoinMembership() {
+        val memberId = state.value.member?.id ?: return
         viewModelScope.launch {
-            (auth as? InMemoryAuthRepository)?.setCurrentUid(uid)
+            runCatching { members.rejoinMembership(memberId) }
+                .onFailure { android.util.Log.e("OctaLink.Auth", "rejoinMembership failed", it) }
         }
     }
 
@@ -158,6 +176,7 @@ class SessionViewModel : ViewModel() {
         belt: Belt,
         weightClass: WeightClass,
         avatarId: String,
+        joinDate: java.time.LocalDate,
         phone: String? = null,
     ) {
         val authId = state.value.authProviderId ?: return
@@ -170,6 +189,7 @@ class SessionViewModel : ViewModel() {
                     belt = belt,
                     weightClass = weightClass,
                     avatarId = avatarId,
+                    joinDate = joinDate,
                     phone = phone,
                     email = identity?.email,
                     gender = identity?.gender,
@@ -179,11 +199,6 @@ class SessionViewModel : ViewModel() {
                 )
             )
         }
-    }
-
-    fun updateAvatar(avatarId: String) {
-        val memberId = state.value.member?.id ?: return
-        viewModelScope.launch { members.updateProfile(memberId, avatarId = avatarId) }
     }
 
     fun updateBelt(belt: Belt) {

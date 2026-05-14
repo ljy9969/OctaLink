@@ -3,6 +3,7 @@ package com.unboundapex.octalink.messaging
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.unboundapex.octalink.data.util.PiiMask
 
 /**
  * FCM 기반 작업 — 현재 단계는 토큰 발급 + 메시지 수신 로깅만.
@@ -23,13 +24,20 @@ class OctaLinkMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.i(TAG, "FCM_TOKEN: $token")
+        // 토큰 원본은 marketing/identifier 성 정보 — PiiMask 거쳐 길이만 노출.
+        // 백엔드 등록 후 디버깅용 토큰 원본이 필요하면 Firestore 의 fcmTokens 컬렉션을 직접 조회.
+        Log.i(TAG, "FCM_TOKEN registered ${PiiMask.id(token)}")
         // TODO(푸시 알림 태스크): 백엔드(Firestore users/{uid}/fcmTokens)에 등록
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        Log.i(TAG, "FCM_MESSAGE from=${message.from} data=${message.data} notif=${message.notification?.title}")
+        // data / notification 본문은 사용자 메시지일 수 있어 release 빌드에선 key 만 노출.
+        val dataKeys = message.data.keys.joinToString(",")
+        Log.i(
+            TAG,
+            "FCM_MESSAGE from=${PiiMask.id(message.from)}, dataKeys=[$dataKeys], hasNotif=${message.notification != null}",
+        )
         // TODO(푸시 알림 태스크): NotificationChannel + NotificationManager로 사용자 알림 표시
     }
 

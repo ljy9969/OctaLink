@@ -6,6 +6,8 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import com.google.firebase.functions.functions
 import com.unboundapex.octalink.data.Belt
+import com.unboundapex.octalink.data.SkillSet
+import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.repo.MemberRepository
 import com.unboundapex.octalink.data.repo.SignupRequest
 import com.unboundapex.octalink.data.schema.Collections
@@ -73,6 +75,7 @@ class FirestoreMemberRepository : MemberRepository {
                     "belt" to req.belt.name,
                     "weightClass" to req.weightClass.name,
                     "avatarId" to req.avatarId,
+                    "joinDate" to req.joinDate.toString(),
                     "phone" to req.phone,
                     "email" to req.email,
                     "gender" to req.gender,
@@ -117,16 +120,39 @@ class FirestoreMemberRepository : MemberRepository {
             .await()
     }
 
+    /**
+     * LEFT → APPROVED/PENDING 재가입. Cloud Function 이 RoleAllowlist 재평가 후 status 결정.
+     * 이미 active 상태면 server 가 alreadyActive=true 로 응답 (no-op).
+     */
+    override suspend fun rejoinMembership(memberId: String) {
+        functions.getHttpsCallable("rejoinMembership")
+            .call(emptyMap<String, Any>())
+            .await()
+    }
+
     override suspend fun updateProfile(
         memberId: String,
         name: String?,
         belt: Belt?,
+        weightClass: WeightClass?,
         avatarId: String?,
+        skills: SkillSet?,
     ) {
         val updates = buildMap<String, Any> {
             name?.let { put("name", it) }
             belt?.let { put("belt", it.name) }
+            weightClass?.let { put("weightClass", it.name) }
             avatarId?.let { put("avatarId", it) }
+            skills?.let {
+                put("skills", mapOf(
+                    "striking" to it.striking,
+                    "grappling" to it.grappling,
+                    "stamina" to it.stamina,
+                    "technique" to it.technique,
+                    "mental" to it.mental,
+                    "speed" to it.speed,
+                ))
+            }
             put("updatedAt", FieldValue.serverTimestamp())
         }
         if (updates.size == 1) return  // updatedAt only — no field to update

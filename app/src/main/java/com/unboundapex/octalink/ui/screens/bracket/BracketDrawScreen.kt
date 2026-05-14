@@ -41,6 +41,7 @@ import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.Member
 import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.avatarById
+import com.unboundapex.octalink.data.avatarFor
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.schema.MembershipStatus
 import com.unboundapex.octalink.data.schema.Role
@@ -50,6 +51,7 @@ import com.unboundapex.octalink.data.tournament.TournamentViewModel
 import com.unboundapex.octalink.ui.components.AvatarTile
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import com.unboundapex.octalink.ui.components.WeightClassInfoDialog
 
 @Composable
 fun BracketDrawScreen(
@@ -81,7 +83,8 @@ fun BracketDrawScreen(
                     name = doc.name,
                     belt = doc.belt,
                     weightClass = doc.weightClass,
-                    avatarId = doc.avatarId,
+                    // 캐릭터는 성별 + 체급에서 자동 파생 (저장된 avatarId 무시).
+                    avatarId = avatarFor(doc.gender, doc.weightClass).id,
                 )
             }
     }
@@ -163,7 +166,8 @@ fun BracketDrawScreen(
                     .padding(vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Belt.values().forEach { b ->
+                // 정식 5단계 벨트만 필터 칩으로 노출 (UNKNOWN 은 운영자가 갱신 전 임시 상태)
+                Belt.gradedValues.forEach { b ->
                     BeltChip(
                         belt = b,
                         selected = beltFilter == b,
@@ -287,79 +291,6 @@ private fun DrawActionChip(
 }
 
 @Composable
-private fun WeightClassInfoDialog(onDismiss: () -> Unit) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                "체급 안내",
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        text = {
-            Column {
-                Text(
-                    "체중 기준 (kg)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                val rows = WeightClass.values().mapIndexed { idx, wc ->
-                    val prevMax = if (idx == 0) null else WeightClass.values()[idx - 1].maxKg
-                    val rangeText = when {
-                        prevMax == null -> "~ ${wc.maxKg}kg"
-                        wc.maxKg == null -> "${prevMax}kg ~"
-                        else -> "${prevMax} ~ ${wc.maxKg}kg"
-                    }
-                    wc to rangeText
-                }
-                rows.forEach { (wc, range) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            wc.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(start = 12.dp)
-                                .width(72.dp)
-                        )
-                        Text(
-                            range,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 16.dp)
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Text(
-                "닫기",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clickable { onDismiss() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-        }
-    )
-}
-
-@Composable
 private fun MemberRow(member: Member, session: SessionState, checked: Boolean, onToggle: () -> Unit) {
     val effectiveAvatarId =
         if (member.name == session.name) session.avatarId else member.avatarId
@@ -371,8 +302,9 @@ private fun MemberRow(member: Member, session: SessionState, checked: Boolean, o
         Row(verticalAlignment = Alignment.CenterVertically) {
             AvatarTile(
                 avatar = avatarById(effectiveAvatarId),
+                belt = member.belt,
                 size = 40.dp,
-                ringColor = null,
+                showBeltRing = false,
             )
             Spacer(Modifier.width(10.dp))
             Column(

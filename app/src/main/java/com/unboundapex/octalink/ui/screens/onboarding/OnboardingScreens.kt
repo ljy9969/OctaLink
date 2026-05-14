@@ -1,8 +1,9 @@
 package com.unboundapex.octalink.ui.screens.onboarding
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,12 +15,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,7 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -40,11 +47,16 @@ import androidx.compose.ui.unit.dp
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.session.SessionViewModel
-import com.unboundapex.octalink.ui.components.AvatarPickerSheet
 import com.unboundapex.octalink.ui.components.AvatarTile
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import com.unboundapex.octalink.ui.components.WeightClassInfoDialog
 import com.unboundapex.octalink.data.avatarById
+import com.unboundapex.octalink.data.avatarFor
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private val kakaoYellow = Color(0xFFFEE500)
 private val kakaoText = Color(0xFF3C1E1E)
@@ -81,80 +93,59 @@ fun LoginScreen(sessionVm: SessionViewModel) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
-            // 개발용 단축 로그인 — 실제 카카오 SDK 통합 후 제거 예정
-            Spacer(Modifier.height(32.dp))
-            Text(
-                "테스트 단축 로그인 (개발용)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DebugLoginChip(
-                    label = "이지연 (창조자)",
-                    onClick = { sessionVm.debugSignInAsCreator() },
-                )
-                DebugLoginChip(
-                    label = "김파시 (관장)",
-                    onClick = { sessionVm.debugSignInAsMaster() },
-                )
-            }
         }
     }
-}
-
-@Composable
-private fun DebugLoginChip(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    )
 }
 
 /**
  * 카카오 로그인 완료(uid 발급) 했으나 MemberDoc 이 없는 상태 — 가입 폼.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignupScreen(sessionVm: SessionViewModel) {
     val session by sessionVm.state.collectAsState()
     val kakaoIdentity = session.kakaoIdentity
 
-    // 한글 IME 조합 보존을 위해 TextFieldValue 사용 (String 기반은 onValueChange 콜백 시
-    // composition region 이 리셋되어 한글 첫 자모 입력이 무시되는 알려진 이슈가 있음)
-    var nameValue by remember { mutableStateOf(TextFieldValue("")) }
-    var phone by remember { mutableStateOf("") }
-    var belt by remember { mutableStateOf(Belt.WHITE) }
-    var weightClass by remember { mutableStateOf(WeightClass.LIGHT) }
-    var avatarId by remember { mutableStateOf("ryu") }
-    var pickerOpen by remember { mutableStateOf(false) }
+    // 카카오 자동 제공 값 (실명) — null/blank 아니면 read-only 로 고정.
+    val kakaoName = kakaoIdentity?.displayName?.takeIf { it.isNotBlank() }
+    val nameAutoFilled = kakaoName != null
 
-    // 카카오에서 받은 nickname/phone 으로 prefill — 단, 사용자가 이미 입력 시작했으면 덮어쓰지 않음
-    LaunchedEffect(kakaoIdentity?.displayName) {
-        val nickname = kakaoIdentity?.displayName.orEmpty()
-        if (nickname.isNotBlank() && nameValue.text.isEmpty()) {
-            nameValue = TextFieldValue(nickname, selection = TextRange(nickname.length))
-        }
+    // 전화번호는 가입 폼 UI 에서 받지 않지만, 카카오 비즈앱 동의 항목으로 받아온 값이 있으면
+    // Firestore members.{uid}.phone 에 그대로 저장. 사용자에게는 노출하지 않음 (조용히 보관).
+    val kakaoPhone = kakaoIdentity?.phoneNumber?.takeIf { it.isNotBlank() }?.let { raw ->
+        raw.filter { it.isDigit() }
+            .let { if (it.startsWith("82")) "0" + it.drop(2) else it }
+            .take(11)
+            .takeIf { it.isNotEmpty() }
     }
-    LaunchedEffect(kakaoIdentity?.phoneNumber) {
-        val raw = kakaoIdentity?.phoneNumber.orEmpty()
-        if (raw.isNotBlank() && phone.isEmpty()) {
-            // 카카오 phone_number 는 "+82 10-1234-5678" 형식 — 숫자만 추출해서 11자 cap
-            phone = raw.filter { it.isDigit() }
-                .let { if (it.startsWith("82")) "0" + it.drop(2) else it }
-                .take(11)
+
+    // 한글 IME 조합 보존을 위해 TextFieldValue 사용
+    var nameValue by remember { mutableStateOf(TextFieldValue("")) }
+    val kakaoGender = kakaoIdentity?.gender
+    var belt by remember { mutableStateOf(Belt.UNKNOWN) }
+    var weightClass by remember { mutableStateOf(WeightClass.LIGHT) }
+    // 캐릭터는 성별 + 체급에서 자동 파생 (사용자 선택 X). belt 는 마스크 색만 변경.
+    val avatarId = avatarFor(kakaoGender, weightClass).id
+
+    // 입관일 (체육관 등록일) — 기본값 오늘. 이미 다니던 회원은 과거 날짜로 변경.
+    val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
+    var joinDate by remember { mutableStateOf(today) }
+    var datePickerOpen by remember { mutableStateOf(false) }
+    var weightInfoOpen by remember { mutableStateOf(false) }
+
+    // 카카오 prefill (자동 — 이후 비활성 필드라 LaunchedEffect 한 번이면 충분)
+    LaunchedEffect(kakaoName) {
+        if (kakaoName != null && nameValue.text.isEmpty()) {
+            nameValue = TextFieldValue(kakaoName, selection = TextRange(kakaoName.length))
         }
     }
 
     val avatar = avatarById(avatarId)
     val name = nameValue.text
     val canSubmit = name.isNotBlank()
+    val joinDateLabel = remember(joinDate) {
+        joinDate.format(DateTimeFormatter.ofPattern("yyyy년 M월 d일"))
+    }
 
     PosseScreen(title = "Signup", subtitle = "체육관 회원 가입 신청") {
         Column(
@@ -165,75 +156,128 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AvatarTile(
                         avatar = avatar,
+                        belt = belt,
                         size = 72.dp,
-                        ringColor = null,
-                        modifier = Modifier.clickable { pickerOpen = true },
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("캐릭터", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(avatar.displayName, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "탭해서 변경",
+                            "성별 · 체급에 따라 자동 부여",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             }
 
+            // 이름 — 카카오에서 받아왔으면 read-only (변조 방지).
+            // 전화번호는 폼에서 받지 않음 — 카카오 비즈앱 동의 항목으로만 수집.
             PosseCard {
                 OutlinedTextField(
                     value = nameValue,
-                    onValueChange = { nameValue = it },
-                    label = { Text("이름") },
+                    onValueChange = { if (!nameAutoFilled) nameValue = it },
+                    enabled = !nameAutoFilled,
+                    label = { Text("이름")},
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it.filter { c -> c.isDigit() }.take(11) },
-                    label = { Text("연락처") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
+            }
+
+            // 입관일 — 도장에 처음 등록한 날 (앱 가입일과 별개)
+            PosseCard(modifier = Modifier.clickable { datePickerOpen = true }) {
+                Text("도장 입관일", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Text(joinDateLabel, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "이미 다니던 회원은 실제 입관일로 변경하세요. 탭해서 선택.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
 
+            // 벨트 — 정식 5단계 + Unknown 옵션. 색상은 BracketDrawScreen 과 일치 (벨트별 ringColor)
             PosseCard {
                 Text("벨트", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                ChipRow(
-                    items = Belt.values().toList(),
-                    selected = belt,
-                    label = { it.displayName },
-                    onSelect = { belt = it },
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Belt.values().forEach { b ->
+                        BeltChip(
+                            belt = b,
+                            selected = belt == b,
+                            onClick = { belt = b },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                if (belt == Belt.UNKNOWN) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "관장님이 가입 승인 시 정확한 벨트로 갱신해주십니다.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
+            // 체급 — BracketDrawScreen 의 그라데이션 칩과 일치 (페더 → 헤비 점진적 진색)
             PosseCard {
-                Text("체급", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "체급",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "ⓘ 체급 안내",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF1A1A1A),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFBC02D))
+                            .clickable { weightInfoOpen = true }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
-                ChipRow(
-                    items = WeightClass.values().toList(),
-                    selected = weightClass,
-                    label = { it.displayName },
-                    onSelect = { weightClass = it },
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    WeightClass.values().forEachIndexed { idx, wc ->
+                        WeightChip(
+                            label = wc.shortLabel,
+                            selected = weightClass == wc,
+                            gradient = weightGradient(idx),
+                            onClick = { weightClass = wc },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
 
             SubmitButton(
                 enabled = canSubmit,
                 label = "가입 신청",
                 onClick = {
+                    android.util.Log.d(
+                        "OctaLink.Signup",
+                        "submit joinDate=$joinDate (today=$today, diff=${joinDate != today})",
+                    )
                     sessionVm.completeSignup(
                         name = name.trim().take(20),
                         belt = belt,
                         weightClass = weightClass,
                         avatarId = avatarId,
-                        phone = phone.ifBlank { null },
+                        joinDate = joinDate,
+                        phone = kakaoPhone,
                     )
                 },
             )
@@ -247,15 +291,71 @@ fun SignupScreen(sessionVm: SessionViewModel) {
         }
     }
 
-    if (pickerOpen) {
-        AvatarPickerSheet(
-            selectedId = avatarId,
-            onDismiss = { pickerOpen = false },
-            onSelect = {
-                avatarId = it.id
-                pickerOpen = false
+    if (datePickerOpen) {
+        // 입관일 picker — 오늘까지만 선택 가능.
+        // 타임존은 KST(Asia/Seoul) 통일. OctaLink 사용자는 모두 한국이고 joinDate 의 의미는
+        // "Korean local date" 이므로 millis ↔ LocalDate 변환 양쪽 모두 KST 기준.
+        // selectableDates 의 today 비교도 KST 날짜로 보정 — UTC 비교 시 새벽 KST 시간대(0~9시)에
+        // "오늘" 칸이 잘못 비활성되는 문제 방지.
+        val seoulZone = ZoneId.of("Asia/Seoul")
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = joinDate.atStartOfDay(seoulZone)
+                .toInstant().toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val picked = Instant.ofEpochMilli(utcTimeMillis)
+                        .atZone(seoulZone).toLocalDate()
+                    return !picked.isAfter(LocalDate.now(seoulZone))
+                }
             },
         )
+        DatePickerDialog(
+            onDismissRequest = { datePickerOpen = false },
+            confirmButton = {
+                Box(
+                    modifier = Modifier
+                        .clickable {
+                            datePickerState.selectedDateMillis?.let { millis ->
+                                val picked = Instant.ofEpochMilli(millis)
+                                    .atZone(seoulZone).toLocalDate()
+                                android.util.Log.d(
+                                    "OctaLink.Signup",
+                                    "DatePicker confirm: millis=$millis, picked=$picked",
+                                )
+                                joinDate = picked
+                            }
+                            datePickerOpen = false
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text(
+                        "확인",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            },
+            dismissButton = {
+                Box(
+                    modifier = Modifier
+                        .clickable { datePickerOpen = false }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text(
+                        "취소",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (weightInfoOpen) {
+        WeightClassInfoDialog(onDismiss = { weightInfoOpen = false })
     }
 }
 
@@ -285,6 +385,47 @@ fun PendingApprovalScreen(sessionVm: SessionViewModel) {
                 modifier = Modifier.padding(horizontal = 32.dp),
             )
             Spacer(Modifier.height(24.dp))
+            SubmitButton(
+                enabled = true,
+                label = "로그아웃",
+                onClick = { sessionVm.signOut() },
+                bg = MaterialTheme.colorScheme.surface,
+                fg = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/**
+ * 자진 탈퇴(LEFT) 후 같은 카카오 계정으로 재로그인한 경우 — 재가입 CTA 제공.
+ * 거부(REJECTED) / 정지(SUSPENDED) 와 달리 본인 의지로 복귀 가능하므로 [RejectedScreen] 과 분리.
+ */
+@Composable
+fun LeftScreen(sessionVm: SessionViewModel) {
+    PosseScreen(title = "Welcome back", subtitle = "탈퇴 후 재로그인") {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("👋", style = MaterialTheme.typography.displayLarge)
+            Spacer(Modifier.height(8.dp))
+            Text("다시 오셨군요", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "이전에 탈퇴 처리된 계정입니다. 재가입 시 과거 출석/스킬 기록은 그대로 복원됩니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp),
+            )
+            Spacer(Modifier.height(24.dp))
+            SubmitButton(
+                enabled = true,
+                label = "재가입 신청",
+                onClick = { sessionVm.rejoinMembership() },
+            )
+            Spacer(Modifier.height(8.dp))
             SubmitButton(
                 enabled = true,
                 label = "로그아웃",
@@ -336,7 +477,7 @@ private fun KakaoSignInButton(onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            "카카오로 시작하기",
+            "카카오톡으로 시작하기",
             style = MaterialTheme.typography.titleMedium,
             color = kakaoText,
             fontWeight = FontWeight.Bold,
@@ -344,37 +485,89 @@ private fun KakaoSignInButton(onClick: () -> Unit) {
     }
 }
 
+// ----- 칩 컴포저블 — BracketDrawScreen 의 칩 스타일과 일치 -----
+
+private val chipShape = RoundedCornerShape(50)
+private const val UNSELECTED_ALPHA = 0.45f
+
+/** 체급 칩의 배경 그라데이션. 페더(밝은 오렌지/레드) → 헤비(딥 마룬). BracketDrawScreen 과 동일. */
+private fun weightGradient(index: Int): Brush {
+    val palette = listOf(
+        Color(0xFFFF6B35) to Color(0xFFE53935),
+        Color(0xFFE53935) to Color(0xFFC8102E),
+        Color(0xFFC8102E) to Color(0xFFAD1A1A),
+        Color(0xFFAD1A1A) to Color(0xFF7B1010),
+        Color(0xFF7B1010) to Color(0xFF3E0606),
+    )
+    val (start, end) = palette[index.coerceIn(palette.indices)]
+    return Brush.horizontalGradient(listOf(start, end))
+}
+
 @Composable
-private fun <T> ChipRow(
-    items: List<T>,
-    selected: T,
-    label: (T) -> String,
-    onSelect: (T) -> Unit,
+private fun WeightChip(
+    label: String,
+    selected: Boolean,
+    gradient: Brush,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val scroll = rememberScrollState()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(scroll),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    val borderColor = if (selected) Color.White else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    Box(
+        modifier = modifier
+            .height(32.dp)
+            .alpha(if (selected) 1f else UNSELECTED_ALPHA)
+            .clip(chipShape)
+            .background(gradient)
+            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor), chipShape)
+            .clickable { onClick() }
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        items.forEach { item ->
-            val isSel = item == selected
-            Text(
-                text = label(item),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(
-                        if (isSel) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                    .clickable { onSelect(item) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White,
+            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+private fun beltTextColor(belt: Belt): Color = when (belt) {
+    Belt.WHITE -> Color(0xFF111111)
+    else -> Color.White
+}
+
+@Composable
+private fun BeltChip(
+    belt: Belt,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val borderColor = if (selected) Color.White else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    Box(
+        modifier = modifier
+            .height(32.dp)
+            .alpha(if (selected) 1f else UNSELECTED_ALPHA)
+            .clip(chipShape)
+            .background(belt.ringColor)
+            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor), chipShape)
+            .clickable { onClick() }
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            belt.displayName,
+            style = MaterialTheme.typography.labelSmall,
+            color = beltTextColor(belt),
+            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

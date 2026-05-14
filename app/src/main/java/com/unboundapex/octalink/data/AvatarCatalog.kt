@@ -7,54 +7,50 @@ data class Avatar(
     val displayName: String,
     val initial: String,
     val accent: Color,
-    val resourceName: String,
+    /** res/drawable-nodpi/avatar_body_{id}.png — full character body */
+    val bodyResourceName: String,
+    /** res/drawable-nodpi/avatar_belt_{id}.png — white belt silhouette for ColorFilter.tint */
+    val beltMaskResourceName: String,
 )
 
-val AvatarCatalog: List<Avatar> = listOf(
-    Avatar("abel",      "Abel",      "Ab", Color(0xFF607D8B), "avatar_abel"),
-    Avatar("adon",      "Adon",      "Ad", Color(0xFFE53935), "avatar_adon"),
-    Avatar("akuma",     "Akuma",     "Ak", Color(0xFF424242), "avatar_akuma"),
-    Avatar("balrog",    "Balrog",    "Bg", Color(0xFFC62828), "avatar_balrog"),
-    Avatar("blanka",    "Blanka",    "Bl", Color(0xFF2E7D32), "avatar_blanka"),
-    Avatar("cammy",     "Cammy",     "Cm", Color(0xFF7CB342), "avatar_cammy"),
-    Avatar("chun_li",   "Chun-Li",   "Cl", Color(0xFF1E88E5), "avatar_chun_li"),
-    Avatar("cody",      "Cody",      "Cd", Color(0xFF1976D2), "avatar_cody"),
-    Avatar("c_viper",   "C.Viper",   "Cv", Color(0xFFB71C1C), "avatar_c_viper"),
-    Avatar("dan",       "Dan",       "Dn", Color(0xFFEC407A), "avatar_dan"),
-    Avatar("decapre",   "Decapre",   "Dc", Color(0xFF1565C0), "avatar_decapre"),
-    Avatar("dee_jay",   "Dee Jay",   "Dj", Color(0xFFF9A825), "avatar_dee_jay"),
-    Avatar("dhalsim",   "Dhalsim",   "Dh", Color(0xFFEF6C00), "avatar_dhalsim"),
-    Avatar("dudley",    "Dudley",    "Dd", Color(0xFF388E3C), "avatar_dudley"),
-    Avatar("e_honda",   "E.Honda",   "Hd", Color(0xFF1A237E), "avatar_e_honda"),
-    Avatar("elena",     "Elena",     "El", Color(0xFFE0E0E0), "avatar_elena"),
-    Avatar("el_fuerte", "El Fuerte", "Ef", Color(0xFFD32F2F), "avatar_el_fuerte"),
-    Avatar("evil_ryu",  "Evil Ryu",  "Er", Color(0xFF8B0000), "avatar_evil_ryu"),
-    Avatar("fei_long",  "Fei Long",  "Fl", Color(0xFFFFCA28), "avatar_fei_long"),
-    Avatar("gen",       "Gen",       "Gn", Color(0xFF0D47A1), "avatar_gen"),
-    Avatar("gouken",    "Gouken",    "Gk", Color(0xFFA1887F), "avatar_gouken"),
-    Avatar("guile",     "Guile",     "Gl", Color(0xFF558B2F), "avatar_guile"),
-    Avatar("guy",       "Guy",       "Gy", Color(0xFFD84315), "avatar_guy"),
-    Avatar("hakan",     "Hakan",     "Hk", Color(0xFFBF360C), "avatar_hakan"),
-    Avatar("hugo",      "Hugo",      "Hg", Color(0xFFAD1457), "avatar_hugo"),
-    Avatar("ibuki",     "Ibuki",     "Ib", Color(0xFF558B2F), "avatar_ibuki"),
-    Avatar("juri",      "Juri",      "Jr", Color(0xFF6A1B9A), "avatar_juri"),
-    Avatar("ken",       "Ken",       "Kn", Color(0xFFE53935), "avatar_ken"),
-    Avatar("makoto",    "Makoto",    "Mk", Color(0xFFFAFAFA), "avatar_makoto"),
-    Avatar("m_bison",   "M.Bison",   "Bs", Color(0xFFB71C1C), "avatar_m_bison"),
-    Avatar("oni",       "Oni",       "On", Color(0xFF263238), "avatar_oni"),
-    Avatar("poison",    "Poison",    "Ps", Color(0xFFEC407A), "avatar_poison"),
-    Avatar("rolento",   "Rolento",   "Rl", Color(0xFF558B2F), "avatar_rolento"),
-    Avatar("rose",      "Rose",      "Rs", Color(0xFF8E24AA), "avatar_rose"),
-    Avatar("rufus",     "Rufus",     "Rf", Color(0xFFFBC02D), "avatar_rufus"),
-    Avatar("ryu",       "Ryu",       "Ry", Color(0xFFE8E8E8), "avatar_ryu"),
-    Avatar("sagat",     "Sagat",     "Sg", Color(0xFF6A1B9A), "avatar_sagat"),
-    Avatar("sakura",    "Sakura",    "Sk", Color(0xFFFAFAFA), "avatar_sakura"),
-    Avatar("seth",      "Seth",      "St", Color(0xFF9E9E9E), "avatar_seth"),
-    Avatar("t_hawk",    "T.Hawk",    "Th", Color(0xFFC62828), "avatar_t_hawk"),
-    Avatar("vega",      "Vega",      "Vg", Color(0xFFC0A85C), "avatar_vega"),
-    Avatar("yang",      "Yang",      "Yg", Color(0xFF1976D2), "avatar_yang"),
-    Avatar("yun",       "Yun",       "Yn", Color(0xFFF9A825), "avatar_yun"),
-    Avatar("zangief",   "Zangief",   "Zg", Color(0xFFB71C1C), "avatar_zangief"),
-)
+private val _catalog: List<Avatar> = buildList {
+    data class WcMeta(val wc: WeightClass, val key: String, val accent: Color)
 
-fun avatarById(id: String?): Avatar = AvatarCatalog.firstOrNull { it.id == id } ?: AvatarCatalog.first { it.id == "ryu" }
+    val wcList = listOf(
+        WcMeta(WeightClass.FEATHER, "feather", Color(0xFF7B1FA2)),
+        WcMeta(WeightClass.LIGHT,   "light",   Color(0xFF1565C0)),
+        WcMeta(WeightClass.WELTER,  "welter",  Color(0xFF2E7D32)),
+        WcMeta(WeightClass.MIDDLE,  "middle",  Color(0xFFBF360C)),
+        WcMeta(WeightClass.HEAVY,   "heavy",   Color(0xFF37474F)),
+    )
+    val genders = listOf("m" to "남", "f" to "여")
+
+    for ((gPrefix, gLabel) in genders) {
+        for ((wc, wKey, accent) in wcList) {
+            val id = "${gPrefix}_${wKey}"
+            add(Avatar(
+                id = id,
+                displayName = "$gLabel ${wc.displayName}",
+                initial = gLabel,
+                accent = accent,
+                bodyResourceName = "${gPrefix}_${wKey}",
+                beltMaskResourceName = "belt_${gPrefix}_${wKey}",
+            ))
+        }
+    }
+}
+
+val AvatarCatalog: List<Avatar> = _catalog
+
+fun avatarById(id: String?): Avatar =
+    _catalog.firstOrNull { it.id == id } ?: _catalog.first()
+
+/**
+ * Auto-resolve avatar from Kakao gender string ("MALE"/"FEMALE") and weight class.
+ * Falls back to male feather when gender is unknown.
+ */
+fun avatarFor(gender: String?, weightClass: WeightClass): Avatar {
+    val g = if (gender?.uppercase() == "FEMALE") "f" else "m"
+    val w = weightClass.name.lowercase()
+    return _catalog.firstOrNull { it.id == "${g}_${w}" } ?: _catalog.first()
+}

@@ -1,11 +1,13 @@
 package com.unboundapex.octalink.data.repo
 
 import com.unboundapex.octalink.data.Belt
+import com.unboundapex.octalink.data.SkillSet
 import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.schema.MemberDoc
 import com.unboundapex.octalink.data.schema.MembershipStatus
 import com.unboundapex.octalink.data.schema.Role
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 /**
  * 회원 ([MemberDoc]) 영속화 추상화. Firestore `members/{uid}` 컬렉션과 1:1 매핑 예정.
@@ -33,12 +35,23 @@ interface MemberRepository {
     /** 회원 역할 변경 (창조자 단독 권한). */
     suspend fun setRole(memberId: String, role: Role)
 
-    /** 본인 프로필 변경. 권한 검증은 호출자 책임 (또는 Firestore Rules). */
+    /**
+     * 회원 프로필 변경. 권한 검증은 호출자 책임 (또는 Firestore Rules).
+     *
+     * 권한 모델:
+     *  - [name], [avatarId], [weightClass]: 본인이 직접 변경 (체급은 본인만 — 관장 변경 불가)
+     *  - [belt], [skills]: 관장이 회원에게 부여
+     *
+     * [weightClass] 변경 시 — 본인이 (gender, weightClass) 매핑으로 [avatarId] 도 함께 갱신해야 함.
+     * 자동 동기화는 SessionViewModel 단에서 수행.
+     */
     suspend fun updateProfile(
         memberId: String,
         name: String? = null,
         belt: Belt? = null,
+        weightClass: WeightClass? = null,
         avatarId: String? = null,
+        skills: SkillSet? = null,
     )
 
     /**
@@ -47,6 +60,12 @@ interface MemberRepository {
      * Cloud Function `leaveMembership` 호출 (server-side audit trail).
      */
     suspend fun leaveMembership(memberId: String)
+
+    /**
+     * LEFT 상태에서 본인 재가입 — Role 재평가 (allowlist 매칭) 후 APPROVED 또는 PENDING.
+     * Cloud Function `rejoinMembership` 호출. 이미 active 상태면 no-op.
+     */
+    suspend fun rejoinMembership(memberId: String)
 }
 
 /** 가입 폼 입력 결과 — 폼에서 사용자가 입력한 값 + 카카오 동의 항목에서 가져온 값 합산. */
@@ -56,6 +75,11 @@ data class SignupRequest(
     val belt: Belt,
     val weightClass: WeightClass,
     val avatarId: String,
+    /**
+     * 체육관 입관일 (실제로 도장에 등록한 날). 앱 가입일(`MemberDoc.createdAt`)과 별개.
+     * 이미 다니던 회원이 나중에 앱 가입하는 케이스 — 본인이 직접 과거 날짜로 입력.
+     */
+    val joinDate: LocalDate,
     val phone: String? = null,
     /** 카카오 동의 항목에서 가져온 부가 정보 — null 가능, 권한/미동의 시 비어옴 */
     val email: String? = null,
