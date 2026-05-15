@@ -40,4 +40,12 @@ interface AttendanceRepository {
      * Security Rules: `isSelf(uid) || isStaff()`.
      */
     suspend fun cancelCheckIn(memberId: String, classDate: LocalDate)
+
+    /**
+     * 운영진 출결 검토 — verified 플래그 토글.
+     * 운영진이 회원 출석을 확인했음을 기록 (체크인 자체는 회원이 직접 누른 기록이고,
+     * verified 는 코치/관장이 실제 수업 참석을 확인했다는 메타).
+     * Security Rules: `isStaff()` 만 허용.
+     */
+    suspend fun setVerified(memberId: String, classDate: LocalDate, verified: Boolean)
 }

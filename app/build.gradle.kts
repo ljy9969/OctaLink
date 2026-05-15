@@ -108,6 +108,9 @@ dependencies {
     // Cloud Functions Callable — Kakao 토큰 ↔ Firebase Custom Token 교환용
     implementation("com.google.firebase:firebase-functions")
 
+    // 이미지 로딩 (HTTPS URL → Compose) — CommunityScreen post 이미지, Firebase Storage download URL.
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
     // 카카오 로그인 SDK (v2-user) — Kakao OAuth → Firebase Custom Token 교환 진입점
     implementation("com.kakao.sdk:v2-user:2.20.6")
     // suspend 코루틴 어댑터용 — Tasks.await() 등에서 사용

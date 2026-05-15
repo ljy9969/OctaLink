@@ -86,4 +86,9 @@ class FirestoreAttendanceRepository : AttendanceRepository {
     override suspend fun cancelCheckIn(memberId: String, classDate: LocalDate) {
         memberAttendance(memberId).document(classDate.toString()).delete().await()
     }
+
+    override suspend fun setVerified(memberId: String, classDate: LocalDate, verified: Boolean) {
+        memberAttendance(memberId).document(classDate.toString())
+            .update("verified", verified).await()
+    }
 }

@@ -2,7 +2,6 @@ package com.unboundapex.octalink.ui.screens.profile
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -95,35 +94,35 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                 }
             }
             item {
+                // 차트 + 평균 점수. skills 6축 평균(0..1) → 0..100 정수.
+                val avgScore = (skills.sumOf { it.value.toDouble() } / skills.size * 100).toInt()
                 PosseCard(padding = PaddingValues(4.dp)) {
-                    // 차트 + 우측 하단 평균 점수 오버레이. skills 6축 평균(0..1) → 0..100 정수.
-                    val avgScore = (skills.sumOf { it.value.toDouble() } / skills.size * 100).toInt()
-                    Box(
+                    HexagonSkillChart(
+                        skills = skills,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                    )
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        HexagonSkillChart(
-                            skills = skills,
-                            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                        Text(
+                            "평균 ",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp),
-                            horizontalAlignment = Alignment.End,
-                        ) {
-                            Text(
-                                "평균",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                "$avgScore",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                        Text(
+                            "$avgScore",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            " 점",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

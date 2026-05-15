@@ -1,5 +1,6 @@
 package com.unboundapex.octalink.ui.screens.attendance
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -56,6 +57,7 @@ private fun shortDateLabel(date: LocalDate): String {
 @Composable
 fun AttendanceScreen(
     sessionVm: SessionViewModel,
+    onOpenReview: () -> Unit = {},
     attendanceVm: AttendanceViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
@@ -85,10 +87,13 @@ fun AttendanceScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            // 운영진 전용 (관장+코치) — 출결 검토 진입점 (UI placeholder)
+            // 운영진 전용 (관장+코치+창조자) — 출결 검토 진입점
             if (session.role.isStaff) {
                 item {
-                    PosseCard(leftStripeColor = MaterialTheme.colorScheme.primary) {
+                    PosseCard(
+                        modifier = Modifier.clickable { onOpenReview() },
+                        leftStripeColor = MaterialTheme.colorScheme.primary,
+                    ) {
                         Text(
                             "운영진 모드",
                             style = MaterialTheme.typography.labelMedium,
@@ -99,7 +104,7 @@ fun AttendanceScreen(
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Text(
-                            "준비 중 — Firestore + Auth 도입 후 활성화",
+                            "탭하면 회원별 출석 기록 + verified 토글 + 정정 삭제",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

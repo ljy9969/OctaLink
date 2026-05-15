@@ -42,6 +42,7 @@ import com.unboundapex.octalink.data.session.SessionState
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.data.tournament.TournamentViewModel
 import com.unboundapex.octalink.ui.screens.admin.AdminScreen
+import com.unboundapex.octalink.ui.screens.attendance.AttendanceReviewScreen
 import com.unboundapex.octalink.ui.screens.attendance.AttendanceScreen
 import com.unboundapex.octalink.ui.screens.bracket.BracketDrawScreen
 import com.unboundapex.octalink.ui.screens.bracket.BracketScreen
@@ -68,6 +69,7 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object Info : Route("info", "체육관 정보", Icons.Outlined.Info)
     data object Admin : Route("admin", "운영", Icons.Outlined.ManageAccounts)
     data object Creator : Route("creator", "창조자", Icons.Outlined.Person)
+    data object AttendanceReview : Route("attendance_review", "출결 검토", Icons.Outlined.CheckCircle)
 }
 
 private val baseTabs = listOf(Route.Home, Route.Curriculum, Route.Attendance, Route.Community, Route.Profile)
@@ -181,7 +183,15 @@ fun PosseApp() {
                 )
             }
             composable(Route.Curriculum.path) { CurriculumScreen() }
-            composable(Route.Attendance.path) { AttendanceScreen(sessionVm = sessionVm) }
+            composable(Route.Attendance.path) {
+                AttendanceScreen(
+                    sessionVm = sessionVm,
+                    onOpenReview = { navController.navigate(Route.AttendanceReview.path) },
+                )
+            }
+            composable(Route.AttendanceReview.path) {
+                AttendanceReviewScreen(onBack = { navController.popBackStack() })
+            }
             composable(Route.Community.path) { CommunityScreen(sessionVm = sessionVm) }
             composable(Route.Profile.path) {
                 ProfileScreen(sessionVm = sessionVm)

@@ -129,6 +129,32 @@ data class SkillScoreDoc(
     val reviewedAt: Instant? = null,
 )
 
+/** 커뮤니티 글 카테고리. NOTICE 는 운영진(`isStaff`) 만 작성 가능. */
+enum class PostTag { NOTICE, RECORD, TIP, QUESTION }
+
+/**
+ * 커뮤니티 글 한 건. 모든 회원이 작성하지만 NOTICE 태그는 운영진만 사용 가능.
+ *
+ * 비정규화 필드(authorName/authorBelt) — 회원 정보 join 회피로 list 쿼리 단순화.
+ * 회원이 이름/벨트 변경 시 기존 글에는 반영되지 않음 (history snapshot 의도).
+ */
+data class PostDoc(
+    val id: String,
+    val authorId: String,
+    /** 비정규화 — 회원 이름. createdAt 시점 스냅샷 */
+    val authorName: String,
+    /** 비정규화 — 작성 시점 벨트 ([Belt.name]). 카드 좌측 스트라이프 색 */
+    val authorBelt: Belt,
+    val title: String,                  // 짧은 제목 (선택, 빈 문자열 허용)
+    val body: String,                   // 본문
+    val tag: PostTag,
+    /** Firebase Storage download URL — null 이면 텍스트만 */
+    val imageUrl: String? = null,
+    /** 좋아요 누른 회원 id 셋. 토글 시 arrayUnion / arrayRemove 사용 */
+    val likedBy: List<String> = emptyList(),
+    val createdAt: Instant,
+)
+
 /** 토너먼트 라운드 enum — TournamentDoc 로 그룹핑 */
 enum class TournamentRound { EIGHT, FOUR, FINAL }
 
@@ -176,4 +202,5 @@ object Collections {
     const val SKILL_SCORES = "skillScores"
     const val TOURNAMENTS = "tournaments"
     const val MATCHES = "matches"
+    const val POSTS = "posts"
 }

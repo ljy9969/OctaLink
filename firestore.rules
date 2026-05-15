@@ -134,11 +134,16 @@ service cloud.firestore {
         // 본인 / 운영진은 자신 / 모든 회원의 출결 검토 가능 (read 권한 동일)
         allow read: if isApproved();
 
-        // 본인만 자기 출석 체크인 (memberId 위조 방지)
-        allow create, update: if isSelf(uid)
+        // create: 본인만 자기 체크인 (memberId 위조 방지)
+        allow create: if isSelf(uid)
           && request.resource.data.memberId == uid;
 
-        // 본인이 자기 체크인 취소 + 운영진은 다른 회원 출결 정정/삭제
+        // update: 본인 재체크인(checkInAt 갱신) + 운영진의 verified 토글.
+        // 운영진이 memberId 변경하지 못하도록 resource.data.memberId 일치 강제.
+        allow update: if (isSelf(uid) && request.resource.data.memberId == uid)
+          || (isStaff() && request.resource.data.memberId == resource.data.memberId);
+
+        // delete: 본인이 자기 체크인 취소 + 운영진은 다른 회원 출결 정정/삭제
         allow delete: if isSelf(uid) || isStaff();
       }
 
@@ -207,24 +212,29 @@ service cloud.firestore {
     }
 
     // ════════════════════════════════════════════════════════
-    // posts — 커뮤니티 글 (공지/기록/팁/질문)
+    // posts — 커뮤니티 글 (NOTICE/RECORD/TIP/QUESTION)
     // ════════════════════════════════════════════════════════
     match /posts/{postId} {
       allow read: if isApproved();
 
-      // 글 작성: 모든 회원. 공지 태그(tag='공지')는 운영진만.
+      // 작성: 모든 APPROVED. NOTICE 태그는 운영진만. authorId 위조 차단.
       allow create: if isApproved()
         && request.resource.data.authorId == request.auth.uid
-        && (request.resource.data.tag != '공지' || isStaff());
+        && (request.resource.data.tag != 'NOTICE' || isStaff());
 
-      // 수정: 본인 글만 (authorId/createdAt 보호) + 공지 태그 변경은 운영진만
-      // 운영진은 모더레이션을 위해 다른 글도 수정 가능
+      // 수정 — 두 케이스:
+      //   (a) 좋아요 토글: 모든 APPROVED 가 likedBy 만 변경 (본인 uid 추가/제거 검증은 클라이언트
+      //       신뢰. 체육관 커뮤니티 저신뢰 환경에선 충분. 악용 시 룰 강화)
+      //   (b) 본인 글 본문 편집 또는 운영진 모더레이션: authorId/createdAt 불변
       allow update: if (
-        resource.data.authorId == request.auth.uid
+        isApproved()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
+      ) || (
+        (resource.data.authorId == request.auth.uid || isStaff())
         && request.resource.data.authorId == resource.data.authorId
         && request.resource.data.createdAt == resource.data.createdAt
-        && (request.resource.data.tag != '공지' || isStaff())
-      ) || isStaff();
+        && (request.resource.data.tag != 'NOTICE' || isStaff())
+      );
 
       // 삭제: 본인 글 + 운영진 (모더레이션)
       allow delete: if isApproved()

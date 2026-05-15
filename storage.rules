@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// OctaLink Firebase Storage Security Rules
+//
+// 경로 규약:
+//   posts/images/{filename}  — 커뮤니티 글 첨부 이미지 (현재 단일 이미지 per post, JPEG)
+//
+// 사이즈/타입 검증은 클라이언트(`ImageUploader.compressImage`) + 룰 양쪽 강제.
+// Blaze 비용 직격 영역이라 무제한 업로드 차단 필수.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // posts/images — 커뮤니티 글 이미지
+    //   read: 모든 인증 사용자 (Firestore Rules 가 read 측 정책을 별도 강제, Storage 는 URL 만 보호)
+    //   write: 인증 + 5MB 이하 + image/* MIME
+    //   delete: 인증 (정밀 ACL 없음 — 모더레이션 책임은 클라이언트/Cloud Function)
+    match /posts/images/{filename} {
+      allow read: if isAuth();
+      allow write: if isAuth()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAuth();
+    }
+
+    // 명시적 거부 — 외 경로 차단 (allowlist 모델)
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

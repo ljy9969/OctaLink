@@ -3,6 +3,7 @@ package com.unboundapex.octalink.data.repo
 import android.content.Context
 import com.unboundapex.octalink.data.repo.firestore.FirestoreAttendanceRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreMemberRepository
+import com.unboundapex.octalink.data.repo.firestore.FirestorePostRepository
 import com.unboundapex.octalink.data.repo.kakao.KakaoAuthRepository
 
 /**
@@ -25,6 +26,8 @@ object RepositoryProvider {
         private set
     lateinit var attendance: AttendanceRepository
         private set
+    lateinit var posts: PostRepository
+        private set
 
     @Volatile
     private var initialized: Boolean = false
@@ -37,6 +40,7 @@ object RepositoryProvider {
             auth = KakaoAuthRepository(context.applicationContext)
             members = FirestoreMemberRepository()
             attendance = FirestoreAttendanceRepository()
+            posts = FirestorePostRepository()
 
             initialized = true
         }

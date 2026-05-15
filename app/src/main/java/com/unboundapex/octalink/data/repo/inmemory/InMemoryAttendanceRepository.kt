@@ -60,6 +60,13 @@ class InMemoryAttendanceRepository(
             it.memberId == memberId && it.classDate == classDate
         }
     }
+
+    override suspend fun setVerified(memberId: String, classDate: LocalDate, verified: Boolean) {
+        _attendance.value = _attendance.value.map {
+            if (it.memberId == memberId && it.classDate == classDate) it.copy(verified = verified)
+            else it
+        }
+    }
 }
 
 /** 시연용 시드. MockSeed 회원들에 매핑되는 오늘 출석 6건. */
