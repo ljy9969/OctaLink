@@ -2,7 +2,6 @@ package com.unboundapex.octalink.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -15,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -24,48 +22,30 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.unboundapex.octalink.data.Avatar
-import com.unboundapex.octalink.data.Belt
 
 /**
- * Circular avatar tile with optional belt-color ring and belt mask overlay.
- *
- * Rendering layers (when image assets exist):
- *   1. bodyResourceName PNG  — full character, TopCenter crop
- *   2. beltMaskResourceName PNG  — white belt silhouette, tinted with belt.ringColor
- *      (also drawn for Belt.UNKNOWN — gray tint hides the natural belt color
- *      to make "ungraded" status visually clear)
- *
- * [ringColor] overrides the automatic belt-color ring (useful for selection highlights).
- * Ring border is skipped for Belt.UNKNOWN to further distinguish ungraded members.
+ * 원형 캐릭터 타일. 캐릭터 본체 PNG 만 렌더 — 벨트 색 링 / 벨트 마스크 tint 모두 제거됨.
+ * 벨트 색 표시는 카드 좌측 스트라이프, 벨트 칩, "{벨트명} 벨트" 텍스트로 분리되어 있어
+ * 아바타에 색을 덧입히면 시각 정보가 중복되고, 스프라이트 슬라이싱 오류(쇼츠 영역 포함)가
+ * 다른 벨트색일 때 의도하지 않은 영역까지 tint 되는 부작용이 있었음.
  */
 @Composable
 fun AvatarTile(
     avatar: Avatar,
-    belt: Belt = Belt.UNKNOWN,
     modifier: Modifier = Modifier,
     size: Dp = 72.dp,
-    ringColor: Color? = null,
-    ringWidth: Dp = 3.dp,
-    showBeltRing: Boolean = true,
 ) {
     val context = LocalContext.current
     val bodyResId = remember(avatar.bodyResourceName) {
         context.resources.getIdentifier(avatar.bodyResourceName, "drawable", context.packageName)
     }
-    val maskResId = remember(avatar.beltMaskResourceName) {
-        context.resources.getIdentifier(avatar.beltMaskResourceName, "drawable", context.packageName)
-    }
-
     val hasImage = bodyResId != 0
-    val autoRing = if (showBeltRing && belt != Belt.UNKNOWN) belt.ringColor else null
-    val effectiveRing = ringColor ?: autoRing
 
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(if (hasImage) Color.Transparent else avatar.accent)
-            .let { m -> if (effectiveRing != null) m.border(ringWidth, effectiveRing, CircleShape) else m },
+            .background(if (hasImage) Color.Transparent else avatar.accent),
         contentAlignment = Alignment.Center,
     ) {
         if (hasImage) {
@@ -76,16 +56,6 @@ fun AvatarTile(
                 alignment = Alignment.TopCenter,
                 modifier = Modifier.fillMaxSize(),
             )
-            if (maskResId != 0) {
-                Image(
-                    painter = painterResource(maskResId),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter,
-                    modifier = Modifier.fillMaxSize(),
-                    colorFilter = ColorFilter.tint(belt.ringColor),
-                )
-            }
         } else {
             Text(
                 text = avatar.initial,

@@ -81,6 +81,23 @@ service cloud.firestore {
     }
 
     // ════════════════════════════════════════════════════════
+    // CollectionGroup 쿼리 룰 (recursive wildcard)
+    // ════════════════════════════════════════════════════════
+    //
+    // Firestore 는 collectionGroup 쿼리를 일반 doc 액세스와 다르게 평가한다.
+    // 특정 부모 경로 룰(`match /members/{uid}/attendance/...`) 은 collectionGroup
+    // 쿼리에 적용되지 않으므로 `{path=**}` recursive wildcard 로 별도 선언 필요.
+    //
+    // 클라이언트 사용처: AttendanceScreen 의 "오늘 함께하는 동료" 카드 —
+    // `db.collectionGroup("attendance").whereEqualTo("classDate", today)` 로
+    // 모든 회원의 출석 doc 을 한 번에 스캔.
+    //
+    // 권한: APPROVED 회원만 list/get. write 는 nested 룰(아래 members 안) 에서 분기.
+    match /{path=**}/attendance/{attendanceId} {
+      allow read: if isApproved();
+    }
+
+    // ════════════════════════════════════════════════════════
     // members — 회원 마스터
     // ════════════════════════════════════════════════════════
     match /members/{uid} {

@@ -2,6 +2,7 @@ package com.unboundapex.octalink.ui.screens.profile
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -74,7 +75,6 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AvatarTile(
                             avatar = avatar,
-                            belt = belt,
                             size = 88.dp,
                             modifier = Modifier.padding(start = 10.dp),
                         )
@@ -96,12 +96,35 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
             }
             item {
                 PosseCard(padding = PaddingValues(4.dp)) {
-                    HexagonSkillChart(
-                        skills = skills,
+                    // 차트 + 우측 하단 평균 점수 오버레이. skills 6축 평균(0..1) → 0..100 정수.
+                    val avgScore = (skills.sumOf { it.value.toDouble() } / skills.size * 100).toInt()
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f)
-                    )
+                            .aspectRatio(1f),
+                    ) {
+                        HexagonSkillChart(
+                            skills = skills,
+                            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                        )
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(8.dp),
+                            horizontalAlignment = Alignment.End,
+                        ) {
+                            Text(
+                                "평균",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                "$avgScore",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
             item {

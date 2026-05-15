@@ -156,7 +156,6 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AvatarTile(
                         avatar = avatar,
-                        belt = belt,
                         size = 72.dp,
                     )
                     Spacer(Modifier.width(12.dp))
@@ -194,7 +193,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 Text(
                     "이미 다니던 회원은 실제 입관일로 변경하세요. 탭해서 선택.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color.White,
                 )
             }
 

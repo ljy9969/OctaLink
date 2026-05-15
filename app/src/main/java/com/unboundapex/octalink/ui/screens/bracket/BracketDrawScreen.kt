@@ -302,9 +302,7 @@ private fun MemberRow(member: Member, session: SessionState, checked: Boolean, o
         Row(verticalAlignment = Alignment.CenterVertically) {
             AvatarTile(
                 avatar = avatarById(effectiveAvatarId),
-                belt = member.belt,
                 size = 40.dp,
-                showBeltRing = false,
             )
             Spacer(Modifier.width(10.dp))
             Column(

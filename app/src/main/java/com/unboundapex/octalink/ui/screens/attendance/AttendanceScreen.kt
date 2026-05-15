@@ -95,7 +95,7 @@ fun AttendanceScreen(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            "▸ 회원별 일자별 출결 검토",
+                            "▸ 회원 / 일자별 출결 검토",
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Text(
@@ -199,7 +199,6 @@ fun AttendanceScreen(
                             ) {
                                 AvatarTile(
                                     avatar = avatarById(peer.member.avatarId),
-                                    belt = peer.member.belt,
                                     size = 40.dp,
                                 )
                                 Spacer(Modifier.width(10.dp))

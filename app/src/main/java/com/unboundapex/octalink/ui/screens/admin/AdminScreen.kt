@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -284,6 +285,9 @@ private fun SkillEditDialog(
 
 @Composable
 private fun SkillSlider(label: String, value: Float, onChange: (Float) -> Unit) {
+    // Slider 가 다이얼로그 폭을 가득 채우면서 active track 색이 카드 배경 톤과 비슷해
+    // 슬라이더 인식이 어려운 문제 — (1) 가로 padding 으로 길이 단축, (2) inactive track
+    // 을 밝은 회색으로 두꺼이 보이게, (3) thumb 을 흰색으로 강조.
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(
             label,
@@ -294,7 +298,14 @@ private fun SkillSlider(label: String, value: Float, onChange: (Float) -> Unit) 
             value = value,
             onValueChange = onChange,
             valueRange = 0f..1f,
-            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = Color(0xFF555560),
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp),
         )
         Text(
             "${(value * 100).toInt()}",

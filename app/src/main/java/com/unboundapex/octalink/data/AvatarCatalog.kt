@@ -7,10 +7,8 @@ data class Avatar(
     val displayName: String,
     val initial: String,
     val accent: Color,
-    /** res/drawable-nodpi/avatar_body_{id}.png — full character body */
+    /** res/drawable-nodpi/{id}.png — 캐릭터 본체. 정적 자산이며 런타임 색 변형 없음. */
     val bodyResourceName: String,
-    /** res/drawable-nodpi/avatar_belt_{id}.png — white belt silhouette for ColorFilter.tint */
-    val beltMaskResourceName: String,
 )
 
 private val _catalog: List<Avatar> = buildList {
@@ -34,7 +32,6 @@ private val _catalog: List<Avatar> = buildList {
                 initial = gLabel,
                 accent = accent,
                 bodyResourceName = "${gPrefix}_${wKey}",
-                beltMaskResourceName = "belt_${gPrefix}_${wKey}",
             ))
         }
     }
