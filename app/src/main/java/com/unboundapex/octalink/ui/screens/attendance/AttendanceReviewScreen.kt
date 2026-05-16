@@ -9,22 +9,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +59,8 @@ fun AttendanceReviewScreen(
     val members by vm.approvedMembers.collectAsState()
     val selectedId by vm.selectedMemberId.collectAsState()
     val attendance by vm.selectedAttendance.collectAsState()
+    val weeklyCount by vm.weeklyCountByMember.collectAsState()
+    val monthlyByDate by vm.monthlyCountByDate.collectAsState()
 
     val sortedMembers = remember(members) {
         members.sortedBy { it.name }
@@ -97,15 +100,16 @@ fun AttendanceReviewScreen(
             if (selected == null) {
                 MemberPickerList(
                     members = sortedMembers,
+                    weeklyCount = weeklyCount,
+                    monthAnchor = vm.monthStart,
+                    today = java.time.LocalDate.now(seoul),
+                    monthlyByDate = monthlyByDate,
                     onPick = { vm.selectMember(it.id) },
                 )
             } else {
                 AttendanceList(
                     member = selected,
                     items = attendance,
-                    onToggleVerified = { date, v ->
-                        vm.toggleVerified(selected.id, date, v)
-                    },
                     onDelete = { date -> vm.deleteAttendance(selected.id, date) },
                 )
             }
@@ -116,41 +120,88 @@ fun AttendanceReviewScreen(
 @Composable
 private fun MemberPickerList(
     members: List<MemberDoc>,
+    weeklyCount: Map<String, Int>,
+    monthAnchor: java.time.LocalDate,
+    today: java.time.LocalDate,
+    monthlyByDate: Map<java.time.LocalDate, Int>,
     onPick: (MemberDoc) -> Unit,
 ) {
-    if (members.isEmpty()) {
-        PosseCard {
-            Text(
-                "승인된 회원이 없습니다.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        return
-    }
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(members.chunked(2)) { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pair.forEach { m ->
-                    PosseCard(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onPick(m) },
-                        padding = PaddingValues(12.dp),
-                        leftStripeColor = m.belt.ringColor,
-                    ) {
-                        Text(m.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "${m.weightClass.displayName} · ${m.belt.displayName}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+        // 최상단 — 도장 전체 일자별 출석 활성도 히트맵
+        item {
+            Text(
+                "월별 도장 활성도",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp, bottom = 2.dp),
+            )
+        }
+        item {
+            MonthCalendar(
+                monthAnchor = monthAnchor,
+                today = today,
+                countsByDate = monthlyByDate,
+            )
+        }
+        if (members.isNotEmpty()) {
+            item {
+                Text(
+                    "회원별 주간 출석률",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp, bottom = 2.dp),
+                )
+            }
+        }
+        if (members.isEmpty()) {
+            item {
+                PosseCard {
+                    Text(
+                        "승인된 회원이 없습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+            }
+        } else {
+            items(members.chunked(2)) { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { m ->
+                        PosseCard(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onPick(m) },
+                            padding = PaddingValues(12.dp),
+                            leftStripeColor = m.belt.ringColor,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.Bottom,
+                                ) {
+                                    Text(m.name, style = MaterialTheme.typography.titleMedium)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        m.weightClass.displayName,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                WeeklyRateBadge(count = weeklyCount[m.id] ?: 0)
+                            }
+                        }
+                    }
+                    if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
@@ -160,21 +211,31 @@ private fun MemberPickerList(
 private fun AttendanceList(
     member: MemberDoc,
     items: List<AttendanceDoc>,
-    onToggleVerified: (java.time.LocalDate, Boolean) -> Unit,
     onDelete: (java.time.LocalDate) -> Unit,
 ) {
+    // 우발 클릭 방지 — 삭제는 confirm 다이얼로그 거침
+    var deleteTarget by remember { mutableStateOf<AttendanceDoc?>(null) }
+
+    val today = remember { java.time.LocalDate.now(seoul) }
+    val countThisMonth = remember(items, today) {
+        items.count { it.classDate.year == today.year && it.classDate.month == today.month }
+    }
+
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
             PosseCard(leftStripeColor = member.belt.ringColor) {
-                Text(member.name, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${member.weightClass.displayName} · ${member.belt.displayName} 벨트 · 총 ${items.size}회 출석",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(member.name, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "${member.weightClass.displayName} · 총 ${items.size}회 출석 · 이번 달 ${countThisMonth}회",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         if (items.isEmpty()) {
@@ -191,11 +252,47 @@ private fun AttendanceList(
             items(items, key = { it.id }) { att ->
                 AttendanceRow(
                     att = att,
-                    onToggleVerified = { v -> onToggleVerified(att.classDate, v) },
-                    onDelete = { onDelete(att.classDate) },
+                    onDelete = { deleteTarget = att },
                 )
             }
         }
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("출석 기록 삭제") },
+            text = {
+                Text(
+                    "${target.classDate.format(dateFormatter)} (${dayOfWeekKr(target.classDate.dayOfWeek)}) 출석 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                Text(
+                    "삭제",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable {
+                            onDelete(target.classDate)
+                            deleteTarget = null
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
+            dismissButton = {
+                Text(
+                    "취소",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable { deleteTarget = null }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
+        )
     }
 }
 
@@ -212,41 +309,27 @@ private fun dayOfWeekKr(d: DayOfWeek): String = when (d) {
 @Composable
 private fun AttendanceRow(
     att: AttendanceDoc,
-    onToggleVerified: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
     PosseCard(padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+        // 날짜+시간 좌측, 삭제 우측 (단 카드 우측 끝까지 글루잉 안 되도록 end padding).
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "${att.classDate.format(dateFormatter)} (${dayOfWeekKr(att.classDate.dayOfWeek)})",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    "체크인 " + att.checkInAt.atZone(seoul).toLocalTime().format(timeFormatter),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "확인",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Switch(
-                    checked = att.verified,
-                    onCheckedChange = onToggleVerified,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
+            Text(
+                "${att.classDate.format(dateFormatter)} (${dayOfWeekKr(att.classDate.dayOfWeek)})",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "체크인 " + att.checkInAt.atZone(seoul).toLocalTime().format(timeFormatter),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
             ActionChip(
                 text = "삭제",
                 bg = Color(0xFF555560),
@@ -279,5 +362,145 @@ private fun ActionChip(
             color = fg,
             fontWeight = FontWeight.Bold,
         )
+    }
+}
+
+/**
+ * 회원 카드 우측 — 이번 주 출석률.
+ * 상단: % (체육관 6일 운영 기준), 하단: "N / 6" 일수.
+ * 출석 0이면 회색 비활성 톤, 1+ 이면 primary.
+ */
+@Composable
+private fun WeeklyRateBadge(count: Int) {
+    val capped = count.coerceAtMost(GYM_DAYS_PER_WEEK)
+    val pct = (capped * 100 / GYM_DAYS_PER_WEEK)
+    val active = count > 0
+    val bg = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+    else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (active) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "$pct%",
+            style = MaterialTheme.typography.titleMedium,
+            color = fg,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "$capped / $GYM_DAYS_PER_WEEK",
+            style = MaterialTheme.typography.labelSmall,
+            color = fg,
+        )
+    }
+}
+
+/**
+ * 한 달 캘린더 — 일요일 시작 7열 그리드. 도장 전체 회원의 일자별 출석 건수 heatmap.
+ * 출석 0건: 빈 셀 / 1+ 건: primary alpha 비례 채움 (활성도 시각화).
+ * 오늘 셀은 1.5dp border 강조.
+ *
+ * 휴무 / 공휴일 등 별도 표기는 없음 — MVP.
+ */
+@Composable
+private fun MonthCalendar(
+    monthAnchor: java.time.LocalDate,
+    today: java.time.LocalDate,
+    countsByDate: Map<java.time.LocalDate, Int>,
+) {
+    val firstOfMonth = monthAnchor.withDayOfMonth(1)
+    val daysInMonth = monthAnchor.lengthOfMonth()
+    // 일요일을 0번 컬럼으로 — Korean calendar convention. DayOfWeek: MON=1..SUN=7
+    val leadingBlank = firstOfMonth.dayOfWeek.value % 7
+    val totalCells = ((leadingBlank + daysInMonth + 6) / 7) * 7
+    // heatmap alpha 스케일 — 이 달 최대 출석 건수 기준. 최대값 1 이상 보장으로 0 나누기 회피.
+    val maxCount = (countsByDate.values.maxOrNull() ?: 0).coerceAtLeast(1)
+
+    PosseCard(padding = PaddingValues(12.dp)) {
+        Text(
+            "${monthAnchor.year}년 ${monthAnchor.monthValue}월",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        val dayLabels = listOf("일", "월", "화", "수", "목", "금", "토")
+        Row(modifier = Modifier.fillMaxWidth()) {
+            dayLabels.forEachIndexed { idx, label ->
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when (idx) {
+                        0 -> Color(0xFFE57373)
+                        6 -> Color(0xFF64B5F6)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        (0 until totalCells).toList().chunked(7).forEach { weekCells ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                weekCells.forEach { cellIdx ->
+                    val dayNum = cellIdx - leadingBlank + 1
+                    val cellDate = if (dayNum in 1..daysInMonth) firstOfMonth.withDayOfMonth(dayNum) else null
+                    val count = cellDate?.let { countsByDate[it] } ?: 0
+                    CalendarCell(
+                        date = cellDate,
+                        count = count,
+                        intensityRatio = count.toFloat() / maxCount,
+                        isToday = cellDate == today,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarCell(
+    date: java.time.LocalDate?,
+    count: Int,
+    intensityRatio: Float,
+    isToday: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val cellShape = RoundedCornerShape(6.dp)
+    // 0건: 투명 / 1+ 건: 0.2~0.85 사이로 alpha 보간 (최저 가시성 확보 + 최고 채도)
+    val alpha = if (count <= 0) 0f else 0.2f + 0.65f * intensityRatio.coerceIn(0f, 1f)
+    val bg = MaterialTheme.colorScheme.primary.copy(alpha = alpha)
+    val fg = when {
+        date == null -> Color.Transparent
+        count > 0 && intensityRatio > 0.5f -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier = modifier
+            .padding(2.dp)
+            .height(32.dp)
+            .clip(cellShape)
+            .background(bg)
+            .let { m ->
+                if (isToday) m.border(1.5.dp, MaterialTheme.colorScheme.primary, cellShape)
+                else m
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (date != null) {
+            Text(
+                text = "${date.dayOfMonth}",
+                style = MaterialTheme.typography.labelMedium,
+                color = fg,
+                fontWeight = if (count > 0 || isToday) FontWeight.Bold else FontWeight.Normal,
+            )
+        }
     }
 }

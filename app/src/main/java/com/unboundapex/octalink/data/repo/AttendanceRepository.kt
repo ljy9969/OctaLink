@@ -26,6 +26,13 @@ interface AttendanceRepository {
     fun observeByMember(memberId: String): Flow<List<AttendanceDoc>>
 
     /**
+     * 특정 일자 이후의 모든 회원 출석 — 운영진 통계 (이번 주/이번 달 회원별 출석 횟수 계산).
+     * Firestore `collectionGroup("attendance")` + `whereGreaterThanOrEqualTo("classDate", ...)`.
+     * Rules: `match /{path=**}/attendance/{attendanceId}` 의 read 권한 사용 (모든 APPROVED).
+     */
+    fun observeSince(classDate: LocalDate): Flow<List<AttendanceDoc>>
+
+    /**
      * 체크인. 같은 날 재호출은 idempotent (서버 시각으로 checkInAt 갱신).
      * 본인만 자기 체크인 가능 (Security Rules: `isSelf(uid)` + `memberId == uid`).
      */

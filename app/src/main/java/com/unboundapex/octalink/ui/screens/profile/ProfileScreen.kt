@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -34,8 +35,6 @@ import com.unboundapex.octalink.ui.components.PosseScreen
 import java.time.LocalDate
 import java.time.Period
 
-private data class Comment(val date: String, val coach: String, val text: String)
-
 private fun membershipLabel(joinDate: LocalDate, today: LocalDate = LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))): String {
     val period = Period.between(joinDate, today)
     return when {
@@ -46,19 +45,31 @@ private fun membershipLabel(joinDate: LocalDate, today: LocalDate = LocalDate.no
     }
 }
 
-private val coachComments = listOf(
-    Comment("5/1 금", "관장 김파시", "리드 잽 후 체중 이동을 반박자 늦춰보세요. 카운터 위험이 줄어듭니다."),
-    Comment("4/29 수", "코치 박", "샌드백 라운드 후반에 가드가 내려갑니다. 마지막 30초 의식적으로 올리기."),
-    Comment("4/26 일", "관장 김파시", "테이크다운 디펜스 시 골반 각도 좋아졌습니다. 그대로 유지."),
-)
+private val commentDateFormatter = java.time.format.DateTimeFormatter.ofPattern("M/d")
+private fun dayOfWeekKr(d: java.time.DayOfWeek): String = when (d) {
+    java.time.DayOfWeek.MONDAY -> "월"; java.time.DayOfWeek.TUESDAY -> "화"
+    java.time.DayOfWeek.WEDNESDAY -> "수"; java.time.DayOfWeek.THURSDAY -> "목"
+    java.time.DayOfWeek.FRIDAY -> "금"; java.time.DayOfWeek.SATURDAY -> "토"
+    java.time.DayOfWeek.SUNDAY -> "일"
+}
 
 @Composable
-fun ProfileScreen(sessionVm: SessionViewModel) {
+fun ProfileScreen(
+    sessionVm: SessionViewModel,
+    commentsVm: MyCommentsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+) {
     val session by sessionVm.state.collectAsState()
     var leaveConfirmOpen by remember { mutableStateOf(false) }
     val avatar = avatarById(session.avatarId)
     val belt = session.belt
     val skills = (session.member?.skills ?: SkillSet.EMPTY).toStats()
+
+    // 본인 회원 id 가 set 되면 코멘트 구독 시작
+    val myMemberId = session.member?.id
+    androidx.compose.runtime.LaunchedEffect(myMemberId) {
+        commentsVm.observeFor(myMemberId)
+    }
+    val coachComments by commentsVm.myComments.collectAsState()
     // 실제 도장 입관일 — Firestore `members/{uid}.joinDate` 에서 (가입 폼에서 사용자가 입력).
     // 아직 회원 doc 이 없는 LOADING 단계 폴백은 오늘 (이번 달 입관 표시).
     val joinDate = session.member?.joinDate ?: LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
@@ -97,6 +108,8 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                 // 차트 + 평균 점수. skills 6축 평균(0..1) → 0..100 정수.
                 val avgScore = (skills.sumOf { it.value.toDouble() } / skills.size * 100).toInt()
                 PosseCard(padding = PaddingValues(4.dp)) {
+                    // 차트의 하단 axis 라벨("기술") 아래 빈 공간 때문에 평균 행이 멀어 보임.
+                    // offset 으로 위로 끌어올려 차트와 시각적으로 결합.
                     HexagonSkillChart(
                         skills = skills,
                         modifier = Modifier.fillMaxWidth().aspectRatio(1f),
@@ -104,22 +117,24 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                            .offset(y = (-20).dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            "평균 ",
+                            "평균",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             "$avgScore",
                             style = MaterialTheme.typography.headlineMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            " 점",
+                            "점",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -169,10 +184,24 @@ fun ProfileScreen(sessionVm: SessionViewModel) {
                 PosseCard {
                     Text("관장님 한 줄 코멘트", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(4.dp))
-                    coachComments.forEach { c ->
-                        Text("${c.date} · ${c.coach}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(c.text, style = MaterialTheme.typography.bodyLarge)
-                        Spacer(Modifier.height(8.dp))
+                    if (coachComments.isEmpty()) {
+                        Text(
+                            "아직 받은 코멘트가 없습니다.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        coachComments.forEach { c ->
+                            val dateLabel = c.classDate.format(commentDateFormatter) +
+                                " " + dayOfWeekKr(c.classDate.dayOfWeek)
+                            Text(
+                                "$dateLabel · ${c.byMasterName}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(c.text, style = MaterialTheme.typography.bodyLarge)
+                            Spacer(Modifier.height(8.dp))
+                        }
                     }
                 }
             }

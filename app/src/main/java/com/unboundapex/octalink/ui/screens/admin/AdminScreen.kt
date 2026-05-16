@@ -56,6 +56,9 @@ import com.unboundapex.octalink.ui.components.PosseScreen
 fun AdminScreen(
     sessionVm: SessionViewModel,
     onOpenCreator: () -> Unit,
+    onOpenCoachComment: () -> Unit = {},
+    onOpenBracket: () -> Unit = {},
+    onOpenSkillScorePropose: () -> Unit = {},
     approvalVm: MemberApprovalViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
@@ -86,13 +89,11 @@ fun AdminScreen(
                     PosseCard(leftStripeColor = StripeStaff) {
                         Text("운영진 공통", style = MaterialTheme.typography.titleMedium, color = StripeStaff)
                         Spacer(Modifier.height(4.dp))
-                        StaffAction("회원 한 줄 코멘트 작성") {}
-                        StaffAction("출결 검토 — 회원별 일자별 출석 이력") {}
-                        StaffAction("토너먼트 추첨/대진 관리") {}
-                        StaffAction("공지 작성 (커뮤니티)") {}
-                        StaffAction("스킬 점수 입력 (제안 → 관장 검토)") {}
+                        StaffAction("회원 한 줄 코멘트 작성") { onOpenCoachComment() }
+                        StaffAction("토너먼트 추첨 / 대진 관리") { onOpenBracket() }
+                        StaffAction("스킬 점수 입력 (제안 → 관장 검토)") { onOpenSkillScorePropose() }
                         Spacer(Modifier.height(4.dp))
-                        FootnoteText("준비 중 — 후속 Repository 작업에서 활성화")
+                        FootnoteText("출결 검토는 출석 탭의 운영진 모드, 공지 작성은 커뮤니티 탭에서 진입.")
                     }
                 }
             }

@@ -9,8 +9,15 @@
 
     <style name="Theme.OctaLink.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/ink</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
-        <item name="windowSplashScreenIconBackgroundColor">@color/bone</item>
+        <!--
+          시스템 splash: ink 배경 + 정적 흰 마크 (Compose [SplashScreen] 의 160dp mark
+          와 동일 시각 크기로 다운스케일). Compose 로 핸드오프되는 즉시 박동 애니메이션
+          이 시작 → 정적/박동 위상 불일치로 인한 점멸 회피. system animation 은 사용
+          안 함 (animationDuration 미설정).
+          iconBackgroundColor: launcher adaptive icon 의 bone 원형 배경 제거.
+        -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_mark_white</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/ink</item>
         <item name="postSplashScreenTheme">@style/Theme.OctaLink</item>
     </style>
 </resources>

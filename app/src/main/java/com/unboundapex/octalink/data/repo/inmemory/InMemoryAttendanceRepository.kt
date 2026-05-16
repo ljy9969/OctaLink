@@ -29,6 +29,9 @@ class InMemoryAttendanceRepository(
                 .sortedByDescending { it.classDate }
         }
 
+    override fun observeSince(classDate: LocalDate): Flow<List<AttendanceDoc>> =
+        _attendance.map { list -> list.filter { !it.classDate.isBefore(classDate) } }
+
     override suspend fun checkIn(
         memberId: String,
         classDefId: String,

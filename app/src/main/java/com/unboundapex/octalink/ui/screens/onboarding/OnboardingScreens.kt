@@ -122,10 +122,14 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     // 한글 IME 조합 보존을 위해 TextFieldValue 사용
     var nameValue by remember { mutableStateOf(TextFieldValue("")) }
     val kakaoGender = kakaoIdentity?.gender
+    // 카카오 비즈 검수 미통과 → kakaoGender == null → 사용자가 직접 선택해야 함.
+    // 검수 통과 시엔 자동으로 들어오므로 chip 은 숨김 + kakaoGender 사용.
+    var pickedGender by remember { mutableStateOf<String?>(null) }
+    val effectiveGender = kakaoGender ?: pickedGender
     var belt by remember { mutableStateOf(Belt.UNKNOWN) }
     var weightClass by remember { mutableStateOf(WeightClass.LIGHT) }
-    // 캐릭터는 성별 + 체급에서 자동 파생 (사용자 선택 X). belt 는 마스크 색만 변경.
-    val avatarId = avatarFor(kakaoGender, weightClass).id
+    // 캐릭터는 성별 + 체급에서 자동 파생. effectiveGender 가 null 이면 avatarFor 가 m_* 로 fallback.
+    val avatarId = avatarFor(effectiveGender, weightClass).id
 
     // 입관일 (체육관 등록일) — 기본값 오늘. 이미 다니던 회원은 과거 날짜로 변경.
     val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
@@ -142,7 +146,8 @@ fun SignupScreen(sessionVm: SessionViewModel) {
 
     val avatar = avatarById(avatarId)
     val name = nameValue.text
-    val canSubmit = name.isNotBlank()
+    // 가입 가능 조건: 이름 + 성별 둘 다 결정 (kakao 자동 또는 사용자 선택)
+    val canSubmit = name.isNotBlank() && effectiveGender != null
     val joinDateLabel = remember(joinDate) {
         joinDate.format(DateTimeFormatter.ofPattern("yyyy년 M월 d일"))
     }
@@ -183,6 +188,54 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            // 성별 — 카카오 비즈 검수 통과 시 자동 (kakaoGender != null), 그 외엔 사용자 직접 선택.
+            // 캐릭터 자동 부여(성별+체급 조합) 용도. kakao 값이 도착하면 chip 숨기고 자동 적용 표시.
+            PosseCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "성별 (필수)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (kakaoGender != null) {
+                        Text(
+                            "카카오 자동",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    GenderChip(
+                        label = "남",
+                        selected = effectiveGender == "MALE",
+                        onClick = { if (kakaoGender == null) pickedGender = "MALE" },
+                        locked = kakaoGender != null,
+                        modifier = Modifier.weight(1f),
+                    )
+                    GenderChip(
+                        label = "여",
+                        selected = effectiveGender == "FEMALE",
+                        onClick = { if (kakaoGender == null) pickedGender = "FEMALE" },
+                        locked = kakaoGender != null,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (kakaoGender == null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "캐릭터 자동 부여에 사용됩니다.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             // 입관일 — 도장에 처음 등록한 날 (앱 가입일과 별개)
@@ -277,6 +330,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                         avatarId = avatarId,
                         joinDate = joinDate,
                         phone = kakaoPhone,
+                        pickedGender = pickedGender,
                     )
                 },
             )
@@ -537,6 +591,42 @@ private fun WeightChip(
 private fun beltTextColor(belt: Belt): Color = when (belt) {
     Belt.WHITE -> Color(0xFF111111)
     else -> Color.White
+}
+
+/**
+ * 성별 선택 칩 — 카카오 비즈 검수 미통과 시 사용자가 직접 선택.
+ * [locked] true 면 카카오 자동 값이라 비활성 (시각적으로만 표시, onClick no-op).
+ */
+@Composable
+private fun GenderChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    locked: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val activeBg = MaterialTheme.colorScheme.primary
+    val borderColor = if (selected) Color.White else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .alpha(if (locked && !selected) UNSELECTED_ALPHA else 1f)
+            .clip(chipShape)
+            .background(if (selected) activeBg else MaterialTheme.colorScheme.surfaceVariant)
+            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor), chipShape)
+            .clickable(enabled = !locked) { onClick() }
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+    }
 }
 
 @Composable

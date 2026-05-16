@@ -170,7 +170,9 @@ class SessionViewModel : ViewModel() {
     }
 
     /** PENDING_SIGNUP 단계에서 가입 폼 제출. authProviderId 는 현재 상태에서 가져옴.
-     *  카카오 동의 항목으로 받은 부가 정보(email/gender/ageRange/birthday/birthyear) 도 같이 영속화. */
+     *  카카오 동의 항목으로 받은 부가 정보(email/gender/ageRange/birthday/birthyear) 도 같이 영속화.
+     *  gender 는 카카오 비즈 검수 통과 시 자동 수집, 미통과 시 사용자 직접 선택값을
+     *  [pickedGender] 로 전달 — 카카오 값이 우선 사용되고 없을 때만 fallback. */
     fun completeSignup(
         name: String,
         belt: Belt,
@@ -178,6 +180,7 @@ class SessionViewModel : ViewModel() {
         avatarId: String,
         joinDate: java.time.LocalDate,
         phone: String? = null,
+        pickedGender: String? = null,
     ) {
         val authId = state.value.authProviderId ?: return
         val identity = state.value.kakaoIdentity
@@ -192,7 +195,8 @@ class SessionViewModel : ViewModel() {
                     joinDate = joinDate,
                     phone = phone,
                     email = identity?.email,
-                    gender = identity?.gender,
+                    // 카카오 gender (비즈 검수 통과 시) 우선, 미수집 시 사용자 직접 선택값 사용
+                    gender = identity?.gender ?: pickedGender,
                     ageRange = identity?.ageRange,
                     birthday = identity?.birthday,
                     birthyear = identity?.birthyear,

@@ -62,6 +62,22 @@ class FirestoreAttendanceRepository : AttendanceRepository {
         awaitClose { sub.remove() }
     }
 
+    override fun observeSince(classDate: LocalDate): Flow<List<AttendanceDoc>> = callbackFlow {
+        android.util.Log.d("OctaLink.Attendance", "observeSince start: >= $classDate")
+        val sub = db.collectionGroup(Collections.ATTENDANCE)
+            .whereGreaterThanOrEqualTo("classDate", classDate.toString())
+            .addSnapshotListener { snap, err ->
+                if (err != null) {
+                    android.util.Log.e("OctaLink.Attendance", "observeSince snapshot error", err)
+                    close(err)
+                    return@addSnapshotListener
+                }
+                val docs = snap?.documents?.mapNotNull { it.toAttendanceDoc() }.orEmpty()
+                trySend(docs)
+            }
+        awaitClose { sub.remove() }
+    }
+
     override suspend fun checkIn(
         memberId: String,
         classDefId: String,

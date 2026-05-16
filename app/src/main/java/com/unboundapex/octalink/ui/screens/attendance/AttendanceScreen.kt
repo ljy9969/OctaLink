@@ -100,11 +100,11 @@ fun AttendanceScreen(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            "▸ 회원 / 일자별 출결 검토",
+                            "▸ 회원 출결 검토",
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Text(
-                            "탭하면 회원별 출석 기록 + verified 토글 + 정정 삭제",
+                            "탭하면 회원별 출석 기록 확인 및 삭제",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

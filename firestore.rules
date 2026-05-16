@@ -97,6 +97,15 @@ service cloud.firestore {
       allow read: if isApproved();
     }
 
+    // 운영진 스킬 점수 리뷰 큐 — `db.collectionGroup("skillScores").whereEqualTo("status", "PROPOSED")`
+    // 으로 전 회원 PROPOSED 점수를 한 번에 스캔. 본인 read 는 아래 nested 룰이 담당.
+    //
+    // 권한: 운영진만 (개인 점수 노출 방지 — 일반 회원은 본인 nested 경로로만 접근).
+    // firestore.indexes.json 의 (status ASC, evaluatedAt ASC) collection-group composite index 필요.
+    match /{path=**}/skillScores/{scoreId} {
+      allow read: if isStaff();
+    }
+
     // ════════════════════════════════════════════════════════
     // members — 회원 마스터
     // ════════════════════════════════════════════════════════

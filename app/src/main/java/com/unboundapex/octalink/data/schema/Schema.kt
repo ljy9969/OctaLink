@@ -99,11 +99,19 @@ data class AttendanceDoc(
     val verified: Boolean = false,
 )
 
-/** 관장 한 줄 코멘트. 회원 본인 + 관장만 read */
+/**
+ * 운영진 한 줄 코멘트. 회원 본인 + 운영진만 read.
+ *
+ * 비정규화 필드 [byMasterName] — 작성 시점 운영진 이름 스냅샷. 회원 표시 시 members join 회피.
+ * 운영진이 이름 변경해도 옛 코멘트엔 반영 안 됨 (history 의도).
+ *
+ * [classDate] — 코멘트가 다루는 수업/관찰 일자. 기본 today, 운영진이 과거 일자 지정 가능.
+ */
 data class CommentDoc(
     val id: String,
     val toMemberId: String,
     val byMasterId: String,
+    val byMasterName: String,
     val text: String,
     val classDate: LocalDate,
     val createdAt: Instant,

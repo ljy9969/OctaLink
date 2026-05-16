@@ -169,26 +169,29 @@ private fun PostCard(
     onDelete: () -> Unit,
 ) {
     val likedByMe = myMemberId != null && myMemberId in post.likedBy
+    // title 이 tag 라벨(공지/질문/팁/기록)과 동일하면 chip 과 중복이라 표시하지 않음
+    val showTitle = post.title.isNotBlank() &&
+        post.title.trim() != post.tag.label()
     PosseCard(leftStripeColor = post.authorBelt.ringColor) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TagBadge(post.tag)
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.weight(1f))
             Text(
                 post.authorName,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
             )
+            Spacer(Modifier.width(8.dp))
             Text(
                 relativeTime(post.createdAt),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        if (post.title.isNotBlank()) {
+        if (showTitle) {
             Spacer(Modifier.height(6.dp))
             Text(
                 post.title,

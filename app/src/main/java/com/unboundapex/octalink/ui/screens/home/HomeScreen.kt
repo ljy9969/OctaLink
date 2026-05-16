@@ -74,13 +74,16 @@ private val oneLineComment = FeedItem(
     body = "리드 잽 후 체중 이동을 반박자 늦춰보세요. 카운터 맞을 위험 줄어듭니다.",
 )
 
-private val invertColorFilter = ColorFilter.colorMatrix(
+// 원본 PNG: 흰색 배경 + 검정 로고/텍스트.
+// 흰색 픽셀은 알파 0(투명)으로 빼고, 검정 픽셀은 흰색 + 불투명으로 출력 → 배경이 화면 색으로 비침.
+// 알파는 입력 RGB 평균을 반전(밝을수록 투명, 어두울수록 불투명) → 가장자리 안티에일리어싱 보존.
+private val logoKeyWhiteFilter = ColorFilter.colorMatrix(
     ColorMatrix(
         floatArrayOf(
-            -1f, 0f, 0f, 0f, 255f,
-            0f, -1f, 0f, 0f, 255f,
-            0f, 0f, -1f, 0f, 255f,
-            0f, 0f, 0f, 1f, 0f
+            0f,         0f,         0f,         0f, 255f,
+            0f,         0f,         0f,         0f, 255f,
+            0f,         0f,         0f,         0f, 255f,
+            -1f / 3f,   -1f / 3f,   -1f / 3f,   0f, 255f
         )
     )
 )
@@ -322,7 +325,7 @@ private fun HomeHeader() {
                 .fillMaxWidth(0.9f)
                 .aspectRatio(1800f / 403f),
             contentScale = ContentScale.Fit,
-            colorFilter = invertColorFilter
+            colorFilter = logoKeyWhiteFilter
         )
         Text(
             text = "👊",

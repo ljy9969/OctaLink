@@ -61,11 +61,17 @@ private const val CARD_WIDTH_FRACTION = 0.78f
 
 private enum class BracketMode { EIGHT, FOUR, FINAL_ONLY }
 
+/**
+ * @param canManage 운영진 진입(Admin → 토너먼트 관리) 시 true — 새 추첨/초기화 칩과
+ *                  EmptyState 의 "추첨하기" 버튼을 노출. Home → "이번 주 대진표" 진입 시
+ *                  false → 회원은 결과 조회만 가능.
+ */
 @Composable
 fun BracketScreen(
     tournamentVm: TournamentViewModel,
     onBack: () -> Unit,
     onOpenDraw: () -> Unit,
+    canManage: Boolean = false,
 ) {
     val state by tournamentVm.state.collectAsState()
     val isInitialized = state.initialized
@@ -84,7 +90,7 @@ fun BracketScreen(
 
     PosseScreen(title = "Matches", subtitle = subtitle) {
         if (!isInitialized) {
-            EmptyState(onOpenDraw = onOpenDraw, onBack = onBack)
+            EmptyState(onOpenDraw = onOpenDraw, onBack = onBack, canManage = canManage)
             return@PosseScreen
         }
 
@@ -101,26 +107,30 @@ fun BracketScreen(
 
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ActionChip(
-                        text = "새 추첨",
-                        bg = MaterialTheme.colorScheme.primary,
-                        fg = MaterialTheme.colorScheme.onPrimary,
-                        onClick = onOpenDraw,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    ActionChip(
-                        text = "초기화",
-                        bg = Color(0xFFFBC02D),
-                        fg = Color(0xFF1A1A1A),
-                        onClick = { tournamentVm.reset() },
-                    )
+                if (canManage) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ActionChip(
+                            text = "새 추첨",
+                            bg = MaterialTheme.colorScheme.primary,
+                            fg = MaterialTheme.colorScheme.onPrimary,
+                            onClick = onOpenDraw,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        ActionChip(
+                            text = "초기화",
+                            bg = Color(0xFFFBC02D),
+                            fg = Color(0xFF1A1A1A),
+                            onClick = { tournamentVm.reset() },
+                        )
+                    }
+                    Spacer(Modifier.height(48.dp))
+                } else {
+                    Spacer(Modifier.height(48.dp))
                 }
-                Spacer(Modifier.height(48.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -131,9 +141,9 @@ fun BracketScreen(
                 Spacer(Modifier.height(12.dp))
 
                 when (mode) {
-                    BracketMode.EIGHT -> BracketTree(state = state, vm = tournamentVm)
-                    BracketMode.FOUR -> BracketTreeFour(state = state, vm = tournamentVm)
-                    BracketMode.FINAL_ONLY -> BracketTreeFinalOnly(state = state, vm = tournamentVm)
+                    BracketMode.EIGHT -> BracketTree(state = state, vm = tournamentVm, canPick = canManage)
+                    BracketMode.FOUR -> BracketTreeFour(state = state, vm = tournamentVm, canPick = canManage)
+                    BracketMode.FINAL_ONLY -> BracketTreeFinalOnly(state = state, vm = tournamentVm, canPick = canManage)
                 }
 
                 Box(
@@ -155,7 +165,7 @@ fun BracketScreen(
 }
 
 @Composable
-private fun EmptyState(onOpenDraw: () -> Unit, onBack: () -> Unit) {
+private fun EmptyState(onOpenDraw: () -> Unit, onBack: () -> Unit, canManage: Boolean) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -174,18 +184,21 @@ private fun EmptyState(onOpenDraw: () -> Unit, onBack: () -> Unit) {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "체급별로 회원을 선택해 추첨을 시작하세요",
+            if (canManage) "체급별로 회원을 선택해 추첨을 시작하세요"
+            else "관장님의 추첨을 기다리는 중입니다",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = onOpenDraw,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            )
-        ) { Text("추첨하기") }
+        if (canManage) {
+            Spacer(Modifier.height(20.dp))
+            Button(
+                onClick = onOpenDraw,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White
+                )
+            ) { Text("추첨하기") }
+        }
     }
 }
 
@@ -251,7 +264,7 @@ private fun RoundLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BracketTree(state: TournamentUiState, vm: TournamentViewModel) {
+private fun BracketTree(state: TournamentUiState, vm: TournamentViewModel, canPick: Boolean) {
     val totalHeight = matchHeight * 4 + verticalGap * 3
     val lineColor = MaterialTheme.colorScheme.outline
     val (fireColor, fireStroke) = rememberFirePulse()
@@ -380,7 +393,7 @@ private fun BracketTree(state: TournamentUiState, vm: TournamentViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 state.round1.forEachIndexed { idx, m ->
-                    MatchCard(m, vm = vm, modifier = cardMod) { winner ->
+                    MatchCard(m, vm = vm, modifier = cardMod, canPick = canPick) { winner ->
                         vm.setRound1Winner(idx, winner)
                     }
                     if (idx < state.round1.lastIndex) Spacer(Modifier.height(verticalGap))
@@ -392,11 +405,11 @@ private fun BracketTree(state: TournamentUiState, vm: TournamentViewModel) {
             ) {
                 Spacer(Modifier.height((matchHeight + verticalGap) / 2))
                 if (state.round2.isNotEmpty()) {
-                    MatchCard(state.round2[0], vm = vm, modifier = cardMod) { winner ->
+                    MatchCard(state.round2[0], vm = vm, modifier = cardMod, canPick = canPick) { winner ->
                         vm.setRound2Winner(0, winner)
                     }
                     Spacer(Modifier.height(matchHeight + verticalGap * 2))
-                    MatchCard(state.round2[1], vm = vm, modifier = cardMod) { winner ->
+                    MatchCard(state.round2[1], vm = vm, modifier = cardMod, canPick = canPick) { winner ->
                         vm.setRound2Winner(1, winner)
                     }
                 }
@@ -411,6 +424,7 @@ private fun BracketTree(state: TournamentUiState, vm: TournamentViewModel) {
                     vm = vm,
                     modifier = cardMod,
                     emphasis = true,
+                    canPick = canPick,
                 ) { winner ->
                     vm.setFinalWinner(winner)
                 }
@@ -420,7 +434,7 @@ private fun BracketTree(state: TournamentUiState, vm: TournamentViewModel) {
 }
 
 @Composable
-private fun BracketTreeFour(state: TournamentUiState, vm: TournamentViewModel) {
+private fun BracketTreeFour(state: TournamentUiState, vm: TournamentViewModel, canPick: Boolean) {
     val totalHeight = matchHeight * 2 + verticalGap
     val lineColor = MaterialTheme.colorScheme.outline
     val (fireColor, fireStroke) = rememberFirePulse()
@@ -486,7 +500,7 @@ private fun BracketTreeFour(state: TournamentUiState, vm: TournamentViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 state.round2.forEachIndexed { idx, m ->
-                    MatchCard(m, vm = vm, modifier = cardMod) { winner ->
+                    MatchCard(m, vm = vm, modifier = cardMod, canPick = canPick) { winner ->
                         vm.setRound2Winner(idx, winner)
                     }
                     if (idx < state.round2.lastIndex) Spacer(Modifier.height(verticalGap))
@@ -502,6 +516,7 @@ private fun BracketTreeFour(state: TournamentUiState, vm: TournamentViewModel) {
                     vm = vm,
                     modifier = cardMod,
                     emphasis = true,
+                    canPick = canPick,
                 ) { winner ->
                     vm.setFinalWinner(winner)
                 }
@@ -511,7 +526,7 @@ private fun BracketTreeFour(state: TournamentUiState, vm: TournamentViewModel) {
 }
 
 @Composable
-private fun BracketTreeFinalOnly(state: TournamentUiState, vm: TournamentViewModel) {
+private fun BracketTreeFinalOnly(state: TournamentUiState, vm: TournamentViewModel, canPick: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -523,6 +538,7 @@ private fun BracketTreeFinalOnly(state: TournamentUiState, vm: TournamentViewMod
                 state.final,
                 vm = vm,
                 emphasis = true,
+                canPick = canPick,
             ) { winner ->
                 vm.setFinalWinner(winner)
             }
@@ -536,6 +552,7 @@ private fun MatchCard(
     vm: TournamentViewModel,
     modifier: Modifier = Modifier,
     emphasis: Boolean = false,
+    canPick: Boolean = true,
     onPickWinner: (String) -> Unit = {},
 ) {
     val redStripe = vm.beltOf(m.red)?.ringColor
@@ -555,7 +572,7 @@ private fun MatchCard(
             isLoser = m.winner != null && m.winner != m.red,
             stripeColor = redStripe,
             // 자기가 이미 승자가 아닌 경우에만 클릭 가능 (다른 사람 클릭으로 전환)
-            isPickable = bothReal && m.red != "?" && m.winner != m.red,
+            isPickable = canPick && bothReal && m.red != "?" && m.winner != m.red,
             onClick = { onPickWinner(m.red) },
         )
         Box(
@@ -569,7 +586,7 @@ private fun MatchCard(
             isWinner = m.winner != null && m.winner == m.blue,
             isLoser = m.winner != null && m.winner != m.blue,
             stripeColor = blueStripe,
-            isPickable = bothReal && m.blue != "?" && m.winner != m.blue,
+            isPickable = canPick && bothReal && m.blue != "?" && m.winner != m.blue,
             onClick = { onPickWinner(m.blue) },
         )
     }
