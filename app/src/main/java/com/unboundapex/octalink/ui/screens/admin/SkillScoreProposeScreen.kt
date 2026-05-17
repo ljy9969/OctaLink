@@ -65,9 +65,13 @@ fun SkillScoreProposeScreen(
     val members by vm.members.collectAsState()
     val selectedId by vm.selectedMemberId.collectAsState()
     val scores by vm.selectedScores.collectAsState()
+    val nameById by vm.nameById.collectAsState()
 
     val selected = remember(selectedId, members) { members.firstOrNull { it.id == selectedId } }
     var proposeOpen by remember { mutableStateOf(false) }
+
+    // 이 화면은 *제안* 전용. 관장이라도 PROPOSED → 본인 검토 경유 (감사 추적 / 일관성).
+    // 관장 직접 평가는 AdminScreen "회원 스킬 점수 입력" 카드(관장 전용) 에서 별도 진입.
 
     PosseScreen(
         title = "Skill",
@@ -107,7 +111,7 @@ fun SkillScoreProposeScreen(
             if (selected == null) {
                 MemberPicker(members = members, onPick = { vm.selectMember(it.id) })
             } else {
-                ScoreList(member = selected, items = scores)
+                ScoreList(member = selected, items = scores, nameById = nameById)
             }
         }
     }
@@ -169,10 +173,21 @@ private fun MemberPicker(
 }
 
 private val seoul = ZoneId.of("Asia/Seoul")
-private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+private val dateFmt = DateTimeFormatter.ofPattern("M/d")
+
+private fun dayOfWeekKr(d: java.time.DayOfWeek): String = when (d) {
+    java.time.DayOfWeek.MONDAY -> "월"; java.time.DayOfWeek.TUESDAY -> "화"
+    java.time.DayOfWeek.WEDNESDAY -> "수"; java.time.DayOfWeek.THURSDAY -> "목"
+    java.time.DayOfWeek.FRIDAY -> "금"; java.time.DayOfWeek.SATURDAY -> "토"
+    java.time.DayOfWeek.SUNDAY -> "일"
+}
 
 @Composable
-private fun ScoreList(member: MemberDoc, items: List<SkillScoreDoc>) {
+private fun ScoreList(
+    member: MemberDoc,
+    items: List<SkillScoreDoc>,
+    nameById: Map<String, String>,
+) {
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -191,26 +206,32 @@ private fun ScoreList(member: MemberDoc, items: List<SkillScoreDoc>) {
             item {
                 PosseCard {
                     Text(
-                        "아직 제안된 점수가 없습니다. 상단 '+ 새 점수 제안' 으로 첫 평가 시작.",
+                        "아직 제안된 점수가 없습니다.\n상단 '+ 새 점수 제안'으로 첫 평가를 시작하세요.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         } else {
-            items(items, key = { it.id }) { s -> ScoreRow(s) }
+            items(items, key = { it.id }) { s ->
+                ScoreRow(s, byUserName = nameById[s.byUserId])
+            }
         }
     }
 }
 
 @Composable
-private fun ScoreRow(s: SkillScoreDoc) {
+private fun ScoreRow(s: SkillScoreDoc, byUserName: String?) {
     val avgPct = (((s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed) / 6f) * 100).toInt()
-    val dateStr = s.evaluatedAt.atZone(seoul).toLocalDate().format(dateFmt)
+    val ld = s.evaluatedAt.atZone(seoul).toLocalDate()
+    val dateStr = "${ld.format(dateFmt)} (${dayOfWeekKr(ld.dayOfWeek)})"
+    // 제안자 이름이 풀에 없으면(탈퇴/CREATOR 이름 동기화 전 등) "·" 자체를 생략
+    val titleLine = if (byUserName.isNullOrBlank()) "$dateStr · 평균 ${avgPct}점"
+        else "$dateStr · 평균 ${avgPct}점 · $byUserName"
     PosseCard(padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("$dateStr · 평균 ${avgPct}점", style = MaterialTheme.typography.titleMedium)
+                Text(titleLine, style = MaterialTheme.typography.titleMedium)
                 Text(
                     skillSummary(s),
                     style = MaterialTheme.typography.labelMedium,
@@ -222,9 +243,15 @@ private fun ScoreRow(s: SkillScoreDoc) {
     }
 }
 
+/**
+ * 카드 폭 한 줄에 6개 다 넣으면 "그래플링" 등이 잘려 약자로 들어가야 했었음.
+ * 3개씩 2줄로 분리 → SkillSlider 다이얼로그 라벨과 동일한 풀네임 사용 가능.
+ */
 private fun skillSummary(s: SkillScoreDoc): String {
     fun pct(f: Float) = (f * 100).toInt()
-    return "타격 ${pct(s.striking)} · 그래 ${pct(s.grappling)} · 체력 ${pct(s.stamina)} · 기술 ${pct(s.technique)} · 멘탈 ${pct(s.mental)} · 스피드 ${pct(s.speed)}"
+    val line1 = "스트라이킹 ${pct(s.striking)} · 그래플링 ${pct(s.grappling)} · 체력 ${pct(s.stamina)}"
+    val line2 = "기술 ${pct(s.technique)} · 멘탈 ${pct(s.mental)} · 스피드 ${pct(s.speed)}"
+    return "$line1\n$line2"
 }
 
 @Composable

@@ -81,6 +81,18 @@ class FirestorePostRepository : PostRepository {
         ref.update(update).await()
     }
 
+    override suspend fun update(postId: String, title: String, body: String, tag: PostTag) {
+        // 부분 업데이트 — authorId/createdAt/imageUrl/likedBy 는 미변경 → Firestore rule
+        // (authorId/createdAt 불변 조건) 통과.
+        col.document(postId).update(
+            mapOf(
+                "title" to title,
+                "body" to body,
+                "tag" to tag.name,
+            )
+        ).await()
+    }
+
     override suspend fun delete(postId: String) {
         col.document(postId).delete().await()
     }

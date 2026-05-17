@@ -57,6 +57,12 @@ class InMemoryPostRepository(
         }
     }
 
+    override suspend fun update(postId: String, title: String, body: String, tag: PostTag) {
+        _posts.value = _posts.value.map {
+            if (it.id != postId) it else it.copy(title = title, body = body, tag = tag)
+        }
+    }
+
     override suspend fun delete(postId: String) {
         _posts.value = _posts.value.filterNot { it.id == postId }
     }

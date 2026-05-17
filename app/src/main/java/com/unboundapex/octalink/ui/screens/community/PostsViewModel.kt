@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * CommunityScreen 의 글 목록 + 작성 + 좋아요 워크플로.
@@ -60,9 +62,28 @@ class PostsViewModel : ViewModel() {
         tag: PostTag,
         imageUri: Uri?,
     ) {
+        if (title.isBlank()) {
+            _writeState.value = WriteState.Error("제목을 입력하세요.")
+            return
+        }
         if (body.isBlank()) {
             _writeState.value = WriteState.Error("본문을 입력하세요.")
             return
+        }
+        // 일일 미디어 업로드 제한 — 계정당 이미지/영상 1건/하루.
+        // sortedPosts 는 CommunityScreen 가 구독 중이라 최신 값 보유. KST 기준 날짜 비교.
+        // 클라이언트 사이드 체크만 — 같은 순간 두 번 빠르게 submit 시도 등의 race 는 허용 (작은 도장 가정).
+        if (imageUri != null) {
+            val todayKst = LocalDate.now(ZoneId.of("Asia/Seoul"))
+            val alreadyUploadedToday = sortedPosts.value.any { post ->
+                post.authorId == authorId &&
+                    post.imageUrl != null &&
+                    post.createdAt.atZone(ZoneId.of("Asia/Seoul")).toLocalDate() == todayKst
+            }
+            if (alreadyUploadedToday) {
+                _writeState.value = WriteState.Error("오늘 이미지 업로드 한도(1건)를 초과했습니다.\n내일 다시 시도해주세요.")
+                return
+            }
         }
         _writeState.value = WriteState.Uploading
         viewModelScope.launch {
@@ -83,6 +104,43 @@ class PostsViewModel : ViewModel() {
             }.onFailure { e ->
                 _writeState.value = WriteState.Error(e.message ?: "글 작성 실패")
                 android.util.Log.e("OctaLink.Posts", "submitPost FAILED", e)
+            }
+        }
+    }
+
+    /**
+     * 글 수정 — title/body/tag 변경. 이미지/작성자/시각은 불변.
+     * 권한(작성자 본인 또는 운영진) 은 Firestore rules 에서 검증.
+     */
+    fun updatePost(
+        postId: String,
+        title: String,
+        body: String,
+        tag: PostTag,
+    ) {
+        if (title.isBlank()) {
+            _writeState.value = WriteState.Error("제목을 입력하세요.")
+            return
+        }
+        if (body.isBlank()) {
+            _writeState.value = WriteState.Error("본문을 입력하세요.")
+            return
+        }
+        _writeState.value = WriteState.Uploading
+        viewModelScope.launch {
+            runCatching {
+                posts.update(
+                    postId = postId,
+                    title = title.trim().take(80),
+                    body = body.trim().take(2000),
+                    tag = tag,
+                )
+            }.onSuccess {
+                _writeState.value = WriteState.Done
+                android.util.Log.i("OctaLink.Posts", "updatePost success: id=$postId")
+            }.onFailure { e ->
+                _writeState.value = WriteState.Error(e.message ?: "글 수정 실패")
+                android.util.Log.e("OctaLink.Posts", "updatePost FAILED", e)
             }
         }
     }

@@ -34,6 +34,12 @@ interface PostRepository {
     /** 좋아요 토글 — likedBy 에 memberId 추가/제거. */
     suspend fun toggleLike(postId: String, memberId: String)
 
+    /**
+     * 글 본문 수정 — title/body/tag 만 변경. authorId/createdAt/imageUrl/likedBy 불변.
+     * 권한(작성자 본인 또는 운영진)은 Firestore rules 에서 검증.
+     */
+    suspend fun update(postId: String, title: String, body: String, tag: PostTag)
+
     /** 글 삭제 — 작성자 본인 또는 운영진. Storage 이미지 같이 정리는 호출자 책임. */
     suspend fun delete(postId: String)
 }

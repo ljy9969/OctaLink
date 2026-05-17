@@ -58,10 +58,10 @@ class AttendanceReviewViewModel : ViewModel() {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
-     * 이번 주/이번 달 출석 집계 — 단일 collectionGroup 쿼리로 한 번에 가져와 client-side 파생.
+     * 이번 주/연중 출석 집계 — 단일 collectionGroup 쿼리로 한 번에 가져와 client-side 파생.
      *
-     * 쿼리 시작점 = min(weekStart, monthStart) — 주가 월을 가로질러도(예: 월초 며칠이 전월)
-     * 두 derivation 모두 누락 없이 커버.
+     * 쿼리 시작점 = min(weekStart, yearStart) — 주가 연도를 가로질러도(예: 1월 첫 주가 전년 12월)
+     * 모든 derivation 누락 없이 커버.
      *
      * 도장 운영 6일/주 (월~토, 일요일 휴무) — 출석률 분모 [GYM_DAYS_PER_WEEK].
      */
@@ -69,7 +69,27 @@ class AttendanceReviewViewModel : ViewModel() {
     private val today: LocalDate = LocalDate.now(seoul)
     val weekStart: LocalDate = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     val monthStart: LocalDate = today.withDayOfMonth(1)
-    private val queryStart: LocalDate = if (weekStart.isBefore(monthStart)) weekStart else monthStart
+    private val yearStart: LocalDate = today.withDayOfMonth(1).withMonth(1)
+    private val queryStart: LocalDate = if (weekStart.isBefore(yearStart)) weekStart else yearStart
+
+    /** 활성도 캘린더 페이징 범위 — 올해 1월(하한) ~ 이번 달(상한). */
+    val minMonth: LocalDate = yearStart
+    val maxMonth: LocalDate = monthStart
+
+    private val _displayedMonth = MutableStateFlow(monthStart)
+    val displayedMonth: StateFlow<LocalDate> = _displayedMonth.asStateFlow()
+
+    fun goPrevMonth() {
+        val cur = _displayedMonth.value
+        if (!cur.isAfter(minMonth)) return
+        _displayedMonth.value = cur.minusMonths(1)
+    }
+
+    fun goNextMonth() {
+        val cur = _displayedMonth.value
+        if (!cur.isBefore(maxMonth)) return
+        _displayedMonth.value = cur.plusMonths(1)
+    }
 
     private val recentAttendance: StateFlow<List<AttendanceDoc>> =
         attendance.observeSince(queryStart)
@@ -89,7 +109,7 @@ class AttendanceReviewViewModel : ViewModel() {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
-     * 이번 달 일자별 출석 건수 — MonthCalendar heatmap.
+     * 올해 일자별 출석 건수 — 1월~이번 달 [MonthCalendar] heatmap 들이 공유하는 단일 맵.
      *
      * 표시 대상 회원 풀([approvedMembers])과 동일하게 집계 — MASTER(관장) 본인 체크인이나
      * APPROVED 가 아닌 회원의 attendance 가 히트맵에는 잡히는데 뱃지에는 0 으로 표시되는
@@ -100,7 +120,7 @@ class AttendanceReviewViewModel : ViewModel() {
             val visibleIds = members.mapTo(HashSet()) { it.id }
             docs.asSequence()
                 .filter { it.memberId in visibleIds }
-                .filter { it.classDate.year == monthStart.year && it.classDate.month == monthStart.month }
+                .filter { it.classDate.year == yearStart.year }
                 .groupingBy { it.classDate }.eachCount()
         }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())

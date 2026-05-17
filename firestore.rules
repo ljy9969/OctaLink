@@ -143,9 +143,11 @@ service cloud.firestore {
         // 본인 / 운영진은 자신 / 모든 회원의 출결 검토 가능 (read 권한 동일)
         allow read: if isApproved();
 
-        // create: 본인만 자기 체크인 (memberId 위조 방지)
+        // create: 본인만 자기 체크인 (memberId 위조 방지).
+        // 관장(MASTER) 은 영업일 상시 운영 — 출석 체크인 불가 (UI 도 비활성).
         allow create: if isSelf(uid)
-          && request.resource.data.memberId == uid;
+          && request.resource.data.memberId == uid
+          && memberDoc().role != 'MASTER';
 
         // update: 본인 재체크인(checkInAt 갱신) + 운영진의 verified 토글.
         // 운영진이 memberId 변경하지 못하도록 resource.data.memberId 일치 강제.
@@ -179,11 +181,21 @@ service cloud.firestore {
       match /skillScores/{scoreId} {
         allow read: if isSelf(uid) || isStaff();
 
-        // 운영진(코치+관장) 모두 PROPOSED 상태로 입력 가능
-        allow create: if isStaff()
-          && request.resource.data.memberId == uid
-          && request.resource.data.byUserId == request.auth.uid
-          && request.resource.data.status == 'PROPOSED';
+        // 운영진(코치+관장) 의 PROPOSED 입력 (코치 제안 흐름).
+        // 또는 관장의 직접 평가 — PROPOSED 단계 건너뛰고 즉시 APPROVED 로 생성.
+        // 직접 평가는 reviewedByMasterId == 본인 (= byUserId) 으로 자기 명의 강제.
+        allow create: if (
+          isStaff()
+            && request.resource.data.memberId == uid
+            && request.resource.data.byUserId == request.auth.uid
+            && request.resource.data.status == 'PROPOSED'
+        ) || (
+          isMaster()
+            && request.resource.data.memberId == uid
+            && request.resource.data.byUserId == request.auth.uid
+            && request.resource.data.status == 'APPROVED'
+            && request.resource.data.reviewedByMasterId == request.auth.uid
+        );
 
         // 관장만 PROPOSED → APPROVED/REJECTED 전환. 점수 자체는 immutable.
         allow update: if isMaster()
@@ -248,6 +260,14 @@ service cloud.firestore {
       // 삭제: 본인 글 + 운영진 (모더레이션)
       allow delete: if isApproved()
         && (resource.data.authorId == request.auth.uid || isStaff());
+    }
+
+    // ════════════════════════════════════════════════════════
+    // gymSettings — 도장 전역 설정 (주간 미션 등 singleton doc)
+    // ════════════════════════════════════════════════════════
+    match /gymSettings/{settingId} {
+      allow read: if isApproved();       // 회원 누구나 (홈 카드에 노출)
+      allow write: if isStaff();         // 운영진만 작성/수정
     }
 
     // ════════════════════════════════════════════════════════

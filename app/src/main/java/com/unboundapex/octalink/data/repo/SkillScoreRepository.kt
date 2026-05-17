@@ -16,20 +16,42 @@ import kotlinx.coroutines.flow.Flow
  *  - delete: 관장만
  *
  * 워크플로:
- *   1. 코치/관장 [propose] → 새 doc, status=PROPOSED
- *   2. 관장 [approve]/[reject] → status 전이 + reviewedByMasterId/At 기록
- *   3. 회원 프로필은 가장 최근 APPROVED 스냅샷을 표시 ([observeLatestApproved])
- *   4. 운영진 리뷰 큐는 [observePendingAcrossAllMembers] (collectionGroup)
+ *   1. 코치 [propose] → 새 doc, status=PROPOSED (관장 검토 대기 — 코치 입력은 반드시 승인 경유)
+ *   2. 관장 [directApprove] → 새 doc, status=APPROVED (제안 단계 생략 — 관장 직접 평가)
+ *   3. 관장 [setStatus] → 코치 제안의 PROPOSED → APPROVED/REJECTED 전이 + reviewedByMasterId/At 기록
+ *   4. 회원 프로필 차트는 [getCanonicalApproved] 가 결정 — APPROVED 중 evaluatedAt 최신.
+ *      누가 입력했는지 무관, 가장 최근 평가가 현재 실력.
+ *   5. 운영진 리뷰 큐는 [observePendingAcrossAllMembers] (collectionGroup)
  */
 interface SkillScoreRepository {
     /** 특정 회원의 모든 스킬 점수 (status 무관, evaluatedAt DESC). 본인/운영진 read. */
     fun observeByMember(memberId: String): Flow<List<SkillScoreDoc>>
 
     /**
-     * 특정 회원의 가장 최근 APPROVED 점수. 차트/프로필 카드 표시용. null 이면 미평가 또는 모두 PROPOSED/REJECTED.
-     * [observeByMember] 결과를 클라이언트 필터링해도 되지만, 차트만 필요할 땐 이쪽이 의도가 명확.
+     * 회원 프로필 차트의 단일 원본 — APPROVED 중 evaluatedAt 최신. 없으면 null.
+     * 작성 주체(관장 직접 평가 vs 코치 제안→승인)는 구분하지 않음 — 가장 최근 평가가 곧 현재 실력.
+     * Flow 라서 콘솔에서 직접 점수 doc 을 삭제/수정해도 listener 가 emit → 차트 즉시 갱신.
      */
-    fun observeLatestApproved(memberId: String): Flow<SkillScoreDoc?>
+    fun observeCanonicalApproved(memberId: String): Flow<SkillScoreDoc?>
+
+    /**
+     * [observeCanonicalApproved] 의 단발 버전.
+     * APPROVED 중 evaluatedAt 최신, 없으면 null. 작성 주체 구분 없음.
+     */
+    suspend fun getCanonicalApproved(memberId: String): SkillScoreDoc?
+
+    /**
+     * 관장(MASTER/CREATOR) 직접 평가 — 제안 단계 없이 곧장 status=APPROVED 로 생성.
+     * id 는 Firestore 자동 생성, evaluatedAt = reviewedAt = 서버 timestamp.
+     * Rules 가 `isMaster() && status == 'APPROVED' && reviewedByMasterId == auth.uid` 강제.
+     *
+     * @param byUserId 작성한 관장 본인의 uid (= reviewedByMasterId).
+     */
+    suspend fun directApprove(
+        memberId: String,
+        byUserId: String,
+        skills: SkillSet,
+    ): SkillScoreDoc
 
     /**
      * 전 회원 PROPOSED 점수 큐 (관장 리뷰 대기 목록).
@@ -65,4 +87,11 @@ interface SkillScoreRepository {
 
     /** 점수 삭제 — 관장만 (Rules 강제). 오입력 정정 등. */
     suspend fun delete(memberId: String, scoreId: String)
+
+    /**
+     * 회원의 모든 PROPOSED 점수를 일괄 REJECTED 처리. 관장 직접 평가 직후 호출하면
+     * 검토 큐에 남은 코치 제안이 자동 정리되어 의도가 명확해짐.
+     * Idempotent — 대상 없으면 no-op. 각 doc 은 기존 [setStatus] 와 동일 룰로 검증.
+     */
+    suspend fun rejectAllPending(memberId: String, byMasterId: String)
 }

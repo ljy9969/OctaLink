@@ -211,4 +211,21 @@ object Collections {
     const val TOURNAMENTS = "tournaments"
     const val MATCHES = "matches"
     const val POSTS = "posts"
+    /** 도장 전역 설정 — 주간 미션 등 단일 doc 들이 들어가는 컬렉션. */
+    const val GYM_SETTINGS = "gymSettings"
+    /** [GYM_SETTINGS] 내 주간 미션 doc 의 고정 ID (싱글톤). */
+    const val WEEKLY_MISSION_DOC_ID = "weeklyMission"
 }
+
+/**
+ * 도장의 이번 주 미션 — 홈 화면 카드에 모든 회원에게 동일하게 노출.
+ * 운영진(코치+관장+창조자)만 작성/수정. Firestore rules 에서 isStaff 검증.
+ *
+ * 본문은 짧은 multi-line 문자열 가정 (불릿 기호 포함 가능). 길이/포맷은 클라이언트 책임.
+ */
+data class WeeklyMissionDoc(
+    val text: String,
+    val updatedAt: Instant,
+    /** 마지막 수정자 운영진 이름 (비정규화 — display 용). */
+    val updatedByName: String,
+)

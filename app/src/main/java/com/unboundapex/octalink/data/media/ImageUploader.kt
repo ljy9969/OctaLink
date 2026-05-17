@@ -10,6 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
 import java.util.UUID
 
 /**
@@ -47,13 +50,30 @@ object ImageUploader {
         ref.downloadUrl.await().toString()
     }
 
+    /**
+     * URI → InputStream.
+     * `file://` 스킴은 `ContentResolver.openInputStream` 가 일부 환경에서 null 을 돌려주는
+     * 케이스가 있어 (특히 cacheDir 의 file://) `FileInputStream` 으로 직접 열어 우회.
+     * content:// 등 다른 스킴은 기존대로 ContentResolver 경유.
+     */
+    private fun openSource(context: Context, uri: Uri): InputStream {
+        if (uri.scheme == "file") {
+            val path = uri.path ?: error("file URI 에 path 없음: $uri")
+            val f = File(path)
+            if (!f.exists()) error("이미지 파일 없음: $path")
+            return FileInputStream(f)
+        }
+        return context.contentResolver.openInputStream(uri)
+            ?: error("이미지 URI 열기 실패 (스트림 null): $uri")
+    }
+
     /** content URI → 리사이즈 + JPEG 압축된 바이트. */
     private fun compressImage(context: Context, uri: Uri): ByteArray {
         // 1. 사이즈만 먼저 조회 (메모리 안 올림)
         val sizeOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use {
+        openSource(context, uri).use {
             BitmapFactory.decodeStream(it, null, sizeOpts)
-        } ?: error("이미지 URI 열기 실패: $uri")
+        }
 
         val srcW = sizeOpts.outWidth
         val srcH = sizeOpts.outHeight
@@ -63,7 +83,7 @@ object ImageUploader {
         val longSide = maxOf(srcW, srcH)
         val sample = (longSide / MAX_DIM).coerceAtLeast(1)
         val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sample }
-        val sampled = context.contentResolver.openInputStream(uri)?.use {
+        val sampled = openSource(context, uri).use {
             BitmapFactory.decodeStream(it, null, decodeOpts)
         } ?: error("이미지 본 디코딩 실패: $uri")
 

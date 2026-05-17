@@ -185,7 +185,7 @@ private fun EmptyState(onOpenDraw: () -> Unit, onBack: () -> Unit, canManage: Bo
         Spacer(Modifier.height(4.dp))
         Text(
             if (canManage) "체급별로 회원을 선택해 추첨을 시작하세요"
-            else "관장님의 추첨을 기다리는 중입니다",
+            else "추첨을 기다리는 중입니다",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

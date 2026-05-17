@@ -49,6 +49,19 @@ class SkillScoreProposeViewModel : ViewModel() {
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * 점수 doc 의 byUserId → 이름 매핑 — ScoreRow 에 제안자 이름 표시용.
+     * [members] 풀은 MASTER 제외라 byUserId 가 관장이면 매핑 안 됨 → 전체 회원 풀로 별도 구독.
+     */
+    val nameById: StateFlow<Map<String, String>> =
+        membersRepo.observeAll()
+            .map { list -> list.associate { it.id to it.name } }
+            .catch { e ->
+                android.util.Log.e("OctaLink.SkillScore", "nameById flow error", e)
+                emit(emptyMap())
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     private val _selectedMemberId = MutableStateFlow<String?>(null)
     val selectedMemberId: StateFlow<String?> = _selectedMemberId.asStateFlow()
 
@@ -68,11 +81,14 @@ class SkillScoreProposeViewModel : ViewModel() {
     fun selectMember(memberId: String) { _selectedMemberId.value = memberId }
     fun clearSelection() { _selectedMemberId.value = null }
 
-    /** 새 스킬 점수 제안. status=PROPOSED 로 작성 → 관장이 검토 후 APPROVED/REJECTED. */
+    /** 코치 흐름 — status=PROPOSED 로 작성 → 관장이 검토 후 APPROVED/REJECTED. */
     fun propose(memberId: String, byUserId: String, skills: SkillSet) {
         viewModelScope.launch {
             runCatching { scoresRepo.propose(memberId, byUserId, skills) }
                 .onFailure { android.util.Log.e("OctaLink.SkillScore", "propose FAILED", it) }
         }
     }
+
+    // 관장 직접 평가는 [MemberApprovalViewModel.assignSkills] 가 담당 (AdminScreen 관장 전용 카드).
+    // 이 ViewModel 은 *제안* 전용 — 모든 운영진(관장 포함) 의 입력은 PROPOSED 로 들어가 관장 검토 경유.
 }

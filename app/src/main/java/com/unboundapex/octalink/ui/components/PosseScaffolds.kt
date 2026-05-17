@@ -4,11 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -165,31 +166,34 @@ fun PosseCard(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp
     ) {
+        // 좌측 stripe 는 Column 의 측정 높이를 따라가야 함. 과거 구조는 `Row(IntrinsicSize.Min)` +
+        // `Box.fillMaxHeight` 였는데, 자식이 `Modifier.aspectRatio(...)` 같이 intrinsic 쿼리에
+        // 0을 반환하는 modifier 를 쓰면 측정 높이가 실제 렌더 높이보다 작게 잡혀서 하단 콘텐츠
+        // (좋아요/수정/삭제, 더보기/접기 등) 가 Surface 의 둥근 clip 밖으로 잘리는 버그가 있었음.
+        // drawBehind 는 measure 후 draw 단계에서 그리므로 stripe 가 실제 column 높이를 그대로
+        // 따라가며, intrinsic 의존이 없어 어떤 자식 modifier 와도 안전하게 호환됨.
         val hasStripe = leftStripeBrush != null || leftStripeColor != null
-        if (hasStripe) {
-            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-                Box(
-                    modifier = Modifier
-                        .width(8.dp)
-                        .fillMaxHeight()
-                        .let { mod ->
-                            when {
-                                leftStripeBrush != null -> mod.background(leftStripeBrush)
-                                leftStripeColor != null -> mod.background(leftStripeColor)
-                                else -> mod
-                            }
-                        }
-                )
-                Column(
-                    modifier = Modifier.padding(padding),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) { content() }
-            }
+        val stripeWidth = 8.dp
+        val columnMod = if (hasStripe) {
+            Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val w = stripeWidth.toPx()
+                    when {
+                        leftStripeBrush != null ->
+                            drawRect(brush = leftStripeBrush, topLeft = Offset.Zero, size = Size(w, size.height))
+                        leftStripeColor != null ->
+                            drawRect(color = leftStripeColor, topLeft = Offset.Zero, size = Size(w, size.height))
+                    }
+                }
+                .padding(start = stripeWidth)
+                .padding(padding)
         } else {
-            Column(
-                modifier = Modifier.padding(padding),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) { content() }
+            Modifier.padding(padding)
         }
+        Column(
+            modifier = columnMod,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) { content() }
     }
 }

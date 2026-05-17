@@ -57,19 +57,24 @@ private fun dayOfWeekKr(d: java.time.DayOfWeek): String = when (d) {
 fun ProfileScreen(
     sessionVm: SessionViewModel,
     commentsVm: MyCommentsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    skillsVm: MySkillsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
     var leaveConfirmOpen by remember { mutableStateOf(false) }
     val avatar = avatarById(session.avatarId)
     val belt = session.belt
-    val skills = (session.member?.skills ?: SkillSet.EMPTY).toStats()
 
-    // 본인 회원 id 가 set 되면 코멘트 구독 시작
+    // 본인 회원 id 가 set 되면 코멘트/스킬 구독 시작
     val myMemberId = session.member?.id
     androidx.compose.runtime.LaunchedEffect(myMemberId) {
         commentsVm.observeFor(myMemberId)
+        skillsVm.observeFor(myMemberId)
     }
     val coachComments by commentsVm.myComments.collectAsState()
+    // 차트는 [SkillScoreDoc] 컬렉션을 직접 구독 — 콘솔에서 점수 doc 삭제/수정해도 즉시 반영.
+    // [MemberDoc.skills] 스냅샷은 다른 화면(슬라이더 기준선 등) 의 빠른 접근용으로만 유지.
+    val skillSet by skillsVm.skills.collectAsState()
+    val skills = skillSet.toStats()
     // 실제 도장 입관일 — Firestore `members/{uid}.joinDate` 에서 (가입 폼에서 사용자가 입력).
     // 아직 회원 doc 이 없는 LOADING 단계 폴백은 오늘 (이번 달 입관 표시).
     val joinDate = session.member?.joinDate ?: LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))

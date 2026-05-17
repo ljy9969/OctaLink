@@ -25,11 +25,16 @@ class InMemorySkillScoreRepository(
                 .sortedByDescending { it.evaluatedAt }
         }
 
-    override fun observeLatestApproved(memberId: String): Flow<SkillScoreDoc?> =
+    override fun observeCanonicalApproved(memberId: String): Flow<SkillScoreDoc?> =
         _scores.map { list ->
             list.filter { it.memberId == memberId && it.status == SkillScoreStatus.APPROVED }
                 .maxByOrNull { it.evaluatedAt }
         }
+
+    override suspend fun getCanonicalApproved(memberId: String): SkillScoreDoc? =
+        _scores.value
+            .filter { it.memberId == memberId && it.status == SkillScoreStatus.APPROVED }
+            .maxByOrNull { it.evaluatedAt }
 
     override fun observePendingAcrossAllMembers(): Flow<List<SkillScoreDoc>> =
         _scores.map { list ->
@@ -59,6 +64,31 @@ class InMemorySkillScoreRepository(
         return doc
     }
 
+    override suspend fun directApprove(
+        memberId: String,
+        byUserId: String,
+        skills: SkillSet,
+    ): SkillScoreDoc {
+        val now = Instant.now()
+        val doc = SkillScoreDoc(
+            id = UUID.randomUUID().toString(),
+            memberId = memberId,
+            byUserId = byUserId,
+            striking = skills.striking,
+            grappling = skills.grappling,
+            stamina = skills.stamina,
+            technique = skills.technique,
+            mental = skills.mental,
+            speed = skills.speed,
+            evaluatedAt = now,
+            status = SkillScoreStatus.APPROVED,
+            reviewedByMasterId = byUserId,
+            reviewedAt = now,
+        )
+        _scores.value = _scores.value + doc
+        return doc
+    }
+
     override suspend fun setStatus(
         memberId: String,
         scoreId: String,
@@ -83,6 +113,19 @@ class InMemorySkillScoreRepository(
     override suspend fun delete(memberId: String, scoreId: String) {
         _scores.value = _scores.value.filterNot {
             it.memberId == memberId && it.id == scoreId
+        }
+    }
+
+    override suspend fun rejectAllPending(memberId: String, byMasterId: String) {
+        val now = Instant.now()
+        _scores.value = _scores.value.map { s ->
+            if (s.memberId == memberId && s.status == SkillScoreStatus.PROPOSED) {
+                s.copy(
+                    status = SkillScoreStatus.REJECTED,
+                    reviewedByMasterId = byMasterId,
+                    reviewedAt = now,
+                )
+            } else s
         }
     }
 }

@@ -7,6 +7,7 @@ import com.unboundapex.octalink.data.SkillSet
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.schema.MemberDoc
 import com.unboundapex.octalink.data.schema.MembershipStatus
+import com.unboundapex.octalink.data.schema.Role
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -23,6 +24,7 @@ import kotlinx.coroutines.launch
  */
 class MemberApprovalViewModel : ViewModel() {
     private val members = RepositoryProvider.members
+    private val scoresRepo = RepositoryProvider.skillScores
 
     val pending: StateFlow<List<MemberDoc>> =
         members.observeByStatus(MembershipStatus.PENDING)
@@ -51,15 +53,44 @@ class MemberApprovalViewModel : ViewModel() {
         }
     }
 
-    /** APPROVED 회원 중 점수가 입력된 회원 + 미입력 회원 모두 — 스킬 평가용 풀. */
+    /**
+     * APPROVED 회원 중 점수가 입력된 회원 + 미입력 회원 모두 — 스킬 평가용 풀.
+     * 관장(MASTER) 제외 — 도장 운영자라 본인 스킬 평가 대상 아님 (스킬 점수 제안 화면과 동일 정책).
+     */
     val approvedMembers: StateFlow<List<MemberDoc>> =
         members.observeByStatus(MembershipStatus.APPROVED)
+            .map { list -> list.filter { it.role != Role.MASTER }.sortedBy { it.name } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** 회원 스킬 점수 입력/갱신 (관장 권한). */
-    fun assignSkills(memberId: String, skills: SkillSet) {
+    /**
+     * 관장이 AdminScreen "회원 스킬 점수 입력" 카드에서 직접 평가.
+     * SkillScoreProposeScreen 의 관장 directApprove 와 동일한 데이터 경로 — 반드시 skillScores 에
+     * 새 doc 을 남기고, 같은 회원의 PROPOSED 코치 제안은 일괄 REJECTED, member.skills 스냅샷은
+     * canonical (= APPROVED 중 evaluatedAt 최신) 으로 재계산.
+     *
+     * 이전 구현은 `members/{uid}.skills` 만 덮어써서 skillScores 에 기록이 남지 않았고, 프로필
+     * 차트(=skillScores 구독) 와 admin 카드(=member.skills 표시) 가 불일치하는 버그가 있었음.
+     *
+     * @param byUserId 작성 관장 본인의 uid (= reviewedByMasterId). Rules 가 일치 강제.
+     */
+    fun assignSkills(memberId: String, byUserId: String, skills: SkillSet) {
         viewModelScope.launch {
-            members.updateProfile(memberId = memberId, skills = skills)
+            runCatching {
+                scoresRepo.directApprove(memberId, byUserId, skills)
+                scoresRepo.rejectAllPending(memberId, byMasterId = byUserId)
+                val canonical = scoresRepo.getCanonicalApproved(memberId) ?: return@launch
+                members.updateProfile(
+                    memberId = memberId,
+                    skills = SkillSet(
+                        striking = canonical.striking,
+                        grappling = canonical.grappling,
+                        stamina = canonical.stamina,
+                        technique = canonical.technique,
+                        mental = canonical.mental,
+                        speed = canonical.speed,
+                    ),
+                )
+            }.onFailure { android.util.Log.e("OctaLink.SkillScore", "assignSkills FAILED", it) }
         }
     }
 }

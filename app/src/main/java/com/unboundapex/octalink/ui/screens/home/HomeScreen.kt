@@ -31,6 +31,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +49,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.R
+import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.CageIcon
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import com.unboundapex.octalink.ui.screens.attendance.GYM_DAYS_PER_WEEK
+import com.unboundapex.octalink.ui.screens.profile.MyCommentsViewModel
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private data class FeedItem(val title: String, val meta: String, val body: String)
@@ -68,11 +77,19 @@ private val sparringMatch = FeedItem(
     body = "대진표가 업데이트 되었습니다. 확인하고 컨디션 체크해주세요.",
 )
 
-private val oneLineComment = FeedItem(
+/** "받은 코멘트 없음" placeholder. 실제 데이터가 있으면 ViewModel 결과로 대체. */
+private val emptyOneLineComment = FeedItem(
     title = "한 줄 코멘트",
-    meta = "5/1 금 · 관장 김파시",
-    body = "리드 잽 후 체중 이동을 반박자 늦춰보세요. 카운터 맞을 위험 줄어듭니다.",
+    meta = "",
+    body = "아직 받은 코멘트가 없습니다.",
 )
+
+private val commentDateFmt = DateTimeFormatter.ofPattern("M/d", Locale.KOREAN)
+private fun dayKr(d: DayOfWeek): String = when (d) {
+    DayOfWeek.MONDAY -> "월"; DayOfWeek.TUESDAY -> "화"; DayOfWeek.WEDNESDAY -> "수"
+    DayOfWeek.THURSDAY -> "목"; DayOfWeek.FRIDAY -> "금"; DayOfWeek.SATURDAY -> "토"
+    DayOfWeek.SUNDAY -> "일"
+}
 
 // 원본 PNG: 흰색 배경 + 검정 로고/텍스트.
 // 흰색 픽셀은 알파 0(투명)으로 빼고, 검정 픽셀은 흰색 + 불투명으로 출력 → 배경이 화면 색으로 비침.
@@ -89,7 +106,43 @@ private val logoKeyWhiteFilter = ColorFilter.colorMatrix(
 )
 
 @Composable
-fun HomeScreen(onOpenBracket: () -> Unit, onOpenInfo: () -> Unit = {}) {
+fun HomeScreen(
+    sessionVm: SessionViewModel,
+    onOpenBracket: () -> Unit,
+    onOpenInfo: () -> Unit = {},
+    onOpenMyAttendance: () -> Unit = {},
+    myCommentsVm: MyCommentsViewModel = viewModel(),
+    weeklyAttendanceVm: HomeWeeklyAttendanceViewModel = viewModel(),
+    weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
+) {
+    val session by sessionVm.state.collectAsState()
+    val memberId = session.member?.id
+    // member id 가 set/변경 될 때 구독 대상 갱신
+    LaunchedEffect(memberId) {
+        myCommentsVm.observeFor(memberId)
+        weeklyAttendanceVm.observeFor(memberId)
+    }
+    val myComments by myCommentsVm.myComments.collectAsState()
+    val weeklyAttendCount by weeklyAttendanceVm.weeklyCount.collectAsState()
+    // REVIEW 화면 WeeklyRateBadge 와 동일 공식: count 는 6 으로 cap, % = capped*100/6
+    val weeklyCapped = weeklyAttendCount.coerceAtMost(GYM_DAYS_PER_WEEK)
+    val weeklyPct = weeklyCapped * 100 / GYM_DAYS_PER_WEEK
+    val weeklyMission by weeklyMissionVm.mission.collectAsState()
+    val weeklyMissionText = weeklyMission?.text ?: "이번 주 미션이 아직 설정되지 않았습니다."
+    // 가장 최신 (classDate, 동일하면 createdAt) 한 건만 홈 카드에 노출
+    val latestComment = remember(myComments) {
+        myComments.maxWithOrNull(
+            compareBy({ it.classDate }, { it.createdAt })
+        )
+    }
+    val oneLineComment = latestComment?.let { c ->
+        FeedItem(
+            title = "한 줄 코멘트",
+            meta = "${c.classDate.format(commentDateFmt)} ${dayKr(c.classDate.dayOfWeek)} · ${c.byMasterName}",
+            body = c.text,
+        )
+    } ?: emptyOneLineComment
+
     PosseScreen(
         subtitle = "개인의 성장, 함께하는 진화",
         subtitleEmphasis = listOf("성장", "진화"),
@@ -127,7 +180,11 @@ fun HomeScreen(onOpenBracket: () -> Unit, onOpenInfo: () -> Unit = {}) {
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-                    PosseCard(modifier = Modifier.weight(1f)) {
+                    PosseCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onOpenMyAttendance() }
+                    ) {
                         Text(
                             "내 주간 출석률",
                             style = MaterialTheme.typography.titleSmall,
@@ -136,14 +193,14 @@ fun HomeScreen(onOpenBracket: () -> Unit, onOpenInfo: () -> Unit = {}) {
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            "3 / 3",
+                            "$weeklyPct%",
                             style = MaterialTheme.typography.displayLarge,
                             color = MaterialTheme.colorScheme.primary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            "이번 주 미션 100%",
+                            "$weeklyCapped / $GYM_DAYS_PER_WEEK 일",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -171,7 +228,7 @@ fun HomeScreen(onOpenBracket: () -> Unit, onOpenInfo: () -> Unit = {}) {
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            "• 체육관 3회 출석\n• 스파링 1라운드 이상\n• 개인 영상 1개 업로드",
+                            weeklyMissionText,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

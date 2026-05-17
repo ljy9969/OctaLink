@@ -26,8 +26,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -41,6 +44,8 @@ import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import com.unboundapex.octalink.ui.screens.home.SaveState
+import com.unboundapex.octalink.ui.screens.home.WeeklyMissionViewModel
 
 /**
  * 운영진/관장/창조자 전용 페이지 — 하단 nav 탭 "운영" 진입점.
@@ -60,15 +65,22 @@ fun AdminScreen(
     onOpenBracket: () -> Unit = {},
     onOpenSkillScorePropose: () -> Unit = {},
     approvalVm: MemberApprovalViewModel = viewModel(),
+    weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
+    skillReviewVm: SkillScoreReviewViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
     val pendingMembers by approvalVm.pending.collectAsState()
     val unknownBeltMembers by approvalVm.unknownBelt.collectAsState()
     val approvedMembers by approvalVm.approvedMembers.collectAsState()
+    val weeklyMission by weeklyMissionVm.mission.collectAsState()
+    val missionSaveState by weeklyMissionVm.saveState.collectAsState()
+    val pendingSkillScores by skillReviewVm.pending.collectAsState()
     val role = session.role
 
     // 스킬 점수 편집 다이얼로그 — null 이면 닫힘.
     var skillEditTarget by remember { mutableStateOf<MemberDoc?>(null) }
+    // 주간 미션 작성/수정 다이얼로그 토글.
+    var missionDialogOpen by remember { mutableStateOf(false) }
 
     val subtitle = when {
         role.isCreator -> "운영 전체 + 권한 부여 (창조자)"
@@ -92,6 +104,10 @@ fun AdminScreen(
                         StaffAction("회원 한 줄 코멘트 작성") { onOpenCoachComment() }
                         StaffAction("토너먼트 추첨 / 대진 관리") { onOpenBracket() }
                         StaffAction("스킬 점수 입력 (제안 → 관장 검토)") { onOpenSkillScorePropose() }
+                        StaffAction(
+                            if (weeklyMission == null) "주간 미션 작성"
+                            else "주간 미션 수정"
+                        ) { missionDialogOpen = true }
                         Spacer(Modifier.height(4.dp))
                         FootnoteText("출결 검토는 출석 탭의 운영진 모드, 공지 작성은 커뮤니티 탭에서 진입.")
                     }
@@ -158,6 +174,41 @@ fun AdminScreen(
                         }
                     }
                 }
+                // 관장 전용 — 코치/관장 본인 입력 PROPOSED 스킬 점수 검토 큐
+                item {
+                    PosseCard(leftStripeColor = StripeSkillReview) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "스킬 점수 검토",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = StripeSkillReview,
+                                modifier = Modifier.weight(1f),
+                            )
+                            PendingBadge(count = pendingSkillScores.size)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        if (pendingSkillScores.isEmpty()) {
+                            Text(
+                                "대기 중인 스킬 점수 제안이 없습니다.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            val myStaffId = session.member?.id
+                            pendingSkillScores.forEach { item ->
+                                PendingSkillScoreRow(
+                                    item = item,
+                                    onApprove = {
+                                        myStaffId?.let { skillReviewVm.approve(item, it) }
+                                    },
+                                    onReject = {
+                                        myStaffId?.let { skillReviewVm.reject(item, it) }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
                 // 관장 전용 — 회원 스킬 점수 입력 (HexagonSkillChart 데이터)
                 item {
                     PosseCard(leftStripeColor = StripeMaster) {
@@ -209,7 +260,7 @@ fun AdminScreen(
                     PosseCard(leftStripeBrush = StripeCreatorBrush) {
                         Text("창조자 전용", style = MaterialTheme.typography.titleMedium, color = StripeCreatorAccent)
                         Spacer(Modifier.height(4.dp))
-                        StaffAction("권한 부여 페이지 (회원 → 코치/관장 승격)") {
+                        StaffAction("권한 부여 페이지 (회원 → 코치 / 관장 승격)") {
                             onOpenCreator()
                         }
                         Spacer(Modifier.height(4.dp))
@@ -225,11 +276,121 @@ fun AdminScreen(
             member = target,
             onDismiss = { skillEditTarget = null },
             onSave = { skills ->
-                approvalVm.assignSkills(target.id, skills)
+                val staff = session.member ?: return@SkillEditDialog
+                approvalVm.assignSkills(target.id, byUserId = staff.id, skills = skills)
                 skillEditTarget = null
             },
         )
     }
+
+    if (missionDialogOpen) {
+        WeeklyMissionDialog(
+            initialText = weeklyMission?.text.orEmpty(),
+            saveState = missionSaveState,
+            onSave = { text ->
+                val staff = session.member ?: return@WeeklyMissionDialog
+                weeklyMissionVm.save(text, staff.name)
+            },
+            onDismiss = {
+                missionDialogOpen = false
+                weeklyMissionVm.resetSaveState()
+            },
+        )
+        LaunchedEffect(missionSaveState) {
+            if (missionSaveState is SaveState.Done) {
+                missionDialogOpen = false
+                weeklyMissionVm.resetSaveState()
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeeklyMissionDialog(
+    initialText: String,
+    saveState: SaveState,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // initialText 가 바뀌면(첫 진입 / 다른 doc) prefill 갱신.
+    var text by remember(initialText) { mutableStateOf(initialText) }
+    val isSaving = saveState is SaveState.Saving
+
+    AlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = { Text(if (initialText.isBlank()) "주간 미션 작성" else "주간 미션 수정") },
+        text = {
+            Column {
+                Text(
+                    "모든 회원의 홈 카드에 즉시 표시됩니다.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(500) },
+                    label = { Text("미션 내용 (불릿 가능, 최대 500자)") },
+                    enabled = !isSaving,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${text.length} / 500",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (saveState is SaveState.Error) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        saveState.message,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (isSaving) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(16.dp).height(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "저장 중…",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(end = 12.dp),
+                    )
+                }
+            } else {
+                Text(
+                    "저장",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable(enabled = text.isNotBlank()) { onSave(text) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        },
+        dismissButton = {
+            Text(
+                "취소",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clickable(enabled = !isSaving) { onDismiss() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        },
+    )
 }
 
 @Composable
@@ -322,6 +483,7 @@ private val StripeStaff = Color(0xFF1E88E5)           // 코치 블루 — 운�
 private val StripeApprovalQueue = Color(0xFFFBC02D)   // 앰버 — 회원 가입 승인 큐
 private val StripeUnknownBelt = Color(0xFF00897B)     // 티얼 — 미등급 벨트 지정 (앰버 회피)
 private val StripeMaster = Color(0xFFC8102E)          // 관장 빨강 — 스킬 점수 입력
+private val StripeSkillReview = Color(0xFFEC407A)     // 핑크 — 스킬 점수 검토 큐 (관장 빨강과 구분)
 
 // 창조자 전용 — 블랙홀 그라데이션 (앰버 인접색 회피)
 // 위에서부터: 이벤트 호라이즌 보라 → 특이점 검정 → 어센션 디스크 주황. 8dp 폭 vertical gradient
@@ -335,6 +497,60 @@ private val StripeCreatorBrush = androidx.compose.ui.graphics.Brush.verticalGrad
     )
 )
 private val StripeCreatorAccent = Color(0xFFAB47BC)   // 보라 — 타이틀 텍스트 (그라데이션 상단과 매칭)
+
+private val reviewSeoulZone = java.time.ZoneId.of("Asia/Seoul")
+private val reviewDateFmt = java.time.format.DateTimeFormatter.ofPattern("MM/dd")
+
+/** 검토 큐 한 행 — 회원 이름 + 6축 점수 평균 + 제안자 + 평가일 + 승인/반려 칩. */
+@Composable
+private fun PendingSkillScoreRow(
+    item: PendingReviewItem,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+) {
+    val s = item.score
+    val avg = (((s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed) / 6f) * 100).toInt()
+    val date = s.evaluatedAt.atZone(reviewSeoulZone).toLocalDate().format(reviewDateFmt)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "${item.memberName} · 평균 ${avg}점",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "${date} · 제안: ${item.byUserName}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            ActionChip(
+                label = "승인",
+                bg = MaterialTheme.colorScheme.primary,
+                fg = MaterialTheme.colorScheme.onPrimary,
+                onClick = onApprove,
+            )
+            Spacer(Modifier.width(6.dp))
+            ActionChip(
+                label = "반려",
+                bg = MaterialTheme.colorScheme.surfaceVariant,
+                fg = MaterialTheme.colorScheme.onSurface,
+                onClick = onReject,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "스트라이킹 ${(s.striking * 100).toInt()} · 그래플링 ${(s.grappling * 100).toInt()} · 체력 ${(s.stamina * 100).toInt()}\n" +
+                "기술 ${(s.technique * 100).toInt()} · 멘탈 ${(s.mental * 100).toInt()} · 스피드 ${(s.speed * 100).toInt()}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun PendingMemberRow(

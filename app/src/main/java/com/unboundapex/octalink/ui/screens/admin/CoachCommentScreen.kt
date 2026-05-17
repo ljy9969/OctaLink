@@ -200,7 +200,7 @@ private fun CommentList(
             item {
                 PosseCard {
                     Text(
-                        "아직 작성된 코멘트가 없습니다. 상단 '+ 코멘트 작성' 으로 첫 코멘트 남기기.",
+                        "아직 작성된 코멘트가 없습니다.\n상단 '+ 코멘트 작성'으로 첫 코멘트를 남기세요.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -231,7 +231,7 @@ private fun CommentRow(
     canDelete: Boolean,
     onDelete: () -> Unit,
 ) {
-    PosseCard(padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+    PosseCard(padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -251,8 +251,13 @@ private fun CommentRow(
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(comment.text, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(10.dp))
+        // 본문은 카드의 시각적 주인공 — titleMedium 으로 한 단계 키워서 메타 라인보다 강조.
+        Text(
+            comment.text,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

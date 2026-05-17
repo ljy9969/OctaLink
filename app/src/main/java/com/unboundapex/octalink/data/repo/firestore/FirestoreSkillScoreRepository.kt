@@ -28,6 +28,13 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
     private fun memberScores(memberId: String) =
         membersCol.document(memberId).collection(Collections.SKILL_SCORES)
 
+    /**
+     * 6축 점수 저장 정밀도 — 슬라이더 raw float (예: 0.5086712837219238) 을 0.01 단위로 truncate.
+     * UI 의 `(value * 100).toInt()` 표시(0~100 정수) 와 1:1 매칭. Firestore doc 가독성/일관성 목적.
+     */
+    private fun Float.toFirestoreScore(): Double =
+        kotlin.math.floor(this.toDouble() * 100) / 100
+
     override fun observeByMember(memberId: String): Flow<List<SkillScoreDoc>> = callbackFlow {
         val sub = memberScores(memberId)
             .orderBy("evaluatedAt", Query.Direction.DESCENDING)
@@ -42,20 +49,31 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
         awaitClose { sub.remove() }
     }
 
-    override fun observeLatestApproved(memberId: String): Flow<SkillScoreDoc?> = callbackFlow {
+    /** APPROVED + evaluatedAt DESC 의 첫 doc 이 곧 canonical. 단순 최신 우선. */
+    override fun observeCanonicalApproved(memberId: String): Flow<SkillScoreDoc?> = callbackFlow {
         val sub = memberScores(memberId)
             .whereEqualTo("status", SkillScoreStatus.APPROVED.name)
             .orderBy("evaluatedAt", Query.Direction.DESCENDING)
             .limit(1)
             .addSnapshotListener { snap, err ->
                 if (err != null) {
-                    android.util.Log.e("OctaLink.SkillScore", "observeLatestApproved error: $memberId", err)
+                    android.util.Log.e("OctaLink.SkillScore", "observeCanonicalApproved error: $memberId", err)
                     close(err)
                     return@addSnapshotListener
                 }
                 trySend(snap?.documents?.firstOrNull()?.toSkillScoreDoc())
             }
         awaitClose { sub.remove() }
+    }
+
+    override suspend fun getCanonicalApproved(memberId: String): SkillScoreDoc? {
+        val snap = memberScores(memberId)
+            .whereEqualTo("status", SkillScoreStatus.APPROVED.name)
+            .orderBy("evaluatedAt", Query.Direction.DESCENDING)
+            .limit(1)
+            .get()
+            .await()
+        return snap.documents.firstOrNull()?.toSkillScoreDoc()
     }
 
     override fun observePendingAcrossAllMembers(): Flow<List<SkillScoreDoc>> = callbackFlow {
@@ -83,12 +101,12 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
             "id" to ref.id,
             "memberId" to memberId,
             "byUserId" to byUserId,
-            "striking" to skills.striking.toDouble(),
-            "grappling" to skills.grappling.toDouble(),
-            "stamina" to skills.stamina.toDouble(),
-            "technique" to skills.technique.toDouble(),
-            "mental" to skills.mental.toDouble(),
-            "speed" to skills.speed.toDouble(),
+            "striking" to skills.striking.toFirestoreScore(),
+            "grappling" to skills.grappling.toFirestoreScore(),
+            "stamina" to skills.stamina.toFirestoreScore(),
+            "technique" to skills.technique.toFirestoreScore(),
+            "mental" to skills.mental.toFirestoreScore(),
+            "speed" to skills.speed.toFirestoreScore(),
             "evaluatedAt" to FieldValue.serverTimestamp(),
             "status" to SkillScoreStatus.PROPOSED.name,
             "reviewedByMasterId" to null,
@@ -98,6 +116,34 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
         val snap = ref.get().await()
         return snap.toSkillScoreDoc()
             ?: error("propose 후 members/$memberId/skillScores/${ref.id} 조회 실패")
+    }
+
+    override suspend fun directApprove(
+        memberId: String,
+        byUserId: String,
+        skills: SkillSet,
+    ): SkillScoreDoc {
+        val ref = memberScores(memberId).document()
+        // evaluatedAt == reviewedAt (단일 트랜잭션 시점). Firestore 서버 timestamp.
+        val data = mapOf(
+            "id" to ref.id,
+            "memberId" to memberId,
+            "byUserId" to byUserId,
+            "striking" to skills.striking.toFirestoreScore(),
+            "grappling" to skills.grappling.toFirestoreScore(),
+            "stamina" to skills.stamina.toFirestoreScore(),
+            "technique" to skills.technique.toFirestoreScore(),
+            "mental" to skills.mental.toFirestoreScore(),
+            "speed" to skills.speed.toFirestoreScore(),
+            "evaluatedAt" to FieldValue.serverTimestamp(),
+            "status" to SkillScoreStatus.APPROVED.name,
+            "reviewedByMasterId" to byUserId,
+            "reviewedAt" to FieldValue.serverTimestamp(),
+        )
+        ref.set(data).await()
+        val snap = ref.get().await()
+        return snap.toSkillScoreDoc()
+            ?: error("directApprove 후 members/$memberId/skillScores/${ref.id} 조회 실패")
     }
 
     override suspend fun setStatus(
@@ -120,5 +166,21 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
 
     override suspend fun delete(memberId: String, scoreId: String) {
         memberScores(memberId).document(scoreId).delete().await()
+    }
+
+    override suspend fun rejectAllPending(memberId: String, byMasterId: String) {
+        val pending = memberScores(memberId)
+            .whereEqualTo("status", SkillScoreStatus.PROPOSED.name)
+            .get()
+            .await()
+        if (pending.isEmpty) return
+        val batch = db.batch()
+        val updates = mapOf(
+            "status" to SkillScoreStatus.REJECTED.name,
+            "reviewedByMasterId" to byMasterId,
+            "reviewedAt" to FieldValue.serverTimestamp(),
+        )
+        pending.documents.forEach { batch.update(it.reference, updates) }
+        batch.commit().await()
     }
 }

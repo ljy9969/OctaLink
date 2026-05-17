@@ -55,6 +55,7 @@ import com.unboundapex.octalink.ui.screens.community.CommunityScreen
 import com.unboundapex.octalink.ui.screens.creator.CreatorScreen
 import com.unboundapex.octalink.ui.screens.curriculum.CurriculumScreen
 import com.unboundapex.octalink.ui.screens.home.HomeScreen
+import com.unboundapex.octalink.ui.screens.home.MyAttendanceHistoryScreen
 import com.unboundapex.octalink.ui.screens.info.InfoScreen
 import com.unboundapex.octalink.ui.screens.onboarding.LeftScreen
 import com.unboundapex.octalink.ui.screens.onboarding.LoginScreen
@@ -79,6 +80,7 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object AttendanceReview : Route("attendance_review", "출결 검토", Icons.Outlined.CheckCircle)
     data object CoachComment : Route("coach_comment", "코멘트", Icons.Outlined.ManageAccounts)
     data object SkillScorePropose : Route("skill_score_propose", "스킬 제안", Icons.Outlined.ManageAccounts)
+    data object MyAttendance : Route("my_attendance", "내 출석", Icons.Outlined.CheckCircle)
 }
 
 private val baseTabs = listOf(Route.Home, Route.Curriculum, Route.Attendance, Route.Community, Route.Profile)
@@ -192,8 +194,16 @@ fun PosseApp() {
         ) {
             composable(Route.Home.path) {
                 HomeScreen(
+                    sessionVm = sessionVm,
                     onOpenBracket = { navController.navigate(Route.Bracket.path) },
                     onOpenInfo = { navController.navigate(Route.Info.path) },
+                    onOpenMyAttendance = { navController.navigate(Route.MyAttendance.path) },
+                )
+            }
+            composable(Route.MyAttendance.path) {
+                MyAttendanceHistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    sessionVm = sessionVm,
                 )
             }
             composable(Route.Curriculum.path) { CurriculumScreen() }

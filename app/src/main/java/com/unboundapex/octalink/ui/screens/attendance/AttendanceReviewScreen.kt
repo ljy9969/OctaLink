@@ -61,6 +61,7 @@ fun AttendanceReviewScreen(
     val attendance by vm.selectedAttendance.collectAsState()
     val weeklyCount by vm.weeklyCountByMember.collectAsState()
     val monthlyByDate by vm.monthlyCountByDate.collectAsState()
+    val displayedMonth by vm.displayedMonth.collectAsState()
 
     val sortedMembers = remember(members) {
         members.sortedBy { it.name }
@@ -101,7 +102,11 @@ fun AttendanceReviewScreen(
                 MemberPickerList(
                     members = sortedMembers,
                     weeklyCount = weeklyCount,
-                    monthAnchor = vm.monthStart,
+                    displayedMonth = displayedMonth,
+                    canGoPrev = displayedMonth.isAfter(vm.minMonth),
+                    canGoNext = displayedMonth.isBefore(vm.maxMonth),
+                    onPrevMonth = { vm.goPrevMonth() },
+                    onNextMonth = { vm.goNextMonth() },
                     today = java.time.LocalDate.now(seoul),
                     monthlyByDate = monthlyByDate,
                     onPick = { vm.selectMember(it.id) },
@@ -121,7 +126,11 @@ fun AttendanceReviewScreen(
 private fun MemberPickerList(
     members: List<MemberDoc>,
     weeklyCount: Map<String, Int>,
-    monthAnchor: java.time.LocalDate,
+    displayedMonth: java.time.LocalDate,
+    canGoPrev: Boolean,
+    canGoNext: Boolean,
+    onPrevMonth: () -> Unit,
+    onNextMonth: () -> Unit,
     today: java.time.LocalDate,
     monthlyByDate: Map<java.time.LocalDate, Int>,
     onPick: (MemberDoc) -> Unit,
@@ -130,7 +139,7 @@ private fun MemberPickerList(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        // 최상단 — 도장 전체 일자별 출석 활성도 히트맵
+        // 최상단 — 도장 전체 일자별 출석 활성도 히트맵. 좌우 페이징 버튼으로 월 이동.
         item {
             Text(
                 "월별 도장 활성도",
@@ -144,9 +153,14 @@ private fun MemberPickerList(
         }
         item {
             MonthCalendar(
-                monthAnchor = monthAnchor,
+                monthAnchor = displayedMonth,
                 today = today,
                 countsByDate = monthlyByDate,
+                totalMemberCount = members.size,
+                canGoPrev = canGoPrev,
+                canGoNext = canGoNext,
+                onPrevMonth = onPrevMonth,
+                onNextMonth = onNextMonth,
             )
         }
         if (members.isNotEmpty()) {
@@ -264,7 +278,7 @@ private fun AttendanceList(
             title = { Text("출석 기록 삭제") },
             text = {
                 Text(
-                    "${target.classDate.format(dateFormatter)} (${dayOfWeekKr(target.classDate.dayOfWeek)}) 출석 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.",
+                    "${formatShortDate(target.classDate)} 출석 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -296,7 +310,7 @@ private fun AttendanceList(
     }
 }
 
-private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+private val dateFormatter = DateTimeFormatter.ofPattern("MM/dd")
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val seoul = ZoneId.of("Asia/Seoul")
 
@@ -306,21 +320,23 @@ private fun dayOfWeekKr(d: DayOfWeek): String = when (d) {
     DayOfWeek.SUNDAY -> "일"
 }
 
+/** "MM/DD (요일)" 한 줄 포맷. 예: 05/17 (일). 화면 전반에서 일관 사용. */
+private fun formatShortDate(d: java.time.LocalDate): String =
+    "${d.format(dateFormatter)} (${dayOfWeekKr(d.dayOfWeek)})"
+
 @Composable
 private fun AttendanceRow(
     att: AttendanceDoc,
     onDelete: () -> Unit,
 ) {
-    PosseCard(padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
-        // 날짜+시간 좌측, 삭제 우측 (단 카드 우측 끝까지 글루잉 안 되도록 end padding).
+    PosseCard(padding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)) {
+        // 날짜+시간 좌측, 삭제 우측. 카드 자체 padding 만 사용 — 내부 Row 추가 padding 없이 균형 맞춤.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "${att.classDate.format(dateFormatter)} (${dayOfWeekKr(att.classDate.dayOfWeek)})",
+                formatShortDate(att.classDate),
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.width(10.dp))
@@ -360,6 +376,29 @@ private fun ActionChip(
             text,
             style = MaterialTheme.typography.labelMedium,
             color = fg,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun PagingButton(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val alpha = if (enabled) 1f else 0.25f
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
             fontWeight = FontWeight.Bold,
         )
     }
@@ -412,22 +451,38 @@ private fun MonthCalendar(
     monthAnchor: java.time.LocalDate,
     today: java.time.LocalDate,
     countsByDate: Map<java.time.LocalDate, Int>,
+    /** 표시 대상 회원 풀 크기 — heatmap alpha 분모 (예: 6명 중 1명 → ratio ≈ 0.17). */
+    totalMemberCount: Int,
+    canGoPrev: Boolean,
+    canGoNext: Boolean,
+    onPrevMonth: () -> Unit,
+    onNextMonth: () -> Unit,
 ) {
     val firstOfMonth = monthAnchor.withDayOfMonth(1)
     val daysInMonth = monthAnchor.lengthOfMonth()
     // 일요일을 0번 컬럼으로 — Korean calendar convention. DayOfWeek: MON=1..SUN=7
     val leadingBlank = firstOfMonth.dayOfWeek.value % 7
     val totalCells = ((leadingBlank + daysInMonth + 6) / 7) * 7
-    // heatmap alpha 스케일 — 이 달 최대 출석 건수 기준. 최대값 1 이상 보장으로 0 나누기 회피.
-    val maxCount = (countsByDate.values.maxOrNull() ?: 0).coerceAtLeast(1)
+    // heatmap alpha 스케일 — 도장 승인 회원 수 기준의 절대 출석률.
+    // (예전엔 "이 달 최대 출석 일수" 분모였지만, 6명 중 1명만 나온 날도 100% 진하게 표시되는 문제가
+    // 있어 부정확. 이제 6명 중 K명 → K/6 비율로 색 진해짐.)
+    val denominator = totalMemberCount.coerceAtLeast(1)
 
     PosseCard(padding = PaddingValues(12.dp)) {
-        Text(
-            "${monthAnchor.year}년 ${monthAnchor.monthValue}월",
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        // 좌우 페이징 버튼 + 중앙 월 라벨. 하한/상한 도달 시 해당 버튼 비활성화.
+        Row(
             modifier = Modifier.fillMaxWidth(),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PagingButton(text = "◀", enabled = canGoPrev, onClick = onPrevMonth)
+            Text(
+                "${monthAnchor.year}년 ${monthAnchor.monthValue}월",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.weight(1f),
+            )
+            PagingButton(text = "▶", enabled = canGoNext, onClick = onNextMonth)
+        }
         Spacer(Modifier.height(8.dp))
         val dayLabels = listOf("일", "월", "화", "수", "목", "금", "토")
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -455,7 +510,7 @@ private fun MonthCalendar(
                     CalendarCell(
                         date = cellDate,
                         count = count,
-                        intensityRatio = count.toFloat() / maxCount,
+                        intensityRatio = count.toFloat() / denominator,
                         isToday = cellDate == today,
                         modifier = Modifier.weight(1f),
                     )

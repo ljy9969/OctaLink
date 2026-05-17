@@ -11,9 +11,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,10 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -49,7 +52,6 @@ import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -64,6 +66,7 @@ fun CommunityScreen(
     val writeState by postsVm.writeState.collectAsState()
     val context = LocalContext.current
     var dialogTag by remember { mutableStateOf<PostTag?>(null) }
+    var editingPost by remember { mutableStateOf<PostDoc?>(null) }
 
     PosseScreen(title = "Community", subtitle = "팀원들의 기록과 응원") {
         LazyColumn(
@@ -95,47 +98,66 @@ fun CommunityScreen(
                 }
             }
             items(posts, key = { it.id }) { p ->
+                val canModify = session.member?.id == p.authorId || session.role.isStaff
                 PostCard(
                     post = p,
                     myMemberId = session.member?.id,
-                    canDelete = session.member?.id == p.authorId || session.role.isStaff,
+                    canEdit = canModify,
+                    canDelete = canModify,
                     onToggleLike = {
                         session.member?.id?.let { postsVm.toggleLike(p.id, it) }
                     },
+                    onEdit = { editingPost = p },
                     onDelete = { postsVm.delete(p.id) },
                 )
             }
         }
     }
 
-    dialogTag?.let { initialTag ->
+    // 작성 모드(dialogTag) 또는 수정 모드(editingPost) 둘 중 하나면 다이얼로그 표시
+    val effectiveTag = editingPost?.tag ?: dialogTag
+    if (effectiveTag != null) {
         WritePostDialog(
-            initialTag = initialTag,
+            initialTag = effectiveTag,
             isStaff = session.role.isStaff,
             writeState = writeState,
+            editing = editingPost,
             onSubmit = { title, body, tag, imageUri ->
-                val member = session.member ?: return@WritePostDialog
-                postsVm.submitPost(
-                    context = context,
-                    authorId = member.id,
-                    authorName = member.name,
-                    authorBelt = member.belt,
-                    title = title,
-                    body = body,
-                    tag = tag,
-                    imageUri = imageUri,
-                )
+                val editTarget = editingPost
+                if (editTarget != null) {
+                    postsVm.updatePost(
+                        postId = editTarget.id,
+                        title = title,
+                        body = body,
+                        tag = tag,
+                    )
+                } else {
+                    val member = session.member ?: return@WritePostDialog
+                    postsVm.submitPost(
+                        context = context,
+                        authorId = member.id,
+                        authorName = member.name,
+                        authorBelt = member.belt,
+                        title = title,
+                        body = body,
+                        tag = tag,
+                        imageUri = imageUri,
+                    )
+                }
             },
             onDismiss = {
                 dialogTag = null
+                editingPost = null
                 postsVm.resetWriteState()
             },
+            onResetError = { postsVm.resetWriteState() },
         )
 
-        // 작성 성공 시 다이얼로그 자동 종료
+        // 작성/수정 성공 시 다이얼로그 자동 종료
         LaunchedEffect(writeState) {
             if (writeState is WriteState.Done) {
                 dialogTag = null
+                editingPost = null
                 postsVm.resetWriteState()
             }
         }
@@ -146,33 +168,34 @@ fun CommunityScreen(
 // Post 카드
 // ─────────────────────────────────────────────────────────────────────────────
 
-private val timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val seoul = ZoneId.of("Asia/Seoul")
 
-private fun relativeTime(createdAt: Instant): String {
-    val diff = Duration.between(createdAt, Instant.now())
-    return when {
-        diff.toMinutes() < 1 -> "방금"
-        diff.toMinutes() < 60 -> "${diff.toMinutes()}분 전"
-        diff.toHours() < 24 -> "${diff.toHours()}시간 전"
-        diff.toDays() < 7 -> "${diff.toDays()}일 전"
-        else -> createdAt.atZone(seoul).format(timeFormatter)
-    }
+/** 글 카드에서 본문이 접힐 때 보이는 최대 줄 수. 초과분은 "더 보기"로 펼침. */
+private const val BODY_COLLAPSED_LINES = 3
+// 날짜는 한국 요일 약자("토"), 시간은 AM/PM 강제 → 두 formatter 를 별도 Locale 로 구성.
+private val postDateFmt = DateTimeFormatter.ofPattern("MM/dd(EEE)", java.util.Locale.KOREAN)
+private val postTimeFmt = DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.US)
+
+private fun postTimestamp(createdAt: Instant): String {
+    val z = createdAt.atZone(seoul)
+    return "${z.format(postDateFmt)} ${z.format(postTimeFmt)}"
 }
 
 @Composable
 private fun PostCard(
     post: PostDoc,
     myMemberId: String?,
+    canEdit: Boolean,
     canDelete: Boolean,
     onToggleLike: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val likedByMe = myMemberId != null && myMemberId in post.likedBy
     // title 이 tag 라벨(공지/질문/팁/기록)과 동일하면 chip 과 중복이라 표시하지 않음
     val showTitle = post.title.isNotBlank() &&
         post.title.trim() != post.tag.label()
-    PosseCard(leftStripeColor = post.authorBelt.ringColor) {
+    PosseCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -180,16 +203,28 @@ private fun PostCard(
             TagBadge(post.tag)
             Spacer(Modifier.weight(1f))
             Text(
-                post.authorName,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                relativeTime(post.createdAt),
+                postTimestamp(post.createdAt),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    post.authorName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    // 이름 너비만큼 벨트색 underline. 두께 2dp.
+                    modifier = Modifier.drawBehind {
+                        val strokePx = 2.dp.toPx()
+                        drawLine(
+                            color = post.authorBelt.ringColor,
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = strokePx,
+                        )
+                    },
+                )
+            }
         }
         if (showTitle) {
             Spacer(Modifier.height(6.dp))
@@ -200,16 +235,51 @@ private fun PostCard(
             )
         }
         Spacer(Modifier.height(6.dp))
-        Text(post.body, style = MaterialTheme.typography.bodyLarge)
+        // 본문 인라인 expand — 길면 BODY_COLLAPSED_LINES 줄에서 ellipsis + "더 보기" 토글.
+        // 실제 잘렸을 때만 토글 노출 (`hasVisualOverflow` 로 판단).
+        var bodyExpanded by remember(post.id) { mutableStateOf(false) }
+        var bodyDidOverflow by remember(post.id) { mutableStateOf(false) }
+        Text(
+            post.body,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = if (bodyExpanded) Int.MAX_VALUE else BODY_COLLAPSED_LINES,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { result ->
+                if (!bodyExpanded && result.hasVisualOverflow) bodyDidOverflow = true
+            },
+        )
+        if (bodyDidOverflow || bodyExpanded) {
+            Text(
+                if (bodyExpanded) "접기" else "더 보기",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable { bodyExpanded = !bodyExpanded }
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+            )
+        }
         if (post.imageUrl != null) {
             Spacer(Modifier.height(8.dp))
+            // Coil AsyncImage 가 fillMaxWidth + wrapContent height 조합에서 intrinsic 사이즈
+            // 를 layout 에 반영 못해 작게 그려지는 이슈 회피 — 로드 성공 콜백으로 실제 가로/세로
+            // 비율을 받아 aspectRatio 로 명시. 초기엔 16:9 placeholder 박스로 시작.
+            var imageRatio by remember(post.imageUrl) { mutableStateOf(16f / 9f) }
             AsyncImage(
                 model = post.imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
+                onSuccess = { state ->
+                    val s = state.painter.intrinsicSize
+                    if (s.width > 0f && s.height > 0f && s.width.isFinite() && s.height.isFinite()) {
+                        imageRatio = s.width / s.height
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .aspectRatio(imageRatio)
                     .clip(RoundedCornerShape(8.dp)),
             )
         }
@@ -229,13 +299,31 @@ private fun PostCard(
                     .padding(horizontal = 6.dp, vertical = 4.dp),
             )
             Spacer(Modifier.weight(1f))
+            // 수정/삭제 칩 색상은 TAG 칩(빨강/파랑/노랑/보라)과 충돌하지 않게 선택.
+            // 수정 = 청록(teal), 삭제 = 진한 주황(deep orange) — destructive 톤이지만 NOTICE 빨강과 구분.
+            if (canEdit) {
+                Text(
+                    "수정",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF00897B))
+                        .clickable { onEdit() }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
             if (canDelete) {
                 Text(
                     "삭제",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFD84315))
                         .clickable { onDelete() }
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                 )
@@ -255,30 +343,52 @@ private fun WritePostDialog(
     writeState: WriteState,
     onSubmit: (title: String, body: String, tag: PostTag, imageUri: Uri?) -> Unit,
     onDismiss: () -> Unit,
+    /** 이미지 교체/제거 등 사용자 액션 시 stale 에러 메시지 초기화용. */
+    onResetError: () -> Unit,
+    /** 수정 모드일 때 원본 글. null 이면 작성 모드. */
+    editing: PostDoc? = null,
 ) {
-    var title by remember { mutableStateOf("") }
-    var body by remember { mutableStateOf("") }
-    var tag by remember { mutableStateOf(initialTag) }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    val isEdit = editing != null
+    // editing 인스턴스가 바뀔 때마다 초기값 재설정 (다이얼로그 첫 진입 시점 prefill).
+    var title by remember(editing?.id) { mutableStateOf(editing?.title.orEmpty()) }
+    var body by remember(editing?.id) { mutableStateOf(editing?.body.orEmpty()) }
+    var tag by remember(editing?.id) { mutableStateOf(editing?.tag ?: initialTag) }
+    var imageUri by remember(editing?.id) { mutableStateOf<Uri?>(null) }
 
+    val context = LocalContext.current
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
-    ) { uri -> if (uri != null) imageUri = uri }
+    ) { picked ->
+        if (picked == null) return@rememberLauncherForActivityResult
+        // picker URI 권한이 콜백 직후 가장 신선 — 바로 app cache 로 복사해 안정적인 file:// 로 전환.
+        // (업로드 시점까지 들고 있다 보면 권한 만료/리졸버 동작 차이로 openInputStream 가 null 을
+        // 돌려주는 케이스 회피)
+        val cached = runCatching { copyPickedImageToCache(context, picked) }
+            .onFailure { android.util.Log.w("OctaLink.Posts", "picker URI cache 복사 실패", it) }
+            .getOrNull()
+        imageUri = cached ?: picked
+        onResetError()
+    }
 
     val isUploading = writeState is WriteState.Uploading
 
     AlertDialog(
         onDismissRequest = { if (!isUploading) onDismiss() },
         title = {
-            Text(
-                if (initialTag == PostTag.NOTICE) "공지 작성" else "글 작성",
-                style = MaterialTheme.typography.titleLarge,
-            )
+            val titleText = when {
+                isEdit && tag == PostTag.NOTICE -> "공지 수정"
+                isEdit -> "글 수정"
+                initialTag == PostTag.NOTICE -> "공지 작성"
+                else -> "글 작성"
+            }
+            Text(titleText, style = MaterialTheme.typography.titleLarge)
         },
         text = {
             Column {
-                // 카테고리 칩 — 공지 작성 진입이면 NOTICE 고정 비활성, 일반 진입이면 RECORD/TIP/QUESTION 선택
-                val tagChoices = if (initialTag == PostTag.NOTICE && isStaff) {
+                // 카테고리 칩
+                // - 공지 작성/수정: NOTICE 고정 (운영진 전용)
+                // - 일반: RECORD/TIP/QUESTION 중 선택. 수정 시 현재 tag 유지하며 변경 허용.
+                val tagChoices = if (tag == PostTag.NOTICE && isStaff) {
                     listOf(PostTag.NOTICE)
                 } else {
                     listOf(PostTag.RECORD, PostTag.TIP, PostTag.QUESTION)
@@ -296,7 +406,7 @@ private fun WritePostDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it.take(80) },
-                    label = { Text("제목 (선택)") },
+                    label = { Text("제목") },
                     singleLine = true,
                     enabled = !isUploading,
                     modifier = Modifier.fillMaxWidth(),
@@ -312,16 +422,42 @@ private fun WritePostDialog(
                         .height(120.dp),
                 )
                 Spacer(Modifier.height(8.dp))
-                ImagePickerRow(
-                    imageUri = imageUri,
-                    enabled = !isUploading,
-                    onPick = {
-                        pickImage.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                    onClear = { imageUri = null },
-                )
+                if (isEdit) {
+                    // 수정 모드: 기존 이미지 read-only 표시. 이미지 변경/제거는 후속 작업.
+                    if (editing?.imageUrl != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(
+                                model = editing.imageUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .width(60.dp)
+                                    .height(60.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "이미지 변경/제거는 글을 새로 작성해주세요",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                } else {
+                    ImagePickerRow(
+                        imageUri = imageUri,
+                        enabled = !isUploading,
+                        onPick = {
+                            pickImage.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onClear = {
+                            imageUri = null
+                            onResetError()
+                        },
+                    )
+                }
                 if (writeState is WriteState.Error) {
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -349,13 +485,15 @@ private fun WritePostDialog(
                     )
                 }
             } else {
+                val canSubmit = title.isNotBlank() && body.isNotBlank()
                 Text(
-                    "게시",
-                    color = MaterialTheme.colorScheme.primary,
+                    if (isEdit) "저장" else "게시",
+                    color = if (canSubmit) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
-                        .clickable { onSubmit(title, body, tag, imageUri) }
+                        .clickable(enabled = canSubmit) { onSubmit(title, body, tag, imageUri) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
@@ -422,6 +560,28 @@ private fun ImagePickerRow(
             )
         }
     }
+}
+
+/**
+ * picker 가 돌려준 `content://media/picker/...` URI 를 즉시 app cache 디렉토리로 복사하고
+ * 결과 파일의 Uri 를 반환. picker URI 의 임시 권한은 콜백 직후 가장 신선하므로 이 시점에
+ * 바이트를 떠두면 이후 업로드(Dispatchers.IO) 가 안정적으로 read 가능.
+ *
+ * 복사 파일은 `cacheDir/post_uploads/` 에 쌓임. 별도 cleanup 안 함 — Android OS 가 캐시 압박 시
+ * 자동 회수. 글 한 건당 ~수백KB 라 누적 부담 적음.
+ */
+private fun copyPickedImageToCache(context: android.content.Context, src: Uri): Uri? {
+    val dir = java.io.File(context.cacheDir, "post_uploads").apply { mkdirs() }
+    val out = java.io.File(dir, "pick_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.bin")
+    val ok = context.contentResolver.openInputStream(src)?.use { input ->
+        out.outputStream().use { sink -> input.copyTo(sink) }
+        true
+    } ?: false
+    if (!ok) {
+        out.delete()
+        return null
+    }
+    return Uri.fromFile(out)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

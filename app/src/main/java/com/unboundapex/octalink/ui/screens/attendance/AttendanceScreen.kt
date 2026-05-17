@@ -28,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.data.CheckInWindow
 import com.unboundapex.octalink.data.avatarById
 import com.unboundapex.octalink.data.checkInWindow
+import com.unboundapex.octalink.data.schema.Role
 import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.data.currentOrNextClassLabel
@@ -71,7 +72,9 @@ fun AttendanceScreen(
     val window = remember { checkInWindow() }
     val classesEnded = window == CheckInWindow.AFTER_LAST_CLASS || window == CheckInWindow.NO_CLASS_TODAY
     val tooEarly = window == CheckInWindow.BEFORE_WINDOW
-    val cantCheckIn = window != CheckInWindow.OPEN
+    // 관장(MASTER) 은 영업일 상시 운영 — 출석 체크인 자체 비활성. 코치/창조자는 일반 회원처럼 체크인 가능.
+    val isMasterRole = session.role == Role.MASTER
+    val cantCheckIn = window != CheckInWindow.OPEN || isMasterRole
 
     // 내 체크인 여부 = todayPeers 에 session.member.id 가 포함되어 있는지
     val myMemberId = session.member?.id
@@ -115,6 +118,7 @@ fun AttendanceScreen(
                 PosseCard {
                     Text(
                         when {
+                            isMasterRole -> "관장 — 체크인 불필요"
                             cantCheckIn -> "체크인 불가"
                             checkedIn -> "체크인 완료"
                             else -> "출석 체크인"
@@ -124,6 +128,7 @@ fun AttendanceScreen(
                     )
                     Text(
                         when {
+                            isMasterRole -> "도장 영업일에 상시 운영 중이라 별도 체크인이 없습니다. 🥋"
                             closedToday -> "오늘은 $closedReason 입니다. 🧘"
                             classesEnded -> "다음 수업에서 봐요! 👋"
                             tooEarly -> "수업 시작 30분 전부터 가능. 🕰️"
@@ -153,6 +158,7 @@ fun AttendanceScreen(
                     ) {
                         Text(
                             when {
+                                isMasterRole -> "관장"
                                 closedToday -> "휴무일"
                                 classesEnded -> "수업 종료"
                                 tooEarly -> "대기"

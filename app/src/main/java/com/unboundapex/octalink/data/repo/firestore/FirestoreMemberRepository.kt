@@ -144,13 +144,14 @@ class FirestoreMemberRepository : MemberRepository {
             weightClass?.let { put("weightClass", it.name) }
             avatarId?.let { put("avatarId", it) }
             skills?.let {
+                // skillScores doc 과 동일 정밀도 (소수점 2자리 floor) 로 저장.
                 put("skills", mapOf(
-                    "striking" to it.striking,
-                    "grappling" to it.grappling,
-                    "stamina" to it.stamina,
-                    "technique" to it.technique,
-                    "mental" to it.mental,
-                    "speed" to it.speed,
+                    "striking" to it.striking.toFirestoreScore(),
+                    "grappling" to it.grappling.toFirestoreScore(),
+                    "stamina" to it.stamina.toFirestoreScore(),
+                    "technique" to it.technique.toFirestoreScore(),
+                    "mental" to it.mental.toFirestoreScore(),
+                    "speed" to it.speed.toFirestoreScore(),
                 ))
             }
             put("updatedAt", FieldValue.serverTimestamp())
@@ -158,6 +159,10 @@ class FirestoreMemberRepository : MemberRepository {
         if (updates.size == 1) return  // updatedAt only — no field to update
         col.document(memberId).update(updates).await()
     }
+
+    /** [FirestoreSkillScoreRepository] 와 동일 정밀도 — 슬라이더 raw float 을 0.01 단위로 truncate. */
+    private fun Float.toFirestoreScore(): Double =
+        kotlin.math.floor(this.toDouble() * 100) / 100
 
     /** Query 의 snapshot 을 List<MemberDoc> Flow 로 변환. */
     private fun Query.snapshotsAsList(): Flow<List<MemberDoc>> = callbackFlow {
