@@ -555,6 +555,19 @@ const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
 };
 
 /**
+ * 클라이언트 [NotificationType.channelId] 와 정확히 일치 — Android 8.0+ 의 NotificationChannel.
+ * notification payload 에 함께 보내야 background/killed 상태에서 OS auto-display 시 올바른 채널로
+ * routing 됨. 누락 시 OS 가 default(없는) 채널로 dispatch 후 silently drop 하는 케이스 발생.
+ */
+const CHANNEL_ID: Record<NotificationTypeKey, string> = {
+  COMMENT: "octalink_comment",
+  TOURNAMENT_DRAWN: "octalink_tournament",
+  NEW_NOTICE: "octalink_notice",
+  SIGNUP_RESULT: "octalink_signup",
+  SKILL_UPDATED: "octalink_skill",
+};
+
+/**
  * 주어진 memberId 들 중 (a) fcmToken 보유 + (b) 해당 type prefs 가 ON 인 사람만 추려서
  * FCM multicast 발송. 401(invalid token) 응답은 자동 토큰 정리 (members/{uid}.fcmToken = null).
  */
@@ -594,6 +607,11 @@ async function sendNotificationTo(
     notification: { title, body },
     android: {
       priority: "high",
+      notification: {
+        // 이 채널 id 가 클라이언트의 NotificationChannel 등록 id (`octalink_*`) 와 정확히 일치해야
+        // background/killed 상태에서 OS auto-display 가 옳은 채널로 routing 됨.
+        channelId: CHANNEL_ID[type],
+      },
     },
   });
   logger.info(`[fcm] type=${type} sent=${response.successCount}/${idTokenPairs.length} failed=${response.failureCount}`);
@@ -761,8 +779,8 @@ export const notifyOnSkillsUpdated = onDocumentUpdated(
     await sendNotificationTo(
       [memberId],
       "SKILL_UPDATED",
-      "스킬 점수가 갱신되었습니다",
-      "프로필에서 새 6축 차트를 확인해보세요.",
+      "스킬 점수 갱신됨",
+      "프로필에서 새 스킬 차트를 확인해보세요.",
     );
   },
 );
