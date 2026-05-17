@@ -160,6 +160,22 @@ class FirestoreMemberRepository : MemberRepository {
         col.document(memberId).update(updates).await()
     }
 
+    override suspend fun updateFcmToken(memberId: String, token: String?) {
+        val updates = mapOf(
+            "fcmToken" to token, // null 도 그대로 — 알림 OFF 전체 해제 의도 반영.
+            "updatedAt" to FieldValue.serverTimestamp(),
+        )
+        col.document(memberId).update(updates).await()
+    }
+
+    override suspend fun updateNotificationPrefs(memberId: String, prefs: Map<String, Boolean>) {
+        val updates = mapOf(
+            "notificationPrefs" to prefs,
+            "updatedAt" to FieldValue.serverTimestamp(),
+        )
+        col.document(memberId).update(updates).await()
+    }
+
     /** [FirestoreSkillScoreRepository] 와 동일 정밀도 — 슬라이더 raw float 을 0.01 단위로 truncate. */
     private fun Float.toFirestoreScore(): Double =
         kotlin.math.floor(this.toDouble() * 100) / 100

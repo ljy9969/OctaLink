@@ -44,6 +44,7 @@ import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionState
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.data.tournament.TournamentViewModel
+import com.unboundapex.octalink.messaging.ClassReminderScheduler
 import com.unboundapex.octalink.ui.screens.admin.AdminScreen
 import com.unboundapex.octalink.ui.screens.admin.CoachCommentScreen
 import com.unboundapex.octalink.ui.screens.admin.SkillScoreProposeScreen
@@ -51,6 +52,7 @@ import com.unboundapex.octalink.ui.screens.attendance.AttendanceReviewScreen
 import com.unboundapex.octalink.ui.screens.attendance.AttendanceScreen
 import com.unboundapex.octalink.ui.screens.bracket.BracketDrawScreen
 import com.unboundapex.octalink.ui.screens.bracket.BracketScreen
+import com.unboundapex.octalink.ui.screens.bracket.TournamentHistoryScreen
 import com.unboundapex.octalink.ui.screens.community.CommunityScreen
 import com.unboundapex.octalink.ui.screens.creator.CreatorScreen
 import com.unboundapex.octalink.ui.screens.curriculum.CurriculumScreen
@@ -81,6 +83,11 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object CoachComment : Route("coach_comment", "코멘트", Icons.Outlined.ManageAccounts)
     data object SkillScorePropose : Route("skill_score_propose", "스킬 제안", Icons.Outlined.ManageAccounts)
     data object MyAttendance : Route("my_attendance", "내 출석", Icons.Outlined.CheckCircle)
+    data object TournamentHistory : Route("tournament_history", "토너먼트 히스토리", Icons.Outlined.CheckCircle)
+    /** 히스토리에서 특정 토너먼트 read-only 진입 — path arg 로 tournamentId 전달. */
+    data object BracketView : Route("bracket_view/{tournamentId}", "대진표 보기", Icons.Outlined.CheckCircle) {
+        fun pathFor(tournamentId: String) = "bracket_view/$tournamentId"
+    }
 }
 
 private val baseTabs = listOf(Route.Home, Route.Curriculum, Route.Attendance, Route.Community, Route.Profile)
@@ -142,6 +149,20 @@ fun PosseApp() {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val tournamentVm: TournamentViewModel = viewModel()
+
+    // 토너먼트 매치 갱신 시 resolvedByMasterId 로 들어갈 작성자 uid.
+    // session.member?.id 변화 시 (로그인/탈퇴/회원 doc 갱신) 자동 동기화.
+    LaunchedEffect(session.member?.id) {
+        tournamentVm.currentUserId = session.member?.id
+    }
+
+    // 로그인 직후 1회 — 오늘 남은 수업의 CLASS_REMINDER 스케줄. prefs OFF 면 내부에서 skip.
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    LaunchedEffect(session.member?.id) {
+        if (session.member?.id != null) {
+            ClassReminderScheduler.scheduleAll(appContext)
+        }
+    }
 
     // 운영진(COACH+) 이상은 "운영" 탭이 Profile 뒤에 추가됨. 회원은 안 보임.
     val tabs = if (session.role.isStaff) baseTabs + Route.Admin else baseTabs
@@ -218,7 +239,10 @@ fun PosseApp() {
             }
             composable(Route.Community.path) { CommunityScreen(sessionVm = sessionVm) }
             composable(Route.Profile.path) {
-                ProfileScreen(sessionVm = sessionVm)
+                ProfileScreen(
+                    sessionVm = sessionVm,
+                    onOpenTournamentHistory = { navController.navigate(Route.TournamentHistory.path) },
+                )
             }
             composable(Route.Info.path) {
                 InfoScreen(onBack = { navController.popBackStack() })
@@ -249,20 +273,55 @@ fun PosseApp() {
             }
             composable(Route.Bracket.path) {
                 // 회원 진입(Home → 이번 주 대진표): 결과 조회만, 새 추첨/초기화 칩 없음.
+                // active 토너먼트 자동 선택 — 명시 override 해제.
+                LaunchedEffect(Unit) { tournamentVm.selectTournament(null) }
                 BracketScreen(
                     tournamentVm = tournamentVm,
                     onBack = { navController.popBackStack() },
                     onOpenDraw = { /* member 모드에서는 호출되지 않음 */ },
+                    onOpenHistory = { navController.navigate(Route.TournamentHistory.path) },
                     canManage = false,
                 )
             }
             composable(Route.BracketAdmin.path) {
                 // 운영진 진입(Admin → 토너먼트 추첨/대진 관리): 새 추첨/초기화 칩 + BracketDrawScreen 진입 가능.
+                LaunchedEffect(Unit) { tournamentVm.selectTournament(null) }
                 BracketScreen(
                     tournamentVm = tournamentVm,
                     onBack = { navController.popBackStack() },
                     onOpenDraw = { navController.navigate(Route.BracketDraw.path) },
+                    onOpenHistory = { navController.navigate(Route.TournamentHistory.path) },
                     canManage = true,
+                )
+            }
+            composable(Route.TournamentHistory.path) {
+                TournamentHistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenTournament = { id ->
+                        navController.navigate(Route.BracketView.pathFor(id))
+                    },
+                    sessionVm = sessionVm,
+                )
+            }
+            composable(
+                route = Route.BracketView.path,
+                arguments = listOf(
+                    androidx.navigation.navArgument("tournamentId") {
+                        type = androidx.navigation.NavType.StringType
+                    }
+                ),
+            ) { entry ->
+                val tournamentId = entry.arguments?.getString("tournamentId").orEmpty()
+                LaunchedEffect(tournamentId) {
+                    tournamentVm.selectTournament(tournamentId.takeIf { it.isNotBlank() })
+                }
+                BracketScreen(
+                    tournamentVm = tournamentVm,
+                    onBack = { navController.popBackStack() },
+                    onOpenDraw = { /* read-only 모드 — 호출 안 됨 */ },
+                    onOpenHistory = { /* 이미 히스토리 경유 진입 — 노출 안 함 */ },
+                    canManage = false,
+                    showHistoryButton = false,
                 )
             }
             composable(Route.BracketDraw.path) {

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.media.ImageUploader
+import com.unboundapex.octalink.data.media.VideoUploader
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.schema.PostDoc
 import com.unboundapex.octalink.data.schema.PostTag
@@ -49,8 +50,10 @@ class PostsViewModel : ViewModel() {
     fun resetWriteState() { _writeState.value = WriteState.Idle }
 
     /**
-     * 글 작성. 이미지 첨부가 있으면 Firebase Storage 업로드 후 download URL 을 doc 에 저장.
-     * 이미지 압축/사이즈 검증은 [ImageUploader] 가 처리.
+     * 글 작성. 이미지 또는 영상 첨부가 있으면 Firebase Storage 업로드 후 download URL 을 doc 에 저장.
+     * 미디어는 상호 배타 — UI 가 동시에 둘 다 선택 못 하게 강제, VM 도 안전망으로 imageUri 우선.
+     *
+     * 일일 업로드 제한 — 계정당 이미지 1건/하루, 영상 1건/하루 (독립 카운트). KST 기준.
      */
     fun submitPost(
         context: Context,
@@ -61,6 +64,7 @@ class PostsViewModel : ViewModel() {
         body: String,
         tag: PostTag,
         imageUri: Uri?,
+        videoUri: Uri? = null,
     ) {
         if (title.isBlank()) {
             _writeState.value = WriteState.Error("제목을 입력하세요.")
@@ -70,11 +74,16 @@ class PostsViewModel : ViewModel() {
             _writeState.value = WriteState.Error("본문을 입력하세요.")
             return
         }
-        // 일일 미디어 업로드 제한 — 계정당 이미지/영상 1건/하루.
+        // 동시 첨부 차단 — UI 도 mutual exclusion 강제하지만 안전망.
+        if (imageUri != null && videoUri != null) {
+            _writeState.value = WriteState.Error("이미지와 영상을 동시에 첨부할 수 없습니다.")
+            return
+        }
+        // 일일 미디어 업로드 제한 — 계정당 이미지 1건/하루, 영상 1건/하루 (독립).
         // sortedPosts 는 CommunityScreen 가 구독 중이라 최신 값 보유. KST 기준 날짜 비교.
         // 클라이언트 사이드 체크만 — 같은 순간 두 번 빠르게 submit 시도 등의 race 는 허용 (작은 도장 가정).
+        val todayKst = LocalDate.now(ZoneId.of("Asia/Seoul"))
         if (imageUri != null) {
-            val todayKst = LocalDate.now(ZoneId.of("Asia/Seoul"))
             val alreadyUploadedToday = sortedPosts.value.any { post ->
                 post.authorId == authorId &&
                     post.imageUrl != null &&
@@ -85,10 +94,22 @@ class PostsViewModel : ViewModel() {
                 return
             }
         }
+        if (videoUri != null) {
+            val alreadyUploadedToday = sortedPosts.value.any { post ->
+                post.authorId == authorId &&
+                    post.videoUrl != null &&
+                    post.createdAt.atZone(ZoneId.of("Asia/Seoul")).toLocalDate() == todayKst
+            }
+            if (alreadyUploadedToday) {
+                _writeState.value = WriteState.Error("오늘 영상 업로드 한도(1건)를 초과했습니다.\n내일 다시 시도해주세요.")
+                return
+            }
+        }
         _writeState.value = WriteState.Uploading
         viewModelScope.launch {
             runCatching {
                 val imageUrl = imageUri?.let { ImageUploader.uploadPostImage(context, it) }
+                val videoUrl = videoUri?.let { VideoUploader.uploadPostVideo(context, it) }
                 posts.create(
                     authorId = authorId,
                     authorName = authorName,
@@ -97,6 +118,7 @@ class PostsViewModel : ViewModel() {
                     body = body.trim().take(2000),
                     tag = tag,
                     imageUrl = imageUrl,
+                    videoUrl = videoUrl,
                 )
             }.onSuccess {
                 _writeState.value = WriteState.Done

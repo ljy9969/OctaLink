@@ -631,7 +631,10 @@ private fun UnknownBeltRow(
     }
 }
 
-/** 스킬 점수 편집 진입 셀 — 회원 이름 + 평균 점수 (미평가 회원은 이름만). 2열 그리드에서 1셀 차지. */
+/**
+ * 스킬 점수 편집 진입 셀 — 회원 이름 + 평균 점수 한 줄. 2열 그리드 1셀 차지.
+ * 평균 점수가 있는 회원만 점수를 노출하지만 단일 Row 라 행 높이는 항상 동일.
+ */
 @Composable
 private fun SkillTargetRow(
     member: MemberDoc,
@@ -642,19 +645,21 @@ private fun SkillTargetRow(
         val sum = s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed
         (sum / 6f * 100).toInt()
     }
-    Column(
+    Row(
         modifier = modifier
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             member.name,
             style = MaterialTheme.typography.bodyLarge,
         )
         if (avg != null) {
+            Spacer(Modifier.width(6.dp))
             Text(
-                "평균 ${avg}점",
+                "${avg}점",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

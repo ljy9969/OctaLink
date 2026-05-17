@@ -72,7 +72,7 @@ service cloud.firestore {
     /** 본인 프로필 수정 시 변경 허용 필드만 (role/status/id/createdAt/joinDate 보호) */
     function memberSelfEditableOnly() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['name', 'belt', 'avatarId', 'phone', 'updatedAt']);
+        .hasOnly(['name', 'belt', 'avatarId', 'phone', 'fcmToken', 'notificationPrefs', 'updatedAt']);
     }
 
     /** 역할(role) 필드 변경 여부 — 관장은 role 못 바꾸도록 강제 */

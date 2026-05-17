@@ -6,6 +6,8 @@ import com.kakao.sdk.common.KakaoSdk
 import com.kakao.sdk.common.util.Utility
 import com.unboundapex.octalink.data.HolidayRepository
 import com.unboundapex.octalink.data.repo.RepositoryProvider
+import com.unboundapex.octalink.messaging.ClassReminderScheduler
+import com.unboundapex.octalink.messaging.NotificationChannels
 
 /**
  * 앱 프로세스 진입점. 초기화는 [onCreate] 에서 1회만 수행.
@@ -27,5 +29,9 @@ class OctaLinkApplication : Application() {
         Log.d("OctaLink.KeyHash", "Kakao KeyHash to register: ${Utility.getKeyHash(this)}")
         HolidayRepository.init(applicationContext)
         RepositoryProvider.init(applicationContext)
+        // FCM 알림 채널 등록 — 알림 표시 자체엔 필수. 권한(POST_NOTIFICATIONS) 은 별도.
+        NotificationChannels.ensureRegistered(applicationContext)
+        // 매일 04:00 KST 에 그날 CLASS_REMINDER 재스케줄 — KEEP 정책이라 멱등.
+        ClassReminderScheduler.scheduleDailyRollover(applicationContext)
     }
 }

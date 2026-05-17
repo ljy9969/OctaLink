@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.unboundapex.octalink.data.schema.PostDoc
@@ -122,7 +123,7 @@ fun CommunityScreen(
             isStaff = session.role.isStaff,
             writeState = writeState,
             editing = editingPost,
-            onSubmit = { title, body, tag, imageUri ->
+            onSubmit = { title, body, tag, imageUri, videoUri ->
                 val editTarget = editingPost
                 if (editTarget != null) {
                     postsVm.updatePost(
@@ -142,6 +143,7 @@ fun CommunityScreen(
                         body = body,
                         tag = tag,
                         imageUri = imageUri,
+                        videoUri = videoUri,
                     )
                 }
             },
@@ -282,6 +284,18 @@ private fun PostCard(
                     .aspectRatio(imageRatio)
                     .clip(RoundedCornerShape(8.dp)),
             )
+        } else if (post.videoUrl != null) {
+            Spacer(Modifier.height(8.dp))
+            // 인라인 영상 재생 — AndroidView 로 [VideoView] 감싸기. MediaController 가 자체 재생/정지/seek UI 제공.
+            // 16:9 고정 — 원본 비율 추출 비용 크고(MediaMetadataRetriever 별도 호출 필요), 30초 짧은 클립이라 letterbox 허용.
+            // ExoPlayer/Media3 로의 업그레이드는 후속 (적응형 스트리밍/픽처-인-픽처 등 필요해질 때).
+            PostVideoPlayer(
+                videoUrl = post.videoUrl,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
         }
         Spacer(Modifier.height(8.dp))
         Row(
@@ -332,6 +346,41 @@ private fun PostCard(
     }
 }
 
+/**
+ * PostCard 인라인 영상 플레이어 — Media3 [androidx.media3.exoplayer.ExoPlayer] + [androidx.media3.ui.PlayerView].
+ *
+ * VideoView 대비 장점: 적응형 스트리밍, fullscreen 토글, 재생 속도 조절, seek/scrub 정밀도, lifecycle 안전성.
+ * LazyColumn 의 disposed item 이 ExoPlayer 인스턴스를 [DisposableEffect] 로 release — 메모리 leak 방지.
+ *
+ * 자동 재생 ❌ (`playWhenReady = false`): 데이터 비용 / 다중 카드 동시 재생 회피. 사용자가 명시적으로 ▶ 탭.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+private fun PostVideoPlayer(videoUrl: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val exoPlayer = remember(videoUrl) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(videoUrl))
+            prepare()
+            playWhenReady = false
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(exoPlayer) {
+        onDispose { exoPlayer.release() }
+    }
+    AndroidView(
+        factory = { ctx ->
+            androidx.media3.ui.PlayerView(ctx).apply {
+                player = exoPlayer
+                useController = true
+                controllerAutoShow = true
+                setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+            }
+        },
+        modifier = modifier.background(Color(0xFF1A1A1A)),
+    )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 글 작성 다이얼로그
 // ─────────────────────────────────────────────────────────────────────────────
@@ -341,7 +390,7 @@ private fun WritePostDialog(
     initialTag: PostTag,
     isStaff: Boolean,
     writeState: WriteState,
-    onSubmit: (title: String, body: String, tag: PostTag, imageUri: Uri?) -> Unit,
+    onSubmit: (title: String, body: String, tag: PostTag, imageUri: Uri?, videoUri: Uri?) -> Unit,
     onDismiss: () -> Unit,
     /** 이미지 교체/제거 등 사용자 액션 시 stale 에러 메시지 초기화용. */
     onResetError: () -> Unit,
@@ -354,6 +403,7 @@ private fun WritePostDialog(
     var body by remember(editing?.id) { mutableStateOf(editing?.body.orEmpty()) }
     var tag by remember(editing?.id) { mutableStateOf(editing?.tag ?: initialTag) }
     var imageUri by remember(editing?.id) { mutableStateOf<Uri?>(null) }
+    var videoUri by remember(editing?.id) { mutableStateOf<Uri?>(null) }
 
     val context = LocalContext.current
     val pickImage = rememberLauncherForActivityResult(
@@ -363,10 +413,22 @@ private fun WritePostDialog(
         // picker URI 권한이 콜백 직후 가장 신선 — 바로 app cache 로 복사해 안정적인 file:// 로 전환.
         // (업로드 시점까지 들고 있다 보면 권한 만료/리졸버 동작 차이로 openInputStream 가 null 을
         // 돌려주는 케이스 회피)
-        val cached = runCatching { copyPickedImageToCache(context, picked) }
+        val cached = runCatching { copyPickedMediaToCache(context, picked, "img") }
             .onFailure { android.util.Log.w("OctaLink.Posts", "picker URI cache 복사 실패", it) }
             .getOrNull()
         imageUri = cached ?: picked
+        videoUri = null // 미디어는 상호 배타 — 새 이미지 픽 시 영상 해제.
+        onResetError()
+    }
+    val pickVideo = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { picked ->
+        if (picked == null) return@rememberLauncherForActivityResult
+        val cached = runCatching { copyPickedMediaToCache(context, picked, "vid") }
+            .onFailure { android.util.Log.w("OctaLink.Posts", "picker video cache 복사 실패", it) }
+            .getOrNull()
+        videoUri = cached ?: picked
+        imageUri = null
         onResetError()
     }
 
@@ -444,9 +506,10 @@ private fun WritePostDialog(
                         }
                     }
                 } else {
+                    // 이미지/영상 상호 배타 — 한쪽 picker 가 set 되면 다른 쪽은 disabled.
                     ImagePickerRow(
                         imageUri = imageUri,
-                        enabled = !isUploading,
+                        enabled = !isUploading && videoUri == null,
                         onPick = {
                             pickImage.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -454,6 +517,20 @@ private fun WritePostDialog(
                         },
                         onClear = {
                             imageUri = null
+                            onResetError()
+                        },
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    VideoPickerRow(
+                        videoUri = videoUri,
+                        enabled = !isUploading && imageUri == null,
+                        onPick = {
+                            pickVideo.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                            )
+                        },
+                        onClear = {
+                            videoUri = null
                             onResetError()
                         },
                     )
@@ -493,7 +570,7 @@ private fun WritePostDialog(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
-                        .clickable(enabled = canSubmit) { onSubmit(title, body, tag, imageUri) }
+                        .clickable(enabled = canSubmit) { onSubmit(title, body, tag, imageUri, videoUri) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
@@ -568,11 +645,13 @@ private fun ImagePickerRow(
  * 바이트를 떠두면 이후 업로드(Dispatchers.IO) 가 안정적으로 read 가능.
  *
  * 복사 파일은 `cacheDir/post_uploads/` 에 쌓임. 별도 cleanup 안 함 — Android OS 가 캐시 압박 시
- * 자동 회수. 글 한 건당 ~수백KB 라 누적 부담 적음.
+ * 자동 회수.
+ *
+ * @param kind 파일명 prefix — "img"/"vid" 로 디버깅 시 캐시 식별 편의.
  */
-private fun copyPickedImageToCache(context: android.content.Context, src: Uri): Uri? {
+private fun copyPickedMediaToCache(context: android.content.Context, src: Uri, kind: String): Uri? {
     val dir = java.io.File(context.cacheDir, "post_uploads").apply { mkdirs() }
-    val out = java.io.File(dir, "pick_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.bin")
+    val out = java.io.File(dir, "${kind}_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.bin")
     val ok = context.contentResolver.openInputStream(src)?.use { input ->
         out.outputStream().use { sink -> input.copyTo(sink) }
         true
@@ -582,6 +661,65 @@ private fun copyPickedImageToCache(context: android.content.Context, src: Uri): 
         return null
     }
     return Uri.fromFile(out)
+}
+
+/**
+ * 영상 첨부 picker UI — [ImagePickerRow] 와 동일 패턴.
+ * 다른 미디어가 이미 선택돼 있을 때 disabled — 안내 문구로 사용자에 명시.
+ */
+@Composable
+private fun VideoPickerRow(
+    videoUri: Uri?,
+    enabled: Boolean,
+    onPick: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (videoUri != null) {
+            // 영상 thumbnail 대신 fixed-size box 에 ▶ 아이콘 — MediaMetadataRetriever 로 첫 프레임 추출은
+            // 비용 대비 가치 낮음 (다이얼로그 짧은 노출). 업로드 직전 미리보기 용도라 placeholder 면 충분.
+            Box(
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(60.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF1A1A1A)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("▶", color = Color.White, style = MaterialTheme.typography.titleLarge)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "영상 변경",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable(enabled = enabled) { onPick() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "제거",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(enabled = enabled) { onClear() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        } else {
+            val alpha = if (enabled) 1f else 0.4f
+            Text(
+                "+ 영상 첨부 (선택, 1분 30초·100MB 이하)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f * alpha), RoundedCornerShape(6.dp))
+                    .clickable(enabled = enabled) { onPick() }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            )
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

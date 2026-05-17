@@ -35,11 +35,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -65,13 +69,17 @@ private enum class BracketMode { EIGHT, FOUR, FINAL_ONLY }
  * @param canManage 운영진 진입(Admin → 토너먼트 관리) 시 true — 새 추첨/초기화 칩과
  *                  EmptyState 의 "추첨하기" 버튼을 노출. Home → "이번 주 대진표" 진입 시
  *                  false → 회원은 결과 조회만 가능.
+ * @param showHistoryButton "히스토리" 칩 노출 여부. 히스토리 → 특정 토너먼트 보기로 진입한
+ *                          경우(BracketView) 는 false 로 재진입 루프 방지.
  */
 @Composable
 fun BracketScreen(
     tournamentVm: TournamentViewModel,
     onBack: () -> Unit,
     onOpenDraw: () -> Unit,
+    onOpenHistory: () -> Unit = {},
     canManage: Boolean = false,
+    showHistoryButton: Boolean = true,
 ) {
     val state by tournamentVm.state.collectAsState()
     val isInitialized = state.initialized
@@ -90,7 +98,13 @@ fun BracketScreen(
 
     PosseScreen(title = "Matches", subtitle = subtitle) {
         if (!isInitialized) {
-            EmptyState(onOpenDraw = onOpenDraw, onBack = onBack, canManage = canManage)
+            EmptyState(
+                onOpenDraw = onOpenDraw,
+                onBack = onBack,
+                canManage = canManage,
+                onOpenHistory = onOpenHistory,
+                showHistoryButton = showHistoryButton,
+            )
             return@PosseScreen
         }
 
@@ -105,27 +119,48 @@ fun BracketScreen(
             BracketMode.FINAL_ONLY -> listOf("결승")
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        // 폭죽 발사 위치를 ChampionBanner 의 실제 화면 위치로 맞추기 위해 outer Box / 배너의
+        // LayoutCoordinates 를 캡처. 둘 다 같은 outer Box 좌표계 안에 있으므로 배너 위치 - outer 위치 = 배너의
+        // 상대 좌표. 8강/4강/결승 모드에 따라 배너 세로 위치가 달라지는 문제를 한 번에 해결.
+        var outerCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+        var bannerOrigin by remember { mutableStateOf<Offset?>(null) }
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { outerCoords = it },
+        ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                if (canManage) {
+                // 상단 액션 row — 운영진은 새 추첨/초기화, 모두에게는 히스토리 칩 노출.
+                if (canManage || showHistoryButton) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ActionChip(
-                            text = "새 추첨",
-                            bg = MaterialTheme.colorScheme.primary,
-                            fg = MaterialTheme.colorScheme.onPrimary,
-                            onClick = onOpenDraw,
-                        )
+                        if (canManage) {
+                            ActionChip(
+                                text = "새 추첨",
+                                bg = MaterialTheme.colorScheme.primary,
+                                fg = MaterialTheme.colorScheme.onPrimary,
+                                onClick = onOpenDraw,
+                            )
+                        }
                         Spacer(Modifier.weight(1f))
-                        ActionChip(
-                            text = "초기화",
-                            bg = Color(0xFFFBC02D),
-                            fg = Color(0xFF1A1A1A),
-                            onClick = { tournamentVm.reset() },
-                        )
+                        if (showHistoryButton) {
+                            ActionChip(
+                                text = "히스토리",
+                                bg = MaterialTheme.colorScheme.surfaceVariant,
+                                fg = MaterialTheme.colorScheme.onSurface,
+                                onClick = onOpenHistory,
+                            )
+                        }
+                        if (canManage) {
+                            ActionChip(
+                                text = "초기화",
+                                bg = Color(0xFFFBC02D),
+                                fg = Color(0xFF1A1A1A),
+                                onClick = { tournamentVm.reset() },
+                            )
+                        }
                     }
                     Spacer(Modifier.height(48.dp))
                 } else {
@@ -152,12 +187,25 @@ fun BracketScreen(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    ChampionBanner(final = state.final)
+                    ChampionBanner(
+                        final = state.final,
+                        modifier = Modifier.onGloballyPositioned { coords ->
+                            val outer = outerCoords ?: return@onGloballyPositioned
+                            // 배너의 outer Box 좌표계 기준 top-left 위치 → 가로 중앙·세로 중앙으로 보정.
+                            val topLeft = outer.localPositionOf(coords, Offset.Zero)
+                            bannerOrigin = topLeft + Offset(
+                                coords.size.width / 2f,
+                                coords.size.height / 2f,
+                            )
+                        },
+                    )
                 }
             }
-            // 챔피언 확정 순간 1회 폭죽 — final.winner가 null→non-null로 바뀔 때 trigger
+            // 챔피언 확정 순간 1회 폭죽 — final.winner가 null→non-null로 바뀔 때 trigger.
+            // origin 이 set 되면 ChampionBanner 정중앙에서 발사, 아직 layout 전(null) 이면 기본 위치(82%) 폴백.
             ConfettiOverlay(
                 triggerKey = state.final.winner,
+                origin = bannerOrigin,
                 modifier = Modifier.matchParentSize(),
             )
         }
@@ -165,7 +213,13 @@ fun BracketScreen(
 }
 
 @Composable
-private fun EmptyState(onOpenDraw: () -> Unit, onBack: () -> Unit, canManage: Boolean) {
+private fun EmptyState(
+    onOpenDraw: () -> Unit,
+    onBack: () -> Unit,
+    canManage: Boolean,
+    onOpenHistory: () -> Unit = {},
+    showHistoryButton: Boolean = true,
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -198,6 +252,18 @@ private fun EmptyState(onOpenDraw: () -> Unit, onBack: () -> Unit, canManage: Bo
                     contentColor = Color.White
                 )
             ) { Text("추첨하기") }
+        }
+        if (showHistoryButton) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "지난 토너먼트 히스토리 보기",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable { onOpenHistory() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
         }
     }
 }
@@ -633,7 +699,7 @@ private fun ColumnScope.FighterRow(
 }
 
 @Composable
-private fun ChampionBanner(final: Match) {
+private fun ChampionBanner(final: Match, modifier: Modifier = Modifier) {
     val winner = final.winner
     val crowned = winner != null
     val nameScale = remember { Animatable(1f) }
@@ -662,7 +728,7 @@ private fun ChampionBanner(final: Match) {
     val nameColor = if (crowned) gold else MaterialTheme.colorScheme.onSurface
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)

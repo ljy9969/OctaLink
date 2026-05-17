@@ -33,8 +33,8 @@ android {
         applicationId = "com.unboundapex.octalink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")
@@ -86,6 +86,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2")
     implementation("androidx.activity:activity-compose:1.9.0")
+    // WorkManager — CLASS_REMINDER 알림 스케줄링 (수업 30분 전 local notification).
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -110,6 +112,14 @@ dependencies {
 
     // 이미지 로딩 (HTTPS URL → Compose) — CommunityScreen post 이미지, Firebase Storage download URL.
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Media3 — 영상 재생(ExoPlayer + PlayerView) + 업로드 전 720p 재인코딩(Transformer + effect).
+    // 도장 클립 (≤90초) 대상이라 1.4.x 안정 라인 사용. ffmpeg-kit 은 2025 deprecation 이후 Media3 가 사실상 표준.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
+    implementation("androidx.media3:media3-transformer:1.4.1")
+    implementation("androidx.media3:media3-effect:1.4.1")
+    implementation("androidx.media3:media3-common:1.4.1")
 
     // 카카오 로그인 SDK (v2-user) — Kakao OAuth → Firebase Custom Token 교환 진입점
     implementation("com.kakao.sdk:v2-user:2.20.6")

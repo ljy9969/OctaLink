@@ -55,6 +55,18 @@ interface MemberRepository {
     )
 
     /**
+     * 본인 FCM 디바이스 토큰 갱신 — [com.unboundapex.octalink.messaging.OctaLinkMessagingService.onNewToken]
+     * 콜백에서 호출. self-only write 라 Firestore rules 의 `memberSelfEditableOnly` 화이트리스트 포함 필요.
+     */
+    suspend fun updateFcmToken(memberId: String, token: String?)
+
+    /**
+     * 본인 알림 ON/OFF 일괄 갱신 — ProfileScreen 토글에서 호출. 단일 호출로 전체 prefs 덮어쓰기.
+     * key 는 [com.unboundapex.octalink.data.schema.NotificationType.name].
+     */
+    suspend fun updateNotificationPrefs(memberId: String, prefs: Map<String, Boolean>)
+
+    /**
      * 본인 회원 탈퇴 — [com.unboundapex.octalink.data.schema.MembershipStatus.LEFT] 로 전환.
      * 도장 명단(MemberDoc) 자체 삭제는 CREATOR/MASTER 권한 (별도 요청).
      * Cloud Function `leaveMembership` 호출 (server-side audit trail).

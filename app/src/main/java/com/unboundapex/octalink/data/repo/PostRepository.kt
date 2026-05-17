@@ -19,7 +19,7 @@ interface PostRepository {
 
     /**
      * 글 작성. id 는 Firestore 자동 생성. 작성 시점이 createdAt.
-     * imageUrl 은 사전 Storage 업로드 후 호출자가 전달.
+     * imageUrl / videoUrl 은 사전 Storage 업로드 후 호출자가 전달. 둘 중 하나만 채워야 함 (UI 가 강제).
      */
     suspend fun create(
         authorId: String,
@@ -29,6 +29,7 @@ interface PostRepository {
         body: String,
         tag: PostTag,
         imageUrl: String? = null,
+        videoUrl: String? = null,
     ): PostDoc
 
     /** 좋아요 토글 — likedBy 에 memberId 추가/제거. */

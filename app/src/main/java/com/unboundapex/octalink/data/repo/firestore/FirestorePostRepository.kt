@@ -49,6 +49,7 @@ class FirestorePostRepository : PostRepository {
         body: String,
         tag: PostTag,
         imageUrl: String?,
+        videoUrl: String?,
     ): PostDoc {
         val ref = col.document()
         val data = mapOf(
@@ -60,6 +61,7 @@ class FirestorePostRepository : PostRepository {
             "body" to body,
             "tag" to tag.name,
             "imageUrl" to imageUrl,
+            "videoUrl" to videoUrl,
             "likedBy" to emptyList<String>(),
             "createdAt" to FieldValue.serverTimestamp(),
         )

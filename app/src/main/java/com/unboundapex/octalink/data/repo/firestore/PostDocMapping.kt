@@ -20,6 +20,7 @@ internal fun PostDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "body" to body,
     "tag" to tag.name,
     "imageUrl" to imageUrl,
+    "videoUrl" to videoUrl,
     "likedBy" to likedBy,
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
 )
@@ -38,6 +39,7 @@ internal fun DocumentSnapshot.toPostDoc(): PostDoc? {
         body = getString("body").orEmpty(),
         tag = runCatching { PostTag.valueOf(tagName) }.getOrDefault(PostTag.RECORD),
         imageUrl = getString("imageUrl"),
+        videoUrl = getString("videoUrl"),
         likedBy = (get("likedBy") as? List<String>) ?: emptyList(),
         createdAt = (get("createdAt") as? Timestamp)?.let {
             Instant.ofEpochSecond(it.seconds, it.nanoseconds.toLong())

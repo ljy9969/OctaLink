@@ -47,6 +47,8 @@ internal fun MemberDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
             "speed" to it.speed,
         )
     },
+    "fcmToken" to fcmToken,
+    "notificationPrefs" to notificationPrefs,
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
     "updatedAt" to Timestamp(updatedAt.epochSecond, updatedAt.nano),
 )
@@ -85,6 +87,14 @@ internal fun DocumentSnapshot.toMemberDoc(): MemberDoc? {
                 speed     = (map["speed"]     as? Number)?.toFloat() ?: 0f,
             )
         },
+        fcmToken = getString("fcmToken"),
+        notificationPrefs = (get("notificationPrefs") as? Map<*, *>)
+            ?.mapNotNull { (k, v) ->
+                val key = k as? String ?: return@mapNotNull null
+                val value = v as? Boolean ?: return@mapNotNull null
+                key to value
+            }?.toMap()
+            .orEmpty(),
         createdAt = (get("createdAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
         updatedAt = (get("updatedAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
     )

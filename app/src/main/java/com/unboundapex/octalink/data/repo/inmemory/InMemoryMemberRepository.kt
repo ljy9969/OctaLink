@@ -81,6 +81,18 @@ class InMemoryMemberRepository(
         }
     }
 
+    override suspend fun updateFcmToken(memberId: String, token: String?) {
+        _members.value = _members.value.map { m ->
+            if (m.id != memberId) m else m.copy(fcmToken = token, updatedAt = Instant.now())
+        }
+    }
+
+    override suspend fun updateNotificationPrefs(memberId: String, prefs: Map<String, Boolean>) {
+        _members.value = _members.value.map { m ->
+            if (m.id != memberId) m else m.copy(notificationPrefs = prefs, updatedAt = Instant.now())
+        }
+    }
+
     override suspend fun leaveMembership(memberId: String) {
         setStatus(memberId, MembershipStatus.LEFT)
     }

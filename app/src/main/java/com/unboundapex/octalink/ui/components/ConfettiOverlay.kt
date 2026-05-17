@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -47,14 +48,18 @@ private val confettiPalette = listOf(
  * 챔피언 결정 시 1회 재생되는 색종이 폭죽 오버레이.
  *
  * triggerKey 가 null → non-null 로 변할 때 발사. 동일 값이 유지되면 다시 안 터짐.
- * 화면 하단(챔피언 배너 부근)에서 위로 솟구쳐 중력으로 자연스럽게 떨어짐.
- * Canvas 기본 동작으로 입력 이벤트는 가로채지 않음.
+ * 기본 발사 위치는 캔버스 하단 중앙(82%) — [origin] 으로 override 가능. UI 가 ChampionBanner 위치를
+ * `onGloballyPositioned` 로 캡처해 전달하면 거기서 폭죽이 터짐. Canvas 기본 동작으로 입력 이벤트는 가로채지 않음.
  *
  * 사용:
  * ```
  * Box {
  *     // 기존 콘텐츠
- *     ConfettiOverlay(triggerKey = champion, modifier = Modifier.matchParentSize())
+ *     ConfettiOverlay(
+ *         triggerKey = champion,
+ *         origin = bannerCenter, // optional, null = 기본 위치
+ *         modifier = Modifier.matchParentSize(),
+ *     )
  * }
  * ```
  */
@@ -62,10 +67,14 @@ private val confettiPalette = listOf(
 fun ConfettiOverlay(
     triggerKey: Any?,
     modifier: Modifier = Modifier,
+    origin: Offset? = null,
 ) {
     val particles = remember { mutableListOf<ConfettiParticle>() }
     var frame by remember { mutableLongStateOf(0L) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
+    // 첫 burst 직전에 origin 이 아직 set 되지 않은 경우 다음 burst 부터는 최신 값으로 emit 되도록
+    // [rememberUpdatedState] 사용 — LaunchedEffect 재시작 없이 loop 안에서 최신 값 read.
+    val originRef by rememberUpdatedState(newValue = origin)
 
     LaunchedEffect(triggerKey, canvasSize.width, canvasSize.height) {
         if (triggerKey == null || canvasSize == Size.Zero) {
@@ -78,8 +87,6 @@ fun ConfettiOverlay(
 
         val rng = Random(System.nanoTime())
         particles.clear()
-        val originX = canvasSize.width / 2f
-        val originY = canvasSize.height * 0.82f
         // 3연발 — 좀 더 큰 잔치 느낌
         val burstTimes = longArrayOf(0L, 220L, 480L)
         var burstIdx = 0
@@ -96,6 +103,9 @@ fun ConfettiOverlay(
             last = now
 
             while (burstIdx < burstTimes.size && elapsedMs >= burstTimes[burstIdx]) {
+                // 매 burst 마다 최신 origin 다시 read — 첫 frame 에 banner 위치가 아직 안 들어왔어도
+                // 다음 burst (220ms / 480ms) 부터는 정확한 위치에서 emit.
+                val o = originRef ?: Offset(canvasSize.width / 2f, canvasSize.height * 0.82f)
                 repeat(35) {
                     // 위로 솟는 부채꼴 (-150° ~ -30°)
                     val angleDeg = -150f + rng.nextFloat() * 120f
@@ -104,8 +114,8 @@ fun ConfettiOverlay(
                     val jitterX = (rng.nextFloat() - 0.5f) * 120f
                     particles.add(
                         ConfettiParticle(
-                            x = originX + jitterX,
-                            y = originY,
+                            x = o.x + jitterX,
+                            y = o.y,
                             vx = cos(angleRad) * speed,
                             vy = sin(angleRad) * speed,
                             rotation = rng.nextFloat() * 360f,

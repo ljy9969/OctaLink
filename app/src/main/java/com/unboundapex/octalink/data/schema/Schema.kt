@@ -73,9 +73,79 @@ data class MemberDoc(
     val birthyear: String? = null,     // "YYYY" 형식 (예: "1995")
     /** 6축 스킬 최신 스냅샷. null 이면 미평가. 관장이 [SkillSet] 으로 입력/갱신. */
     val skills: SkillSet? = null,
+    /**
+     * FCM 디바이스 토큰 — 푸시 알림 발송 대상. [OctaLinkMessagingService.onNewToken] 에서 자동 갱신.
+     * null = 아직 토큰 미수신(앱 첫 실행 전) 또는 사용자 토글로 알림 일괄 OFF.
+     */
+    val fcmToken: String? = null,
+    /**
+     * 알림 종류별 ON/OFF — key 는 [NotificationType.name]. 키 누락 시 [NotificationType.defaultEnabled] 값 사용.
+     * 본인이 ProfileScreen 에서 직접 토글. Firestore rules 의 self-editable 화이트리스트에 포함.
+     */
+    val notificationPrefs: Map<String, Boolean> = emptyMap(),
     val createdAt: Instant,
     val updatedAt: Instant,
 )
+
+/**
+ * 푸시 알림 종류 — 사용자가 ProfileScreen 에서 개별 ON/OFF 가능.
+ * 각 enum 의 [channelId]/[channelName]/[channelDescription] 는 NotificationChannel 등록 시 사용.
+ *
+ * FCM payload 의 `type` 데이터 필드가 [name] 과 일치하면 해당 채널로 라우팅.
+ * 채널 분리 사유: Android 8.0+ 부터 사용자가 OS 알림 설정에서 채널별로 끌 수 있고, 알림 톤/중요도 분리 가능.
+ */
+enum class NotificationType(
+    val displayName: String,
+    val description: String,
+    val channelId: String,
+    val channelName: String,
+    val channelDescription: String,
+    val defaultEnabled: Boolean = true,
+) {
+    COMMENT(
+        displayName = "한 줄 코멘트",
+        description = "운영진이 내게 한 줄 코멘트를 남겼을 때",
+        channelId = "octalink_comment",
+        channelName = "한 줄 코멘트",
+        channelDescription = "운영진이 보낸 한 줄 코멘트 알림",
+    ),
+    TOURNAMENT_DRAWN(
+        displayName = "토너먼트 추첨",
+        description = "이번 주 새 토너먼트가 정해졌을 때",
+        channelId = "octalink_tournament",
+        channelName = "토너먼트",
+        channelDescription = "새 대진표 추첨 알림",
+    ),
+    NEW_NOTICE(
+        displayName = "새 공지",
+        description = "운영진이 커뮤니티에 새 공지를 작성했을 때",
+        channelId = "octalink_notice",
+        channelName = "공지",
+        channelDescription = "운영진 공지 알림",
+    ),
+    SIGNUP_RESULT(
+        displayName = "가입 승인 결과",
+        description = "관장이 내 가입 신청을 승인/거부할 때",
+        channelId = "octalink_signup",
+        channelName = "가입 결과",
+        channelDescription = "가입 승인/거부 결과 알림",
+    ),
+    CLASS_REMINDER(
+        displayName = "수업 30분 전 리마인더",
+        description = "체육관 영업일의 각 수업 시작 30분 전",
+        channelId = "octalink_class",
+        channelName = "수업 리마인더",
+        channelDescription = "오늘 수업 시작 30분 전 리마인더",
+        defaultEnabled = false, // 잦은 알림 — 옵트인 방식
+    ),
+    SKILL_UPDATED(
+        displayName = "스킬 점수 갱신",
+        description = "내 스킬 점수가 갱신되었을 때",
+        channelId = "octalink_skill",
+        channelName = "스킬 점수",
+        channelDescription = "스킬 점수 갱신 알림",
+    ),
+}
 
 /** 정기 클래스 정의 (요일별 운영 슬롯 — 변경 빈도 낮음) */
 data class ClassDefDoc(
@@ -156,8 +226,10 @@ data class PostDoc(
     val title: String,                  // 짧은 제목 (선택, 빈 문자열 허용)
     val body: String,                   // 본문
     val tag: PostTag,
-    /** Firebase Storage download URL — null 이면 텍스트만 */
+    /** Firebase Storage download URL — null 이면 첨부 없음. [imageUrl] / [videoUrl] 은 상호 배타. */
     val imageUrl: String? = null,
+    /** Firebase Storage download URL (mp4). null 이면 첨부 없음. */
+    val videoUrl: String? = null,
     /** 좋아요 누른 회원 id 셋. 토글 시 arrayUnion / arrayRemove 사용 */
     val likedBy: List<String> = emptyList(),
     val createdAt: Instant,

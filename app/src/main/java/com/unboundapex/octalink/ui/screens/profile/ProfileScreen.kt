@@ -56,25 +56,48 @@ private fun dayOfWeekKr(d: java.time.DayOfWeek): String = when (d) {
 @Composable
 fun ProfileScreen(
     sessionVm: SessionViewModel,
+    onOpenTournamentHistory: () -> Unit = {},
     commentsVm: MyCommentsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     skillsVm: MySkillsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    recordVm: MyTournamentRecordViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    notifPrefsVm: NotificationPrefsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
     var leaveConfirmOpen by remember { mutableStateOf(false) }
     val avatar = avatarById(session.avatarId)
     val belt = session.belt
 
-    // 본인 회원 id 가 set 되면 코멘트/스킬 구독 시작
+    // 본인 회원 id 가 set 되면 코멘트/스킬/전적/알림 prefs 구독 시작
     val myMemberId = session.member?.id
     androidx.compose.runtime.LaunchedEffect(myMemberId) {
         commentsVm.observeFor(myMemberId)
         skillsVm.observeFor(myMemberId)
+        recordVm.observeForMember(myMemberId)
+        notifPrefsVm.observeFor(myMemberId)
     }
+    val notifPrefs by notifPrefsVm.prefs.collectAsState()
+
+    // POST_NOTIFICATIONS 런타임 권한 launcher — 토글 ON 시 권한 없으면 요청.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pendingToggleType by remember { mutableStateOf<com.unboundapex.octalink.data.schema.NotificationType?>(null) }
+    val notifPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val type = pendingToggleType ?: return@rememberLauncherForActivityResult
+        // 권한 결과와 무관하게 사용자 의도(ON 토글)는 저장 — 거부 시 알림은 안 뜨지만 prefs 는 유지.
+        notifPrefsVm.setEnabled(type, true)
+        if (!granted) {
+            android.util.Log.w("OctaLink.NotifPrefs", "POST_NOTIFICATIONS denied — toggle saved but no notifications will show")
+        }
+        pendingToggleType = null
+    }
+    var notifDialogOpen by remember { mutableStateOf(false) }
     val coachComments by commentsVm.myComments.collectAsState()
     // 차트는 [SkillScoreDoc] 컬렉션을 직접 구독 — 콘솔에서 점수 doc 삭제/수정해도 즉시 반영.
     // [MemberDoc.skills] 스냅샷은 다른 화면(슬라이더 기준선 등) 의 빠른 접근용으로만 유지.
     val skillSet by skillsVm.skills.collectAsState()
     val skills = skillSet.toStats()
+    val tournamentRecord by recordVm.record.collectAsState()
     // 실제 도장 입관일 — Firestore `members/{uid}.joinDate` 에서 (가입 폼에서 사용자가 입력).
     // 아직 회원 doc 이 없는 LOADING 단계 폴백은 오늘 (이번 달 입관 표시).
     val joinDate = session.member?.joinDate ?: LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
@@ -147,19 +170,20 @@ fun ProfileScreen(
                 }
             }
             item {
-                PosseCard {
+                // 토너먼트 전적 — 완료된 토너먼트(`finishedAt != null`) 누적. 탭하면 히스토리 진입.
+                PosseCard(modifier = Modifier.clickable { onOpenTournamentHistory() }) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.padding(start = 12.dp)) {
                             Text(
-                                "승률",
+                                "우승",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                "64%",
+                                "${tournamentRecord.wins}회",
                                 style = MaterialTheme.typography.displayLarge,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -168,19 +192,36 @@ fun ProfileScreen(
                             modifier = Modifier.weight(1f),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                "스파링 25전 16승 9패",
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                "최근 10경기 7승 3패",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            if (tournamentRecord.participated == 0) {
+                                Text(
+                                    "참가한 토너먼트 없음",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    "히스토리 보기 →",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                Text(
+                                    "토너먼트 ${tournamentRecord.participated}전 · 준우승 ${tournamentRecord.runnerUps}회",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    "히스토리 보기 →",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -207,6 +248,38 @@ fun ProfileScreen(
                             Text(c.text, style = MaterialTheme.typography.bodyLarge)
                             Spacer(Modifier.height(8.dp))
                         }
+                    }
+                }
+            }
+
+            // 알림 설정 — 카드 탭 시 모달로 토글 리스트 노출.
+            item {
+                PosseCard(modifier = Modifier.clickable { notifDialogOpen = true }) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "알림 설정",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            // SIGNUP_RESULT 제외 (Profile 진입자에겐 무의미). 토글 다이얼로그와 카운트 일치.
+                            val visiblePrefs = notifPrefs.filterKeys {
+                                it != com.unboundapex.octalink.data.schema.NotificationType.SIGNUP_RESULT
+                            }
+                            val onCount = visiblePrefs.count { it.value }
+                            Text(
+                                "$onCount / ${visiblePrefs.size} 종 켜짐 · 탭하여 변경",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            "→",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
@@ -242,6 +315,64 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+
+    if (notifDialogOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { notifDialogOpen = false },
+            title = { Text("알림 설정", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Text(
+                        "푸시 알림 종류별로 켜고 끌 수 있습니다.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // SIGNUP_RESULT 는 PENDING 상태에서만 의미 있는 알림 — Profile 진입자는 이미
+                    // APPROVED 라 토글이 무의미해 UI 에서 제외. 데이터 모델/CF 트리거는 그대로 유지.
+                    com.unboundapex.octalink.data.schema.NotificationType.values()
+                        .filter { it != com.unboundapex.octalink.data.schema.NotificationType.SIGNUP_RESULT }
+                        .forEach { type ->
+                        NotificationToggleRow(
+                            type = type,
+                            enabled = notifPrefs[type] ?: type.defaultEnabled,
+                            onToggle = { newValue ->
+                                if (newValue) {
+                                    // ON 으로 전환 — Android 13+ 면 권한 확인.
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                                            context,
+                                            android.Manifest.permission.POST_NOTIFICATIONS,
+                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                        if (granted) {
+                                            notifPrefsVm.setEnabled(type, true)
+                                        } else {
+                                            pendingToggleType = type
+                                            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                    } else {
+                                        notifPrefsVm.setEnabled(type, true)
+                                    }
+                                } else {
+                                    notifPrefsVm.setEnabled(type, false)
+                                }
+                            },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Text(
+                    "닫기",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable { notifDialogOpen = false }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
+        )
     }
 
     if (leaveConfirmOpen) {
@@ -290,3 +421,33 @@ fun ProfileScreen(
 
 }
 
+/** 알림 종류 한 줄 — 타이틀/설명 + Material3 Switch. */
+@Composable
+private fun NotificationToggleRow(
+    type: com.unboundapex.octalink.data.schema.NotificationType,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                type.displayName,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                type.description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.material3.Switch(
+            checked = enabled,
+            onCheckedChange = onToggle,
+        )
+    }
+}

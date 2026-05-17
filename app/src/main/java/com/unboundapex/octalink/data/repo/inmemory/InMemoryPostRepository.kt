@@ -30,6 +30,7 @@ class InMemoryPostRepository(
         body: String,
         tag: PostTag,
         imageUrl: String?,
+        videoUrl: String?,
     ): PostDoc {
         val doc = PostDoc(
             id = UUID.randomUUID().toString(),
@@ -40,6 +41,7 @@ class InMemoryPostRepository(
             body = body,
             tag = tag,
             imageUrl = imageUrl,
+            videoUrl = videoUrl,
             createdAt = Instant.now(),
         )
         _posts.value = _posts.value + doc

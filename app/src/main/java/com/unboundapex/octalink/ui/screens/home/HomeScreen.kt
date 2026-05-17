@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.R
+import com.unboundapex.octalink.data.curriculumForToday
+import com.unboundapex.octalink.data.isClosed
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.CageIcon
 import com.unboundapex.octalink.ui.components.PosseCard
@@ -59,23 +61,13 @@ import com.unboundapex.octalink.ui.screens.attendance.GYM_DAYS_PER_WEEK
 import com.unboundapex.octalink.ui.screens.profile.MyCommentsViewModel
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
 private data class FeedItem(val title: String, val meta: String, val body: String)
-
-private val todayClass = FeedItem(
-    title = "오늘의 커리큘럼",
-    meta = "관장 김파시",
-    body = "잽-스트레이트 거리감 + 인사이드 로우킥",
-)
-
-private val sparringMatch = FeedItem(
-    title = "스파링 매치",
-    meta = "5/8 금 19:30 · 라이트급",
-    body = "대진표가 업데이트 되었습니다. 확인하고 컨디션 체크해주세요.",
-)
 
 /** "받은 코멘트 없음" placeholder. 실제 데이터가 있으면 ViewModel 결과로 대체. */
 private val emptyOneLineComment = FeedItem(
@@ -114,6 +106,8 @@ fun HomeScreen(
     myCommentsVm: MyCommentsViewModel = viewModel(),
     weeklyAttendanceVm: HomeWeeklyAttendanceViewModel = viewModel(),
     weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
+    gymActivityVm: HomeGymActivityViewModel = viewModel(),
+    sparringMatchVm: HomeSparringMatchViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
     val memberId = session.member?.id
@@ -129,6 +123,20 @@ fun HomeScreen(
     val weeklyPct = weeklyCapped * 100 / GYM_DAYS_PER_WEEK
     val weeklyMission by weeklyMissionVm.mission.collectAsState()
     val weeklyMissionText = weeklyMission?.text ?: "이번 주 미션이 아직 설정되지 않았습니다."
+    val gymActivity by gymActivityVm.state.collectAsState()
+    val sparringMatch by sparringMatchVm.match.collectAsState()
+    val sparringMatchItem = sparringMatch?.let { m ->
+        val date = m.drawnAt.atZone(ZoneId.of("Asia/Seoul")).toLocalDate()
+        FeedItem(
+            title = "스파링 매치",
+            meta = "${date.format(commentDateFmt)} ${dayKr(date.dayOfWeek)} · ${m.title}",
+            body = "대진표가 업데이트 되었습니다. 확인하고 컨디션 체크해주세요.",
+        )
+    } ?: FeedItem(
+        title = "스파링 매치",
+        meta = "",
+        body = "이번 주 대진표 추첨이 아직 없습니다.",
+    )
     // 가장 최신 (classDate, 동일하면 createdAt) 한 건만 홈 카드에 노출
     val latestComment = remember(myComments) {
         myComments.maxWithOrNull(
@@ -142,6 +150,19 @@ fun HomeScreen(
             body = c.text,
         )
     } ?: emptyOneLineComment
+
+    // 오늘의 커리큘럼 — 평일 그룹 수업 매핑. 주말(토/일) 은 [curriculumForToday] 가 null,
+    // 평일 공휴일은 weeklyCurriculum 에는 매칭되지만 [isClosed] 가 true → 카드 자체를 숨김.
+    val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
+    val todayCurriculum = remember(today) { curriculumForToday(today) }
+    val gymClosedToday = remember(today) { isClosed(today) }
+    val todayCurriculumItem = if (todayCurriculum != null && !gymClosedToday) {
+        FeedItem(
+            title = "오늘의 커리큘럼",
+            meta = "${todayCurriculum.coach} · ${todayCurriculum.tag}",
+            body = todayCurriculum.theme,
+        )
+    } else null
 
     PosseScreen(
         subtitle = "개인의 성장, 함께하는 진화",
@@ -165,20 +186,32 @@ fun HomeScreen(
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text(
-                            "72%",
-                            style = MaterialTheme.typography.displayLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            "출석 18 / 등록 25",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (gymActivity.isClosed) {
+                            // 휴무일(일요일/공휴일) — 활성도 수치 대신 "오늘은\n휴무" 노출.
+                            Text(
+                                "오늘은\n휴무",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Text(
+                                "${gymActivity.percent}%",
+                                style = MaterialTheme.typography.displayLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                "출석 ${gymActivity.attendCount} / 등록 ${gymActivity.totalMembers}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                     PosseCard(
                         modifier = Modifier
@@ -271,8 +304,10 @@ fun HomeScreen(
                     }
                 }
             }
-            item { TitleMetaCard(todayClass) }
-            item { TitleMetaCard(sparringMatch) }
+            if (todayCurriculumItem != null) {
+                item { TitleMetaCard(todayCurriculumItem) }
+            }
+            item { TitleMetaCard(sparringMatchItem) }
             item { TitleMetaCard(oneLineComment) }
             item { GymInfoCard(onClick = onOpenInfo) }
         }

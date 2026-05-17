@@ -4,8 +4,9 @@ rules_version = '2';
 //
 // 경로 규약:
 //   posts/images/{filename}  — 커뮤니티 글 첨부 이미지 (현재 단일 이미지 per post, JPEG)
+//   posts/videos/{filename}  — 커뮤니티 글 첨부 영상 (mp4, 1분 30초 / 100MB 이하)
 //
-// 사이즈/타입 검증은 클라이언트(`ImageUploader.compressImage`) + 룰 양쪽 강제.
+// 사이즈/타입 검증은 클라이언트(`ImageUploader` / `VideoUploader`) + 룰 양쪽 강제.
 // Blaze 비용 직격 영역이라 무제한 업로드 차단 필수.
 
 service firebase.storage {
@@ -24,6 +25,17 @@ service firebase.storage {
       allow write: if isAuth()
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
+      allow delete: if isAuth();
+    }
+
+    // posts/videos — 커뮤니티 글 영상
+    //   write: 인증 + 100MB 이하 + video/* MIME. 재생 시간 cap(90s) 은 Storage 에서 검증 불가,
+    //          클라이언트 `VideoUploader.validate` 가 MediaMetadataRetriever 로 사전 차단.
+    match /posts/videos/{filename} {
+      allow read: if isAuth();
+      allow write: if isAuth()
+        && request.resource.size < 100 * 1024 * 1024
+        && request.resource.contentType.matches('video/.*');
       allow delete: if isAuth();
     }
 

@@ -1,4 +1,8 @@
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
+import {
+  onDocumentCreated,
+  onDocumentUpdated,
+} from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 
@@ -520,3 +524,245 @@ async function handleScopeWithdraw(uid: string, scopes: string[]): Promise<void>
   logger.info(`[kakaoWebhook] scope.withdraw uid=${uid}: cleared ${cleared} field(s) for scopes=${JSON.stringify(scopes)}`);
 }
 
+// ════════════════════════════════════════════════════════
+// 푸시 알림 (FCM) — Firestore 이벤트 트리거 기반 발송
+// ════════════════════════════════════════════════════════
+//
+// 클라이언트 Schema.kt 의 NotificationType enum 과 1:1 매칭 — type 키 값:
+//   COMMENT / TOURNAMENT_DRAWN / NEW_NOTICE / SIGNUP_RESULT / SKILL_UPDATED
+//   (CLASS_REMINDER 는 클라이언트 WorkManager 가 직접 fire — 서버 트리거 없음)
+//
+// payload 구조: data.{ type, title, body } + notification.{ title, body }.
+//   - notification 필드: foreground/background 모두 OS 가 표시 가능. iOS 호환.
+//   - data 필드: OctaLinkMessagingService.onMessageReceived 가 type 으로 채널 라우팅 + prefs 필터.
+//
+// prefs 필터 — 본인이 ProfileScreen 에서 OFF 한 알림은 발송 자체를 skip.
+
+type NotificationTypeKey =
+  | "COMMENT"
+  | "TOURNAMENT_DRAWN"
+  | "NEW_NOTICE"
+  | "SIGNUP_RESULT"
+  | "SKILL_UPDATED";
+
+/** [NotificationType.defaultEnabled] 과 일치 — 클라이언트에서 prefs 키 누락 시 기본값. */
+const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
+  COMMENT: true,
+  TOURNAMENT_DRAWN: true,
+  NEW_NOTICE: true,
+  SIGNUP_RESULT: true,
+  SKILL_UPDATED: true,
+};
+
+/**
+ * 주어진 memberId 들 중 (a) fcmToken 보유 + (b) 해당 type prefs 가 ON 인 사람만 추려서
+ * FCM multicast 발송. 401(invalid token) 응답은 자동 토큰 정리 (members/{uid}.fcmToken = null).
+ */
+async function sendNotificationTo(
+  memberIds: string[],
+  type: NotificationTypeKey,
+  title: string,
+  body: string,
+): Promise<void> {
+  if (memberIds.length === 0) return;
+  const db = admin.firestore();
+  const defaultEnabled = DEFAULT_ENABLED[type];
+
+  // distinct id → 토큰/uid 쌍 수집. 빠진 doc / 토큰 없음 / pref OFF 는 모두 skip.
+  const idTokenPairs: Array<{ uid: string; token: string }> = [];
+  await Promise.all(
+    Array.from(new Set(memberIds)).map(async (memberId) => {
+      const snap = await db.collection("members").doc(memberId).get();
+      const data = snap.data();
+      if (!data) return;
+      const token = data.fcmToken as string | undefined;
+      if (!token) return;
+      const prefs = (data.notificationPrefs as Record<string, boolean> | undefined) ?? {};
+      const enabled = prefs[type] !== undefined ? prefs[type] : defaultEnabled;
+      if (!enabled) return;
+      idTokenPairs.push({ uid: memberId, token });
+    }),
+  );
+  if (idTokenPairs.length === 0) {
+    logger.info(`[fcm] type=${type} — 0 recipients after filter (sent to none of ${memberIds.length})`);
+    return;
+  }
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens: idTokenPairs.map((p) => p.token),
+    data: { type, title, body },
+    notification: { title, body },
+    android: {
+      priority: "high",
+    },
+  });
+  logger.info(`[fcm] type=${type} sent=${response.successCount}/${idTokenPairs.length} failed=${response.failureCount}`);
+
+  // invalid token cleanup — Firebase 가 unregistered/invalid-argument 응답 시 token 폐기.
+  const cleanupPromises: Promise<unknown>[] = [];
+  response.responses.forEach((r, i) => {
+    if (r.success) return;
+    const errCode = r.error?.code ?? "";
+    if (errCode === "messaging/registration-token-not-registered" || errCode === "messaging/invalid-argument") {
+      const { uid } = idTokenPairs[i];
+      logger.info(`[fcm] cleanup stale token uid=${uid} reason=${errCode}`);
+      cleanupPromises.push(db.collection("members").doc(uid).update({ fcmToken: null }));
+    } else {
+      logger.warn(`[fcm] send error uid=${idTokenPairs[i].uid} code=${errCode}`);
+    }
+  });
+  if (cleanupPromises.length > 0) await Promise.all(cleanupPromises);
+}
+
+/**
+ * 한 줄 코멘트 — 운영진이 회원에게 작성. `members/{memberId}/comments/{commentId}` create 시 본인에게 알림.
+ */
+export const notifyOnCommentCreated = onDocumentCreated(
+  {
+    document: "members/{memberId}/comments/{commentId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    const memberId = event.params.memberId;
+    const byName = (data.byMasterName as string | undefined) ?? "운영진";
+    const text = (data.text as string | undefined) ?? "";
+    const snippet = text.length > 60 ? text.slice(0, 60) + "…" : text;
+    await sendNotificationTo(
+      [memberId],
+      "COMMENT",
+      `${byName} 한 줄 코멘트`,
+      snippet,
+    );
+  },
+);
+
+/**
+ * 토너먼트 추첨 — `tournaments/{tournamentId}` create 시 모든 참가자에게.
+ * matches 서브컬렉션 은 같은 batch 에서 작성되므로 doc 생성 직후 read 가능.
+ */
+export const notifyOnTournamentCreated = onDocumentCreated(
+  {
+    document: "tournaments/{tournamentId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    const tournamentId = event.params.tournamentId;
+    const title = (data.title as string | undefined) ?? "토너먼트";
+    const matchesSnap = await admin.firestore()
+      .collection(`tournaments/${tournamentId}/matches`)
+      .get();
+    const participantIds = Array.from(new Set(
+      matchesSnap.docs.flatMap((d) => {
+        const md = d.data();
+        return [md.redMemberId, md.blueMemberId];
+      }).filter((id): id is string => typeof id === "string" && id.length > 0),
+    ));
+    if (participantIds.length === 0) {
+      logger.info(`[fcm] tournament ${tournamentId} has no participants — skip`);
+      return;
+    }
+    await sendNotificationTo(
+      participantIds,
+      "TOURNAMENT_DRAWN",
+      "토너먼트 추첨 완료",
+      `${title} 대진표가 업데이트되었습니다.`,
+    );
+  },
+);
+
+/**
+ * 새 공지 — 운영진이 NOTICE 태그로 글 작성 시 모든 APPROVED 회원(작성자 제외)에게.
+ */
+export const notifyOnNoticeCreated = onDocumentCreated(
+  {
+    document: "posts/{postId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    if (data.tag !== "NOTICE") return;
+    const authorId = data.authorId as string | undefined;
+    const titleText = (data.title as string | undefined) ?? "";
+    const body = (data.body as string | undefined) ?? "";
+    const snippet = body.length > 80 ? body.slice(0, 80) + "…" : body;
+
+    // 모든 APPROVED 회원 fetch (작성자 제외).
+    const membersSnap = await admin.firestore()
+      .collection("members")
+      .where("status", "==", "APPROVED")
+      .get();
+    const targetIds = membersSnap.docs
+      .map((d) => d.id)
+      .filter((id) => id !== authorId);
+    await sendNotificationTo(
+      targetIds,
+      "NEW_NOTICE",
+      titleText.trim().length > 0 ? `[공지] ${titleText}` : "새 공지",
+      snippet,
+    );
+  },
+);
+
+/**
+ * 가입 승인 결과 — `members/{memberId}` status 가 PENDING 에서 변경될 때 본인에게.
+ * APPROVED / REJECTED 만 노티 (LEFT/SUSPENDED 는 별도 시나리오).
+ */
+export const notifyOnSignupResult = onDocumentUpdated(
+  {
+    document: "members/{memberId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+    const beforeStatus = before.status as string | undefined;
+    const afterStatus = after.status as string | undefined;
+    if (beforeStatus !== "PENDING") return;
+    if (afterStatus !== "APPROVED" && afterStatus !== "REJECTED") return;
+
+    const memberId = event.params.memberId;
+    const approved = afterStatus === "APPROVED";
+    await sendNotificationTo(
+      [memberId],
+      "SIGNUP_RESULT",
+      approved ? "가입이 승인되었습니다 🎉" : "가입 신청 결과",
+      approved
+        ? "이제 OctaLink 의 모든 기능을 사용할 수 있어요."
+        : "관장님께 문의 부탁드립니다.",
+    );
+  },
+);
+
+/**
+ * 스킬 점수 갱신 — `members/{memberId}.skills` 필드가 변경될 때 본인에게.
+ * skills 가 새로 생성(null → set) 되거나 기존 값에서 변경된 경우 모두 포함.
+ */
+export const notifyOnSkillsUpdated = onDocumentUpdated(
+  {
+    document: "members/{memberId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+    // 깊은 비교 회피 — JSON stringify 로 충분 (Float/Number 동등성 + key order 안정).
+    const beforeJson = JSON.stringify(before.skills ?? null);
+    const afterJson = JSON.stringify(after.skills ?? null);
+    if (beforeJson === afterJson) return;
+
+    const memberId = event.params.memberId;
+    await sendNotificationTo(
+      [memberId],
+      "SKILL_UPDATED",
+      "스킬 점수가 갱신되었습니다",
+      "프로필에서 새 6축 차트를 확인해보세요.",
+    );
+  },
+);
