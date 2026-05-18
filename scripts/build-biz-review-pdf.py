@@ -187,6 +187,7 @@ def build():
     meta_lines = [
         "운영: Team Posse Striking 강남점 / 제작: Unbound Apex Systems",
         "Android · Kakao OAuth · 카카오 동의 항목 사용처: 회원 정보 prefill + 캐릭터 자동 부여",
+        "본 문서는 카카오 비즈니스 정보 심사 재신청용입니다. 실명 등 개인정보는 모두 마스킹 처리되었습니다.",
     ]
     for i, t in enumerate(meta_lines):
         bbox = draw.textbbox((0, 0), t, font=f_meta)
@@ -230,8 +231,8 @@ def build():
     sec3_y = sec2_shot_y + SHOT_H + CAPTION_H + 70
     draw_section_header(draw, margin, sec3_y, "부가 정보", PAGE_W - 2 * margin)
     sec3_shot_y = sec3_y + SECTION_LABEL_H + 30
-    # 단일 shot — 좌측에 두고 우측에 설명 텍스트 추가
-    x = margin + 40
+    # 단일 shot — 페이지 가로 중앙 정렬, 우측에 설명 텍스트
+    x = (PAGE_W - SHOT_W) // 2
     draw_shot(canvas, draw, shots[7][0], x, sec3_shot_y, 8, shots[7][1], shots[7][2])
     # 우측 설명 박스
     tx = x + SHOT_W + 100
@@ -251,13 +252,7 @@ def build():
     for i, t in enumerate(info_lines):
         draw.text((tx, ty + 60 + i * 44), t, fill=GRAY if i > 0 else INK, font=f_b)
 
-    # ─── 6. 푸터 ─────────────────────────────────────────
-    foot_y = PAGE_H - 80
-    f_foot = font(20)
-    draw.text((margin, foot_y), "본 문서는 카카오 비즈니스 정보 심사 재신청용입니다. 실명 등 개인정보는 모두 마스킹 처리되었습니다.",
-              fill=GRAY, font=f_foot)
-
-    # ─── 7. PDF 저장 ─────────────────────────────────────
+    # ─── 6. PDF 저장 ─────────────────────────────────────
     out_path = os.path.join(OUT_DIR, "octalink-biz-review.pdf")
     canvas.save(out_path, "PDF", resolution=150.0, quality=85, optimize=True)
     size_mb = os.path.getsize(out_path) / 1024 / 1024
