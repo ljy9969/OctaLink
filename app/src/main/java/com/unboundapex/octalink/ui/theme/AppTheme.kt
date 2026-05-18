@@ -2,12 +2,9 @@ package com.unboundapex.octalink.ui.theme
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 /**
  * 회원 본인이 ProfileScreen 에서 선택하는 앱 UI 테마.
@@ -27,13 +24,16 @@ enum class AppTheme(val displayName: String) {
 private const val PREFS_NAME = "octalink_ui_theme"
 private const val KEY_THEME = "selected_theme"
 
-internal fun loadAppTheme(context: Context): AppTheme {
+/** 신규 설치 / SharedPreferences 미존재 / 파싱 실패 시 폴백. 라이트가 기본 — 일반 사용자 친숙도 ↑. */
+private val DEFAULT_THEME = AppTheme.LIGHT
+
+private fun loadAppTheme(context: Context): AppTheme {
     val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val name = prefs.getString(KEY_THEME, AppTheme.DARK.name) ?: AppTheme.DARK.name
-    return runCatching { AppTheme.valueOf(name) }.getOrDefault(AppTheme.DARK)
+    val name = prefs.getString(KEY_THEME, DEFAULT_THEME.name) ?: DEFAULT_THEME.name
+    return runCatching { AppTheme.valueOf(name) }.getOrDefault(DEFAULT_THEME)
 }
 
-internal fun saveAppTheme(context: Context, theme: AppTheme) {
+private fun saveAppTheme(context: Context, theme: AppTheme) {
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
         .putString(KEY_THEME, theme.name)
@@ -41,18 +41,33 @@ internal fun saveAppTheme(context: Context, theme: AppTheme) {
 }
 
 /**
- * 테마 선택 상태 + 영속화. [MainActivity] 에서 1회 hoist → `OctaLinkTheme` 에 전달 → ProfileScreen 에서 토글.
- * Application context 보유라 Configuration 변경 후에도 동일 인스턴스.
+ * 앱 전역 테마 상태 — 싱글톤 [StateFlow]. ViewModel 로 만들지 않는 이유:
+ *
+ * Compose 의 `viewModel()` 은 가장 가까운 `LocalViewModelStoreOwner` 를 잡는데,
+ * MainActivity.setContent 는 Activity scope, NavHost composable 내부의 ProfileScreen 은
+ * 자기 NavBackStackEntry scope 라 *서로 다른 store* 인스턴스를 갖는다. 한쪽에서 setter 호출해도
+ * 다른 쪽의 collectAsState 가 갱신되지 않음 → 테마 즉시 적용 안 되는 버그.
+ *
+ * 테마는 화면 라이프사이클과 무관한 앱 전역 상태이므로 object 싱글톤이 적합.
+ * [init] 은 [MainActivity.onCreate] 에서 1회 호출 (멱등).
  */
-class AppThemeViewModel(application: android.app.Application) : AndroidViewModel(application) {
-    private val _theme = MutableStateFlow(loadAppTheme(application))
+object AppThemeStore {
+    private var appContext: Context? = null
+    // init() 호출 전 잠깐 노출되는 임시 기본값 — DEFAULT_THEME 과 일치시켜 첫 프레임 깜빡임 회피.
+    private val _theme = MutableStateFlow(DEFAULT_THEME)
     val theme: StateFlow<AppTheme> = _theme.asStateFlow()
+
+    /** Application 또는 MainActivity 시작 시 1회 호출. 멱등 — 두 번째 호출은 no-op. */
+    fun init(context: Context) {
+        if (appContext != null) return
+        val app = context.applicationContext
+        appContext = app
+        _theme.value = loadAppTheme(app)
+    }
 
     fun set(theme: AppTheme) {
         if (_theme.value == theme) return
-        viewModelScope.launch {
-            saveAppTheme(getApplication(), theme)
-        }
         _theme.value = theme
+        appContext?.let { saveAppTheme(it, theme) }
     }
 }

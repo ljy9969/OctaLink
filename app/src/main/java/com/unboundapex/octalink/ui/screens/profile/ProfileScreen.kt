@@ -42,7 +42,7 @@ import com.unboundapex.octalink.ui.components.HexagonSkillChart
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.theme.AppTheme
-import com.unboundapex.octalink.ui.theme.AppThemeViewModel
+import com.unboundapex.octalink.ui.theme.AppThemeStore
 import java.time.LocalDate
 import java.time.Period
 
@@ -72,10 +72,10 @@ fun ProfileScreen(
     skillsVm: MySkillsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     recordVm: MyTournamentRecordViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     notifPrefsVm: NotificationPrefsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-    appThemeVm: AppThemeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
-    val currentAppTheme by appThemeVm.theme.collectAsState()
+    // 앱 전역 싱글톤 — MainActivity 와 같은 StateFlow 를 보므로 set 즉시 전체 트리 재구성.
+    val currentAppTheme by AppThemeStore.theme.collectAsState()
     var leaveConfirmOpen by remember { mutableStateOf(false) }
     val avatar = avatarById(session.avatarId)
     val belt = session.belt
@@ -305,7 +305,7 @@ fun ProfileScreen(
             item {
                 ThemePickerCard(
                     current = currentAppTheme,
-                    onSelect = { appThemeVm.set(it) },
+                    onSelect = { AppThemeStore.set(it) },
                 )
             }
 
@@ -354,11 +354,15 @@ fun ProfileScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
-                    // SIGNUP_RESULT 는 PENDING 상태에서만 의미 있는 알림 — Profile 진입자는 이미
-                    // APPROVED 라 토글이 무의미해 UI 에서 제외. 데이터 모델/CF 트리거는 그대로 유지.
-                    com.unboundapex.octalink.data.schema.NotificationType.values()
-                        .filter { it != com.unboundapex.octalink.data.schema.NotificationType.SIGNUP_RESULT }
-                        .forEach { type ->
+                    // 표시 순서 — 사용 빈도 / 중요도 기준 명시 배치. enum 선언 순서와 분리해 자유 정렬.
+                    // SIGNUP_RESULT 는 PENDING 단계 전용이라 APPROVED 회원의 Profile 에서 노출 안 함.
+                    listOf(
+                        com.unboundapex.octalink.data.schema.NotificationType.COMMENT,
+                        com.unboundapex.octalink.data.schema.NotificationType.SKILL_UPDATED,
+                        com.unboundapex.octalink.data.schema.NotificationType.TOURNAMENT_DRAWN,
+                        com.unboundapex.octalink.data.schema.NotificationType.NEW_NOTICE,
+                        com.unboundapex.octalink.data.schema.NotificationType.CLASS_REMINDER,
+                    ).forEach { type ->
                         if (type == com.unboundapex.octalink.data.schema.NotificationType.CLASS_REMINDER) {
                             // 수업 리마인더는 슬롯별 세분화 — 단순 Switch 가 아닌 설정 진입 row.
                             ClassReminderConfigRow(
@@ -539,8 +543,8 @@ private fun ClassReminderConfigRow(
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                if (selectedCount == 0) "비활성화 · 탭하여 슬롯 선택"
-                else "$selectedCount 개 슬롯 활성화 · 탭하여 변경",
+                if (selectedCount == 0) "수업 미선택 · 탭하여 설정"
+                else "${selectedCount}개 수업 알림 ON · 탭하여 변경",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -555,8 +559,12 @@ private fun ClassReminderConfigRow(
 }
 
 /**
- * 수업 리마인더 슬롯 선택 다이얼로그.
- * weekly schedule 의 모든 (요일, 수업) 슬롯을 요일별 그룹으로 LazyColumn 에 나열, 체크박스로 토글.
+ * 수업 리마인더 슬롯 선택 다이얼로그 — 그리드 형식.
+ *
+ * 평일(월~금) 그룹 수업 4시간대(복싱·킥복싱·MMA) 만 노출. 오픈 매트(자율 운동)·토요일 PT 는 제외.
+ * 컬럼: 시간 라벨 + 월/화/수/목/금 5요일. 로우: 12:00 / 18:00 / 19:30 / 21:00.
+ * 헤더 요일 탭 = 그 요일 전체 토글, 시간 라벨 탭 = 그 시간대 5일치 전체 토글, 셀 탭 = 개별 토글.
+ *
  * 저장 시 선택 셋을 [NotificationPrefsViewModel.updateClassReminderSlots] 로 일괄 push.
  */
 @Composable
@@ -566,80 +574,108 @@ private fun ClassReminderConfigDialog(
     onSave: (Set<String>) -> Unit,
     onRequestPermissionIfNeeded: () -> Unit,
 ) {
-    // 다이얼로그 열린 동안 로컬 편집 상태 — 저장 시점에 외부로 commit.
     var selected by remember(initialSelected) { mutableStateOf(initialSelected) }
-    val allSlots = remember { com.unboundapex.octalink.data.allWeeklyClassSlots() }
-    val grouped = remember(allSlots) {
-        allSlots.groupBy({ it.first }, { it.second })
+
+    val weekdays = remember {
+        listOf(
+            java.time.DayOfWeek.MONDAY,
+            java.time.DayOfWeek.TUESDAY,
+            java.time.DayOfWeek.WEDNESDAY,
+            java.time.DayOfWeek.THURSDAY,
+            java.time.DayOfWeek.FRIDAY,
+        )
+    }
+    // 평일 스케줄은 Mon-Fri 동일하므로 Monday 의 그룹 수업 슬롯이 전체 시간대 대표.
+    val groupSlots = remember {
+        com.unboundapex.octalink.data.allWeeklyClassSlots()
+            .filter { (day, slot) ->
+                day == java.time.DayOfWeek.MONDAY && slot.name == "복싱 · 킥복싱 · MMA"
+            }
+            .map { it.second }
     }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("수업 리마인더 설정", style = MaterialTheme.typography.titleLarge) },
         text = {
-            LazyColumn(modifier = Modifier.height(420.dp)) {
-                item {
-                    Text(
-                        "참석할 수업을 선택하면 시작 30분 전에 알림을 보냅니다.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                grouped.forEach { (day, slots) ->
-                    item {
-                        // 요일 헤더 + 일괄 선택/해제 토글
-                        val dayKeys = slots.map { com.unboundapex.octalink.data.classSlotKey(day, it) }.toSet()
-                        val allOn = dayKeys.isNotEmpty() && dayKeys.all { it in selected }
-                        Row(
+            Column {
+                Text(
+                    "참석할 수업을 선택하면 시작 30분 전에 알림을 보냅니다.\n수업 시간 / 요일 라벨을 탭하면 일괄 선택.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+
+                // 헤더 행: 시간 자리(빈) + 월/화/수/목/금 (탭 = 컬럼 전체 토글).
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(modifier = Modifier.width(50.dp))
+                    weekdays.forEach { day ->
+                        val colKeys = groupSlots
+                            .map { com.unboundapex.octalink.data.classSlotKey(day, it) }
+                            .toSet()
+                        val allColOn = colKeys.all { it in selected }
+                        Text(
+                            dayOfWeekKr(day),
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 10.dp, bottom = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                dayOfWeekKr(day),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                if (allOn) "전체 해제" else "전체 선택",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .clickable {
-                                        selected = if (allOn) selected - dayKeys else selected + dayKeys
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-                    items(slots) { slot ->
-                        val key = com.unboundapex.octalink.data.classSlotKey(day, slot)
-                        val checked = key in selected
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
+                                .weight(1f)
                                 .clickable {
-                                    selected = if (checked) selected - key else selected + key
+                                    selected = if (allColOn) selected - colKeys else selected + colKeys
                                 }
-                                .padding(vertical = 4.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            androidx.compose.material3.Checkbox(
-                                checked = checked,
-                                onCheckedChange = {
-                                    selected = if (it) selected + key else selected - key
-                                },
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "${slot.timeRangeText} · ${slot.name}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                            )
+                                .padding(vertical = 6.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (allColOn) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+
+                // 데이터 행 — 시간대 4개 (12:00 / 18:00 / 19:30 / 21:00). 시간 라벨 탭 = 그 시간 5일 전체 토글.
+                groupSlots.forEach { slot ->
+                    val timeLabel = "%02d:%02d".format(slot.start.hour, slot.start.minute)
+                    val rowKeys = weekdays
+                        .map { com.unboundapex.octalink.data.classSlotKey(it, slot) }
+                        .toSet()
+                    val allRowOn = rowKeys.all { it in selected }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            timeLabel,
+                            modifier = Modifier
+                                .width(50.dp)
+                                .clickable {
+                                    selected = if (allRowOn) selected - rowKeys else selected + rowKeys
+                                }
+                                .padding(vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (allRowOn) FontWeight.Bold else FontWeight.Medium,
+                            color = if (allRowOn) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
+                        weekdays.forEach { day ->
+                            val key = com.unboundapex.octalink.data.classSlotKey(day, slot)
+                            val checked = key in selected
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        selected = if (checked) selected - key else selected + key
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                androidx.compose.material3.Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = {
+                                        selected = if (it) selected + key else selected - key
+                                    },
+                                )
+                            }
                         }
                     }
                 }

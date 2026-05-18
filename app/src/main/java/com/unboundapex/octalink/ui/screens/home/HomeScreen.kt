@@ -84,14 +84,28 @@ private fun dayKr(d: DayOfWeek): String = when (d) {
 }
 
 // 원본 PNG: 흰색 배경 + 검정 로고/텍스트.
-// 흰색 픽셀은 알파 0(투명)으로 빼고, 검정 픽셀은 흰색 + 불투명으로 출력 → 배경이 화면 색으로 비침.
-// 알파는 입력 RGB 평균을 반전(밝을수록 투명, 어두울수록 불투명) → 가장자리 안티에일리어싱 보존.
+// 흰색 픽셀은 알파 0(투명)으로 빼고, 알파는 입력 RGB 평균을 반전(밝을수록 투명, 어두울수록 불투명) →
+// 가장자리 안티에일리어싱 보존. 출력 색은 테마별로 분기: 다크는 흰색, 라이트는 Slate(#1A1A1F).
+
+/** 다크 테마용 — 출력 색 흰색. 거의-검정 배경 위에서 로고가 흰색으로 떠 보임. */
 private val logoKeyWhiteFilter = ColorFilter.colorMatrix(
     ColorMatrix(
         floatArrayOf(
             0f,         0f,         0f,         0f, 255f,
             0f,         0f,         0f,         0f, 255f,
             0f,         0f,         0f,         0f, 255f,
+            -1f / 3f,   -1f / 3f,   -1f / 3f,   0f, 255f
+        )
+    )
+)
+
+/** 라이트 테마용 — 출력 색 Slate(#1A1A1F). 흰/회색 배경에 다크 로고. */
+private val logoKeyDarkFilter = ColorFilter.colorMatrix(
+    ColorMatrix(
+        floatArrayOf(
+            0f,         0f,         0f,         0f, 0x1A.toFloat(),
+            0f,         0f,         0f,         0f, 0x1A.toFloat(),
+            0f,         0f,         0f,         0f, 0x1F.toFloat(),
             -1f / 3f,   -1f / 3f,   -1f / 3f,   0f, 255f
         )
     )
@@ -383,6 +397,11 @@ private fun HomeHeader() {
     val gloveScale = remember { Animatable(0.2f) }
     val gloveAlpha = remember { Animatable(0f) }
     val gloveOffsetX = remember { Animatable(80f) }
+    // 라이트 테마면 로고를 다크 필터로 출력. 글러브 이모지는 다크 테마에서만 흰색,
+    // 라이트 테마는 native 이모지 색(글러브 검정 그림자) 유지.
+    val currentTheme by com.unboundapex.octalink.ui.theme.AppThemeStore.theme.collectAsState()
+    val isLight = currentTheme == com.unboundapex.octalink.ui.theme.AppTheme.LIGHT
+    val logoFilter = if (isLight) logoKeyDarkFilter else logoKeyWhiteFilter
 
     LaunchedEffect(Unit) {
         // 단발 정권 임팩트 (~630ms)
@@ -417,7 +436,7 @@ private fun HomeHeader() {
                 .fillMaxWidth(0.9f)
                 .aspectRatio(1800f / 403f),
             contentScale = ContentScale.Fit,
-            colorFilter = logoKeyWhiteFilter
+            colorFilter = logoFilter,
         )
         Text(
             text = "👊",

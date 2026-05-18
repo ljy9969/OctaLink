@@ -191,21 +191,18 @@ fun BracketDrawScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f)
                 )
-                val allSelected = filtered.isNotEmpty() &&
-                    filtered.all { it.id in selectedIds } &&
-                    filtered.size <= 8
-                val toggleLabel = if (allSelected || (filtered.size > 8 && selectedIds.size >= 8)) "선택 해제"
-                else "전체 선택"
+                // 토글 단순화: 선택 있으면 모두 해제, 없으면 처음 8명 선택 (8강 한도).
+                // 이전 로직은 filtered.size > 8 일 때 "선택 해제" 라벨이 영구 false 처럼 작동해
+                // 클릭해도 같은 첫 8명만 재선택되는 버그가 있었음.
+                val hasSelection = selectedIds.isNotEmpty()
+                val toggleLabel = if (hasSelection) "선택 해제" else "전체 선택"
                 DrawActionChip(
                     text = toggleLabel,
                     bg = MaterialTheme.colorScheme.primary,
                     fg = MaterialTheme.colorScheme.onPrimary,
                     onClick = {
-                        selectedIds = if (allSelected) {
-                            emptySet()
-                        } else {
-                            filtered.take(8).map { it.id }.toSet()
-                        }
+                        selectedIds = if (hasSelection) emptySet()
+                        else filtered.take(8).map { it.id }.toSet()
                     },
                 )
             }

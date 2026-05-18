@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -32,7 +33,45 @@ class NotificationPrefsViewModel(application: Application) : AndroidViewModel(ap
     private val members = RepositoryProvider.members
 
     private val _memberId = MutableStateFlow<String?>(null)
-    fun observeFor(memberId: String?) { _memberId.value = memberId }
+
+    /**
+     * 회원 id 가 변경되면 (a) flow 구독 전환 + (b) **1회성 legacy 슬롯 정리** 트리거.
+     *
+     * 마이그레이션 대상 — 이전 ClassReminderConfigDialog 가 평일 오픈매트 / 토요일 PT 슬롯까지
+     * 노출했을 때 사용자가 저장한 키들. 새 그리드 다이얼로그는 평일 그룹 수업 4시간대만 노출이라
+     * 이 키들은 UI 에서 해제 불가 + WorkManager 가 무효 시간에 reminder fire 가능 → 이중 위험.
+     *
+     * 정책: stored set ∩ [validClassReminderKeys] 가 stored set 과 다르면 cleaned 셋으로 일괄 write.
+     * Idempotent — 다시 trigger 돼도 cleaned == stored 이므로 no-op. 이후 schedule 재실행.
+     */
+    fun observeFor(memberId: String?) {
+        _memberId.value = memberId
+        if (memberId != null) viewModelScope.launch { migrateClassReminderSlotsIfNeeded(memberId) }
+    }
+
+    private suspend fun migrateClassReminderSlotsIfNeeded(memberId: String) {
+        runCatching {
+            // 한 번만 read — observeById 의 첫 emit 사용. observeById 는 콜백 listener 라 즉시 첫값 emit.
+            val member = members.observeById(memberId).first()
+            val raw = member?.classReminderSlots.orEmpty().toSet()
+            val valid = com.unboundapex.octalink.data.validClassReminderKeys
+            val cleaned = raw intersect valid
+            if (cleaned == raw) return@runCatching
+            val dropped = raw - cleaned
+            android.util.Log.i(
+                "OctaLink.NotifPrefs",
+                "migrate classReminderSlots: dropped=$dropped (${raw.size} -> ${cleaned.size})",
+            )
+            members.updateClassReminderSlots(memberId, cleaned.toList())
+            // 영속 정리 후 WorkManager 재스케줄 — 무효 키로 잡혀 있던 worker 가 있다면 cancelAll + 다시 scheduleAll.
+            val ctx = getApplication<Application>().applicationContext
+            if (cleaned.isEmpty()) {
+                ClassReminderScheduler.cancelAll(ctx)
+            } else {
+                ClassReminderScheduler.scheduleAll(ctx)
+            }
+        }.onFailure { android.util.Log.w("OctaLink.NotifPrefs", "migrate failed", it) }
+    }
 
     /** 현재 사용자의 notificationPrefs 맵 — 키 누락 시 default 채워서 전달. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -57,7 +96,11 @@ class NotificationPrefsViewModel(application: Application) : AndroidViewModel(ap
                 NotificationType.values().associateWith { it.defaultEnabled },
             )
 
-    /** 현재 사용자가 선택한 CLASS_REMINDER 슬롯 키 셋 (예: `"MONDAY_19:30"`). */
+    /**
+     * 현재 사용자가 선택한 CLASS_REMINDER 슬롯 키 셋 (예: `"MONDAY_19:30"`).
+     * 마이그레이션 영속 처리와 별개로 UI 단에서도 항상 [validClassReminderKeys] 와 교집합만 노출 —
+     * write-back 이 끝나기 전 잠시 raw 값이 노출되는 race 차단.
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
     val classReminderSlots: StateFlow<Set<String>> =
         _memberId
@@ -65,7 +108,7 @@ class NotificationPrefsViewModel(application: Application) : AndroidViewModel(ap
                 if (id == null) flowOf(emptyList())
                 else members.observeById(id).map { it?.classReminderSlots.orEmpty() }
             }
-            .map { it.toSet() }
+            .map { it.toSet() intersect com.unboundapex.octalink.data.validClassReminderKeys }
             .catch { e ->
                 android.util.Log.e("OctaLink.NotifPrefs", "classReminderSlots flow error", e)
                 emit(emptySet())

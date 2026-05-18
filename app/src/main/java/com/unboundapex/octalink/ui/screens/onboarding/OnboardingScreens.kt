@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,7 +91,7 @@ fun LoginScreen(sessionVm: SessionViewModel) {
             KakaoSignInButton(onClick = { sessionVm.signInWithKakao() })
             Spacer(Modifier.height(12.dp))
             Text(
-                "관장 승인 후 정상 이용 가능합니다.",
+                "가입 승인 후 이용 가능합니다.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -153,8 +155,12 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     }
 
     PosseScreen(title = "Signup", subtitle = "체육관 회원 가입 신청") {
+        // 폼 카드(캐릭터 / 이름 / 성별 / 입관일 / 벨트 / 체급) + 가입 버튼 + 푸터 안내가 누적되어
+        // 작은 화면에선 하단 텍스트가 잘림 → verticalScroll 로 스크롤 가능하게.
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             PosseCard {
@@ -191,23 +197,13 @@ fun SignupScreen(sessionVm: SessionViewModel) {
             }
 
             // 성별 — 카카오 비즈 검수 통과 시 자동 (kakaoGender != null), 그 외엔 사용자 직접 선택.
-            // 캐릭터 자동 부여(성별+체급 조합) 용도. kakao 값이 도착하면 chip 숨기고 자동 적용 표시.
+            // 캐릭터 자동 부여(성별+체급 조합) 용도. kakao 값이 있으면 chip 잠금(locked).
             PosseCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "성별 (필수)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (kakaoGender != null) {
-                        Text(
-                            "카카오 자동",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
+                Text(
+                    "성별",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -270,7 +266,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 if (belt == Belt.UNKNOWN) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "관장님이 가입 승인 시 정확한 벨트로 갱신해주십니다.",
+                        "가입 승인 시 정확한 벨트로 갱신됩니다.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -336,7 +332,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
             )
 
             Text(
-                "신청 후 관장 승인 시 메인 화면 진입 가능. 관장은 운영 탭에서 승인 가능합니다.",
+                "가입 신청 후 승인 시 메인 화면 진입 가능합니다.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
@@ -417,7 +413,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
  */
 @Composable
 fun PendingApprovalScreen(sessionVm: SessionViewModel) {
-    PosseScreen(title = "Pending", subtitle = "관장 승인 대기 중") {
+    PosseScreen(title = "Pending", subtitle = "가입 승인 대기 중") {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
@@ -431,7 +427,7 @@ fun PendingApprovalScreen(sessionVm: SessionViewModel) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "관장의 승인을 기다리는 중입니다. 승인 즉시 메인 화면으로 자동 이동합니다.",
+                "가입 승인을 기다리는 중입니다. 승인 즉시 메인 화면으로 자동 이동합니다.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

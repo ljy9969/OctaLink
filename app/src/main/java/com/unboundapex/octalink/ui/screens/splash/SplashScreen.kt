@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -22,6 +21,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.unboundapex.octalink.R
+import com.unboundapex.octalink.ui.theme.Ink
 
 /**
  * 앱 LOADING phase 동안 표시되는 스플래시. 다크 ink 배경 + 흰색으로 tint 된 OctaLink 마크 +
@@ -62,10 +62,13 @@ fun SplashScreen() {
         label = "heartbeat-scale",
     )
 
+    // 스플래시는 테마 무관 항상 다크 — 시스템 splash(themes.xml: Theme.OctaLink.Starting) 가
+    // 항상 ink 배경이라, Compose splash 도 다크로 통일해 시스템→Compose 핸드오프 시 색 점멸 회피.
+    // 메인 컨텐츠 진입 시점에 사용자의 AppTheme 가 적용되므로 라이트 사용자도 자연스러운 페이드 인.
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(Ink),
         contentAlignment = Alignment.Center,
     ) {
         Image(

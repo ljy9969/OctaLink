@@ -358,6 +358,7 @@ tools/                                        # 빌드/디자인 보조 스크�
 
 **[중요도 ★★★]**
 - [ ] `배포` **카카오 비즈 검수 재신청** *(난이도 2, 외부 1~3 영업일)* — 콘솔에서 `gender/age_range/birthday/birthyear/name/phone_number/account_email` 동의 항목이 "권한 없음" 상태. 비즈니스 정보 등록 + 검수 신청. 통과 시 SignupScreen 성별 chip 이 자동 잠김 + 카카오 자동 prefill 모드로 전환 (코드 변경 없음, 응답에 gender 들어오면 그 값 우선)
+  - **카카오 앱 2개 운영 구조**: (a) 비즈 앱 ID `1453976` — 운영용, 검수 대기 중, `local.properties.KAKAO_NATIVE_APP_KEY` 기본값. (b) 테스트 앱 ID `1455062` — 이미 모든 동의 항목 활성, 단 팀 멤버(Owner/Manager)만 로그인 가능. 일반 회원 운영 배포는 반드시 비즈 앱 키 사용. 개발자 본인이 풀 데이터 흐름 즉시 검증하려면 `local.properties` 키만 1455062 로 임시 교체 (운영 빌드 전 1453976 복원 필수)
 - [ ] `배포` **Play 콘솔 비공개 테스트 새 릴리스 게시** *(난이도 2, ~30분)* — 카카오 검수 통과 확인 후 진행. `versionCode 3` + `versionName 0.3.0` bump → `gradlew :app:bundleRelease` → 비공개 트랙 업로드 + 출시 노트(스킬 평가 워크플로우, 출결 검토 캘린더 페이징, posts/comments, 영상 첨부, 토너먼트 히스토리) 작성
 
 **[중요도 ★]**

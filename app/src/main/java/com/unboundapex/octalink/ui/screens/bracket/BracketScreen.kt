@@ -683,8 +683,11 @@ private fun ColumnScope.FighterRow(
         Text(
             text = name,
             style = MaterialTheme.typography.bodyMedium,
+            // 승자는 ExtraBold + 정상 onSurface 컬러, 패자는 40% 페이드.
+            // 기존엔 승자 색을 Color.White 하드코딩으로 다크 테마에서 Bone(#F5F2EC) 보다 살짝 밝게
+            // 추가 강조했지만, 라이트 테마에서 흰 카드 surface 위에 흰 글자라 보이지 않는 버그.
+            // 굵기 차이 + 패자 페이드만으로 시각 위계가 충분히 명확하므로 onSurface 단일화.
             color = when {
-                isWinner -> Color(0xFFFFFFFF)
                 isLoser -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 else -> MaterialTheme.colorScheme.onSurface
             },

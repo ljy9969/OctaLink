@@ -90,6 +90,24 @@ fun classSlotKey(day: DayOfWeek, slot: ClassSlot): String =
     "${day.name}_%02d:%02d".format(slot.start.hour, slot.start.minute)
 
 /**
+ * 현재 ClassReminderConfigDialog 가 노출하는 *유효* 슬롯 키 셋.
+ * 평일(월~금) × 그룹 수업(복싱·킥복싱·MMA) 4시간대 = 20개. 토요일 PT / 평일 오픈 매트는 제외.
+ *
+ * 마이그레이션용 — 이전 다이얼로그(전 슬롯 노출) 에서 저장된 키 중 이 셋에 없는 항목은 legacy
+ * 잔재이므로 정리 대상. [NotificationPrefsViewModel.observeFor] 가 1회성 정리 + UI 필터에 사용.
+ */
+val validClassReminderKeys: Set<String> = buildSet {
+    val weekdays = listOf(
+        DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+        DayOfWeek.THURSDAY, DayOfWeek.FRIDAY,
+    )
+    val groupSlots = weekdaySlots.filter { it.name == "복싱 · 킥복싱 · MMA" }
+    weekdays.forEach { day ->
+        groupSlots.forEach { slot -> add(classSlotKey(day, slot)) }
+    }
+}
+
+/**
  * 현재 시각 기준 진행 중인 수업 → 표시.
  * 진행 중인 수업이 없으면 다음 수업 → 표시.
  * 오늘 수업이 모두 끝났거나 휴무이면 그에 맞는 메시지.

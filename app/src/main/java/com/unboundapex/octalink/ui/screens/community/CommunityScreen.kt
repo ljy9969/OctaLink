@@ -172,8 +172,8 @@ fun CommunityScreen(
 
 private val seoul = ZoneId.of("Asia/Seoul")
 
-/** 글 카드에서 본문이 접힐 때 보이는 최대 줄 수. 초과분은 "더 보기"로 펼침. */
-private const val BODY_COLLAPSED_LINES = 3
+/** 글 카드 본문 미리보기 줄 수. 초과분은 ellipsis 로 잘림 — 펼치기는 별도 상세 화면에서 처리. */
+private const val BODY_PREVIEW_LINES = 2
 // 날짜는 한국 요일 약자("토"), 시간은 AM/PM 강제 → 두 formatter 를 별도 Locale 로 구성.
 private val postDateFmt = DateTimeFormatter.ofPattern("MM/dd(EEE)", java.util.Locale.KOREAN)
 private val postTimeFmt = DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.US)
@@ -237,20 +237,23 @@ private fun PostCard(
             )
         }
         Spacer(Modifier.height(6.dp))
-        // 본문 인라인 expand — 길면 BODY_COLLAPSED_LINES 줄에서 ellipsis + "더 보기" 토글.
-        // 실제 잘렸을 때만 토글 노출 (`hasVisualOverflow` 로 판단).
+        // 본문 인라인 expand — 한 줄 초과면 "더 보기" 토글, 펼치면 "접기".
+        //
+        // `bodyOverflows` 는 *현재* 측정 결과를 그대로 반영 (sticky true 안 함). 본문이 수정되어
+        // 짧아진 경우 stale true 가 남아 토글이 의미 없이 보이는 버그 방지. 펼친 상태에선
+        // maxLines=MAX_VALUE 라 자연히 hasVisualOverflow=false 가 되므로 그 케이스만 reset 스킵.
         var bodyExpanded by remember(post.id) { mutableStateOf(false) }
-        var bodyDidOverflow by remember(post.id) { mutableStateOf(false) }
+        var bodyOverflows by remember(post.id) { mutableStateOf(false) }
         Text(
             post.body,
             style = MaterialTheme.typography.bodyLarge,
-            maxLines = if (bodyExpanded) Int.MAX_VALUE else BODY_COLLAPSED_LINES,
+            maxLines = if (bodyExpanded) Int.MAX_VALUE else BODY_PREVIEW_LINES,
             overflow = TextOverflow.Ellipsis,
             onTextLayout = { result ->
-                if (!bodyExpanded && result.hasVisualOverflow) bodyDidOverflow = true
+                if (!bodyExpanded) bodyOverflows = result.hasVisualOverflow
             },
         )
-        if (bodyDidOverflow || bodyExpanded) {
+        if (bodyOverflows || bodyExpanded) {
             Text(
                 if (bodyExpanded) "접기" else "더 보기",
                 style = MaterialTheme.typography.labelMedium,

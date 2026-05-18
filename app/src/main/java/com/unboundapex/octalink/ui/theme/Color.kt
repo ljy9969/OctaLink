@@ -13,13 +13,15 @@ val Blood = Color(0xFFC8102E)     // primary — 브랜드 빨강 (양 테마 �
 val Mist = Color(0xFF8A8A93)      // onSurfaceVariant — 보조 텍스트
 
 // ─────────────────────────────────────
-// Light 팔레트 (신규 — 깔끔/미니멀)
-// 톤: Notion / Linear 풍의 부드러운 화이트 + 다크 그레이 본문.
-// 순수 백색(#FFFFFF) 은 글래어 강해서 카드만 백색, 배경은 off-white.
+// Light 팔레트 — Apple iOS systemGroupedBackground / Notion 풍.
+// 핵심: 배경 < surfaceVariant < surface 단계로 명도 분리. 균일 화이트면 카드 구분 안 됨.
+//   - 배경: 약 6% 어두운 그레이 (#EDEDF0) → 카드(흰색)가 명확히 떠 보임
+//   - surfaceVariant: 칩/비활성 영역 (#E1E1E6) → 본문 카드와 다른 단계 표현
+//   - outline: 카드 경계 1dp 보더 시인성 충분히 (#CFCFD5)
 // ─────────────────────────────────────
-val Paper = Color(0xFFFFFFFF)        // surface — 카드 (순백)
-val Cloud = Color(0xFFFAFAFA)        // background — 본문 배경 (off-white)
-val Frost = Color(0xFFF2F2F4)        // surfaceVariant — 비활성 칩/세컨더리 surface
+val Paper = Color(0xFFFFFFFF)        // surface — 카드 (순백, 떠올라 보이는 plane)
+val Cloud = Color(0xFFE9E9ED)        // background — 본문 배경. 너무 옅음(#EDEDF0)/너무 진함(#E5E5EA) 중간 톤
+val Frost = Color(0xFFDCDCE1)        // surfaceVariant — 칩/세컨더리 surface (배경보다 한 단계 진함, Cloud 와 동일 비율 보간)
 val Slate = Color(0xFF1A1A1F)        // onBackground / onSurface — 본문 텍스트
 val Pebble = Color(0xFF6A6A72)       // onSurfaceVariant — 보조 텍스트 / 라벨
-val OutlineLight = Color(0xFFE1E1E6) // outline — 1dp border / divider
+val OutlineLight = Color(0xFFCFCFD5) // outline — 1dp border / divider (배경/카드 모두에서 보임)
