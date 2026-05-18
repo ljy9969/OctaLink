@@ -49,6 +49,7 @@ internal fun MemberDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     },
     "fcmToken" to fcmToken,
     "notificationPrefs" to notificationPrefs,
+    "classReminderSlots" to classReminderSlots,
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
     "updatedAt" to Timestamp(updatedAt.epochSecond, updatedAt.nano),
 )
@@ -94,6 +95,9 @@ internal fun DocumentSnapshot.toMemberDoc(): MemberDoc? {
                 val value = v as? Boolean ?: return@mapNotNull null
                 key to value
             }?.toMap()
+            .orEmpty(),
+        classReminderSlots = (get("classReminderSlots") as? List<*>)
+            ?.filterIsInstance<String>()
             .orEmpty(),
         createdAt = (get("createdAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
         updatedAt = (get("updatedAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,

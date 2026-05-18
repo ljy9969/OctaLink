@@ -93,6 +93,12 @@ class InMemoryMemberRepository(
         }
     }
 
+    override suspend fun updateClassReminderSlots(memberId: String, slots: List<String>) {
+        _members.value = _members.value.map { m ->
+            if (m.id != memberId) m else m.copy(classReminderSlots = slots, updatedAt = Instant.now())
+        }
+    }
+
     override suspend fun leaveMembership(memberId: String) {
         setStatus(memberId, MembershipStatus.LEFT)
     }

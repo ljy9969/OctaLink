@@ -81,8 +81,18 @@ data class MemberDoc(
     /**
      * 알림 종류별 ON/OFF — key 는 [NotificationType.name]. 키 누락 시 [NotificationType.defaultEnabled] 값 사용.
      * 본인이 ProfileScreen 에서 직접 토글. Firestore rules 의 self-editable 화이트리스트에 포함.
+     *
+     * 단, [NotificationType.CLASS_REMINDER] 는 이 map 의 값이 아닌 [classReminderSlots] 로 세분화 관리.
+     * (회원마다 출석 의향 있는 요일/시간대가 다르므로 단순 boolean 으로 부족)
      */
     val notificationPrefs: Map<String, Boolean> = emptyMap(),
+    /**
+     * 회원이 30분 전 리마인더를 받고 싶은 특정 수업 슬롯 셋.
+     * 각 항목은 `"MONDAY_19:30"` 형식의 `요일_HH:mm` key
+     * (`com.unboundapex.octalink.data.classSlotKey` 헬퍼 사용).
+     * 비어있으면 CLASS_REMINDER 알림 안 받음 — 기본값 (옵트인).
+     */
+    val classReminderSlots: List<String> = emptyList(),
     val createdAt: Instant,
     val updatedAt: Instant,
 )

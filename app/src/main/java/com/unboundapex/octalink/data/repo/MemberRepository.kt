@@ -67,6 +67,13 @@ interface MemberRepository {
     suspend fun updateNotificationPrefs(memberId: String, prefs: Map<String, Boolean>)
 
     /**
+     * 본인 CLASS_REMINDER 슬롯 셋 일괄 갱신 — ProfileScreen 의 "수업 리마인더 설정" 다이얼로그에서 호출.
+     * 각 항목은 `"MONDAY_19:30"` 형식 ([com.unboundapex.octalink.data.classSlotKey] 참조).
+     * 비어있는 리스트 전달 시 알림 모두 해제.
+     */
+    suspend fun updateClassReminderSlots(memberId: String, slots: List<String>)
+
+    /**
      * 본인 회원 탈퇴 — [com.unboundapex.octalink.data.schema.MembershipStatus.LEFT] 로 전환.
      * 도장 명단(MemberDoc) 자체 삭제는 CREATOR/MASTER 권한 (별도 요청).
      * Cloud Function `leaveMembership` 호출 (server-side audit trail).

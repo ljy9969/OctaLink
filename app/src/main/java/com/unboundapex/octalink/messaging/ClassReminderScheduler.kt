@@ -24,10 +24,11 @@ import androidx.work.workDataOf
 import com.google.firebase.auth.FirebaseAuth
 import com.unboundapex.octalink.MainActivity
 import com.unboundapex.octalink.R
+import com.unboundapex.octalink.data.allWeeklyClassSlots
+import com.unboundapex.octalink.data.classSlotKey
 import com.unboundapex.octalink.data.isClosed
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.schema.NotificationType
-import com.unboundapex.octalink.data.weeklyPlan
 import kotlinx.coroutines.flow.first
 import java.time.Duration
 import java.time.LocalDate
@@ -59,8 +60,10 @@ object ClassReminderScheduler {
     private val KST: ZoneId = ZoneId.of("Asia/Seoul")
 
     /**
-     * 오늘 남은 수업들에 대해 30분 전 알림 enqueue. 기존 oneshot 모두 취소 후 재등록 (멱등).
-     * `awaitPrefCheck = true` 면 Firestore 에서 pref 확인 후 OFF 면 skip.
+     * 오늘 남은 수업 중 **회원이 선택한 슬롯** 만 30분 전 알림 enqueue.
+     * 기존 oneshot 모두 취소 후 재등록 (멱등). 휴무일 / uid 없음 / 선택 슬롯 없음 → skip.
+     *
+     * 선택 슬롯 = `members/{uid}.classReminderSlots` (예: `["MONDAY_19:30", "WEDNESDAY_19:30"]`).
      */
     suspend fun scheduleAll(context: Context) {
         val wm = WorkManager.getInstance(context)
@@ -72,9 +75,9 @@ object ClassReminderScheduler {
             Log.d(TAG, "scheduleAll skip — no Firebase Auth uid")
             return
         }
-        val enabled = isPrefEnabled(uid)
-        if (!enabled) {
-            Log.d(TAG, "scheduleAll skip — pref OFF")
+        val selectedSlots = loadSelectedSlots(uid)
+        if (selectedSlots.isEmpty()) {
+            Log.d(TAG, "scheduleAll skip — no class reminder slots selected")
             return
         }
 
@@ -85,26 +88,32 @@ object ClassReminderScheduler {
             return
         }
 
-        val slots = todaySlots(today)
+        // 오늘 요일의 슬롯들 중 사용자가 선택한 것만 + 시작 시각이 미래인 것만.
+        val todayDow = today.dayOfWeek
         var enqueued = 0
-        slots.forEach { slot ->
-            val fireAt = LocalDateTime.of(today, slot.start).minusMinutes(LEAD_MINUTES)
-            if (!fireAt.isAfter(now)) return@forEach // 이미 지난 시각 skip
-            val delayMillis = Duration.between(now, fireAt).toMillis()
-            val req = OneTimeWorkRequestBuilder<ClassReminderWorker>()
-                .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
-                .addTag(WORK_TAG_ONESHOT)
-                .setInputData(
-                    workDataOf(
-                        "slotStart" to slot.start.toString(),
-                        "slotName" to slot.name,
+        allWeeklyClassSlots()
+            .filter { (day, _) -> day == todayDow }
+            .forEach { (day, slot) ->
+                val key = classSlotKey(day, slot)
+                if (key !in selectedSlots) return@forEach
+                val fireAt = LocalDateTime.of(today, slot.start).minusMinutes(LEAD_MINUTES)
+                if (!fireAt.isAfter(now)) return@forEach // 이미 지난 시각 skip
+                val delayMillis = Duration.between(now, fireAt).toMillis()
+                val req = OneTimeWorkRequestBuilder<ClassReminderWorker>()
+                    .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
+                    .addTag(WORK_TAG_ONESHOT)
+                    .setInputData(
+                        workDataOf(
+                            "slotKey" to key,
+                            "slotStart" to slot.start.toString(),
+                            "slotName" to slot.name,
+                        )
                     )
-                )
-                .build()
-            wm.enqueue(req)
-            enqueued++
-        }
-        Log.i(TAG, "scheduleAll enqueued=$enqueued slots for $today")
+                    .build()
+                wm.enqueue(req)
+                enqueued++
+            }
+        Log.i(TAG, "scheduleAll enqueued=$enqueued slots for $today (selected total=${selectedSlots.size})")
     }
 
     /**
@@ -129,29 +138,17 @@ object ClassReminderScheduler {
         Log.i(TAG, "scheduleDailyRollover anchored at $nextFire (delay ${initialDelayMs}ms)")
     }
 
-    /** prefs OFF / pref 해제 시 모든 예약 취소. */
+    /** 선택 슬롯 전부 해제 시 모든 예약 취소. */
     fun cancelAll(context: Context) {
         WorkManager.getInstance(context).cancelAllWorkByTag(WORK_TAG_ONESHOT)
-        Log.i(TAG, "cancelAll — pref OFF")
+        Log.i(TAG, "cancelAll — no slots selected")
     }
 
-    /** 오늘(요일) 의 ClassSlot 리스트. weeklyPlan 의 "평일" / "토요일" 매핑. */
-    private fun todaySlots(today: LocalDate): List<com.unboundapex.octalink.data.ClassSlot> {
-        val dayPlan = when (today.dayOfWeek) {
-            java.time.DayOfWeek.SATURDAY -> weeklyPlan.firstOrNull { it.title == "토요일" }
-            java.time.DayOfWeek.SUNDAY -> null
-            else -> weeklyPlan.firstOrNull { it.title == "평일" }
-        }
-        return dayPlan?.slots.orEmpty()
-    }
-
-    private suspend fun isPrefEnabled(uid: String): Boolean {
+    private suspend fun loadSelectedSlots(uid: String): Set<String> {
         val member = runCatching {
             RepositoryProvider.members.observeById(uid).first()
         }.getOrNull()
-        val prefs = member?.notificationPrefs.orEmpty()
-        return prefs[NotificationType.CLASS_REMINDER.name]
-            ?: NotificationType.CLASS_REMINDER.defaultEnabled
+        return member?.classReminderSlots.orEmpty().toSet()
     }
 }
 
@@ -166,17 +163,17 @@ class ClassReminderWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        val slotKey = inputData.getString("slotKey") ?: return Result.success()
         val slotStart = inputData.getString("slotStart") ?: return Result.success()
         val slotName = inputData.getString("slotName") ?: return Result.success()
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         if (isClosed(today)) return Result.success()
 
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return Result.success()
+        // fire 시점 재확인 — 스케줄 후 사용자가 이 슬롯을 해제했으면 drop.
         val member = runCatching { RepositoryProvider.members.observeById(uid).first() }.getOrNull()
-        val prefs = member?.notificationPrefs.orEmpty()
-        val enabled = prefs[NotificationType.CLASS_REMINDER.name]
-            ?: NotificationType.CLASS_REMINDER.defaultEnabled
-        if (!enabled) return Result.success()
+        val selected = member?.classReminderSlots.orEmpty().toSet()
+        if (slotKey !in selected) return Result.success()
 
         showNotification(slotStart, slotName)
         return Result.success()

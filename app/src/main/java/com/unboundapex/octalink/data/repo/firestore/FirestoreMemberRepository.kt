@@ -176,6 +176,14 @@ class FirestoreMemberRepository : MemberRepository {
         col.document(memberId).update(updates).await()
     }
 
+    override suspend fun updateClassReminderSlots(memberId: String, slots: List<String>) {
+        val updates = mapOf(
+            "classReminderSlots" to slots,
+            "updatedAt" to FieldValue.serverTimestamp(),
+        )
+        col.document(memberId).update(updates).await()
+    }
+
     /** [FirestoreSkillScoreRepository] 와 동일 정밀도 — 슬라이더 raw float 을 0.01 단위로 truncate. */
     private fun Float.toFirestoreScore(): Double =
         kotlin.math.floor(this.toDouble() * 100) / 100

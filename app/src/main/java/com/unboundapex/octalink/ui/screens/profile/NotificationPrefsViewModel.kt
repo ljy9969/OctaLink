@@ -57,6 +57,21 @@ class NotificationPrefsViewModel(application: Application) : AndroidViewModel(ap
                 NotificationType.values().associateWith { it.defaultEnabled },
             )
 
+    /** 현재 사용자가 선택한 CLASS_REMINDER 슬롯 키 셋 (예: `"MONDAY_19:30"`). */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val classReminderSlots: StateFlow<Set<String>> =
+        _memberId
+            .flatMapLatest { id ->
+                if (id == null) flowOf(emptyList())
+                else members.observeById(id).map { it?.classReminderSlots.orEmpty() }
+            }
+            .map { it.toSet() }
+            .catch { e ->
+                android.util.Log.e("OctaLink.NotifPrefs", "classReminderSlots flow error", e)
+                emit(emptySet())
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
     /**
      * 토글 한 건 변경 — 전체 prefs 를 다시 직렬화해 single update 로 push.
      * 동시에 (a) 처음 ON 으로 전환되는 순간이라면 FCM 토큰을 fetch 해 영속화.
@@ -76,11 +91,28 @@ class NotificationPrefsViewModel(application: Application) : AndroidViewModel(ap
                     members.updateFcmToken(memberId, token)
                 }.onFailure { android.util.Log.w("OctaLink.NotifPrefs", "fcm token fetch FAILED", it) }
             }
-            // CLASS_REMINDER 는 클라이언트 WorkManager 스케줄 — 토글 즉시 등록/취소.
-            if (type == NotificationType.CLASS_REMINDER) {
-                val ctx = getApplication<Application>().applicationContext
-                if (enabled) ClassReminderScheduler.scheduleAll(ctx)
-                else ClassReminderScheduler.cancelAll(ctx)
+        }
+    }
+
+    /**
+     * 회원이 30분 전 리마인더 받을 슬롯 셋을 일괄 갱신. 비어있으면 모든 예약 취소.
+     * 비어있지 않으면 FCM 토큰도 함께 fetch + 즉시 [ClassReminderScheduler.scheduleAll] 호출.
+     */
+    fun updateClassReminderSlots(slots: Set<String>) {
+        val memberId = _memberId.value ?: return
+        val serialized = slots.toList()
+        viewModelScope.launch {
+            runCatching { members.updateClassReminderSlots(memberId, serialized) }
+                .onFailure { android.util.Log.e("OctaLink.NotifPrefs", "classReminderSlots save FAILED", it) }
+            val ctx = getApplication<Application>().applicationContext
+            if (slots.isEmpty()) {
+                ClassReminderScheduler.cancelAll(ctx)
+            } else {
+                runCatching {
+                    val token = FirebaseMessaging.getInstance().token.await()
+                    members.updateFcmToken(memberId, token)
+                }.onFailure { android.util.Log.w("OctaLink.NotifPrefs", "fcm token fetch FAILED", it) }
+                ClassReminderScheduler.scheduleAll(ctx)
             }
         }
     }

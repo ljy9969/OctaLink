@@ -68,6 +68,28 @@ private fun slotsFor(day: DayOfWeek): List<ClassSlot> = when (day) {
 }
 
 /**
+ * 주간 운영 슬롯 전체 — CLASS_REMINDER 세분화 UI 가 enumerate.
+ * 월~금(평일 6개) + 토 1개 = 31 슬롯. 일요일/공휴일 (휴무) 은 포함 안 됨.
+ *
+ * 반환 순서: 월요일부터 토요일까지, 각 요일 내에선 시작 시각 오름차순.
+ */
+fun allWeeklyClassSlots(): List<Pair<DayOfWeek, ClassSlot>> = buildList {
+    val weekdays = listOf(
+        DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+        DayOfWeek.THURSDAY, DayOfWeek.FRIDAY,
+    )
+    weekdays.forEach { day -> weekdaySlots.forEach { add(day to it) } }
+    saturdaySlots.forEach { add(DayOfWeek.SATURDAY to it) }
+}
+
+/**
+ * 알림 ON/OFF 단위 — `"MONDAY_19:30"` 형식.
+ * [com.unboundapex.octalink.data.schema.MemberDoc.classReminderSlots] 의 key.
+ */
+fun classSlotKey(day: DayOfWeek, slot: ClassSlot): String =
+    "${day.name}_%02d:%02d".format(slot.start.hour, slot.start.minute)
+
+/**
  * 현재 시각 기준 진행 중인 수업 → 표시.
  * 진행 중인 수업이 없으면 다음 수업 → 표시.
  * 오늘 수업이 모두 끝났거나 휴무이면 그에 맞는 메시지.

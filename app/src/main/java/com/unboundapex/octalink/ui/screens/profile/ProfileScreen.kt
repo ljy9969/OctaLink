@@ -1,7 +1,10 @@
 package com.unboundapex.octalink.ui.screens.profile
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,8 +14,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +29,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.SkillSet
@@ -32,6 +41,8 @@ import com.unboundapex.octalink.ui.components.AvatarTile
 import com.unboundapex.octalink.ui.components.HexagonSkillChart
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import com.unboundapex.octalink.ui.theme.AppTheme
+import com.unboundapex.octalink.ui.theme.AppThemeViewModel
 import java.time.LocalDate
 import java.time.Period
 
@@ -61,8 +72,10 @@ fun ProfileScreen(
     skillsVm: MySkillsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     recordVm: MyTournamentRecordViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     notifPrefsVm: NotificationPrefsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    appThemeVm: AppThemeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
+    val currentAppTheme by appThemeVm.theme.collectAsState()
     var leaveConfirmOpen by remember { mutableStateOf(false) }
     val avatar = avatarById(session.avatarId)
     val belt = session.belt
@@ -92,7 +105,9 @@ fun ProfileScreen(
         pendingToggleType = null
     }
     var notifDialogOpen by remember { mutableStateOf(false) }
+    var classReminderDialogOpen by remember { mutableStateOf(false) }
     val coachComments by commentsVm.myComments.collectAsState()
+    val classReminderSlots by notifPrefsVm.classReminderSlots.collectAsState()
     // 차트는 [SkillScoreDoc] 컬렉션을 직접 구독 — 콘솔에서 점수 doc 삭제/수정해도 즉시 반영.
     // [MemberDoc.skills] 스냅샷은 다른 화면(슬라이더 기준선 등) 의 빠른 접근용으로만 유지.
     val skillSet by skillsVm.skills.collectAsState()
@@ -284,6 +299,16 @@ fun ProfileScreen(
                 }
             }
 
+            // ─────────────────────────────────────
+            // UI 테마 (다크 / 라이트) — 본인 device-local 설정. SharedPreferences 영속.
+            // ─────────────────────────────────────
+            item {
+                ThemePickerCard(
+                    current = currentAppTheme,
+                    onSelect = { appThemeVm.set(it) },
+                )
+            }
+
             // 운영진/관장/창조자 전용 작업은 하단 nav "운영" 탭으로 이전 (AdminScreen 참조)
             item {
                 PosseCard(modifier = Modifier.clickable { sessionVm.signOut() }) {
@@ -334,31 +359,42 @@ fun ProfileScreen(
                     com.unboundapex.octalink.data.schema.NotificationType.values()
                         .filter { it != com.unboundapex.octalink.data.schema.NotificationType.SIGNUP_RESULT }
                         .forEach { type ->
-                        NotificationToggleRow(
-                            type = type,
-                            enabled = notifPrefs[type] ?: type.defaultEnabled,
-                            onToggle = { newValue ->
-                                if (newValue) {
-                                    // ON 으로 전환 — Android 13+ 면 권한 확인.
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                                        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
-                                            context,
-                                            android.Manifest.permission.POST_NOTIFICATIONS,
-                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                        if (granted) {
-                                            notifPrefsVm.setEnabled(type, true)
+                        if (type == com.unboundapex.octalink.data.schema.NotificationType.CLASS_REMINDER) {
+                            // 수업 리마인더는 슬롯별 세분화 — 단순 Switch 가 아닌 설정 진입 row.
+                            ClassReminderConfigRow(
+                                selectedCount = classReminderSlots.size,
+                                onClick = {
+                                    notifDialogOpen = false
+                                    classReminderDialogOpen = true
+                                },
+                            )
+                        } else {
+                            NotificationToggleRow(
+                                type = type,
+                                enabled = notifPrefs[type] ?: type.defaultEnabled,
+                                onToggle = { newValue ->
+                                    if (newValue) {
+                                        // ON 으로 전환 — Android 13+ 면 권한 확인.
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                                                context,
+                                                android.Manifest.permission.POST_NOTIFICATIONS,
+                                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                            if (granted) {
+                                                notifPrefsVm.setEnabled(type, true)
+                                            } else {
+                                                pendingToggleType = type
+                                                notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                            }
                                         } else {
-                                            pendingToggleType = type
-                                            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                            notifPrefsVm.setEnabled(type, true)
                                         }
                                     } else {
-                                        notifPrefsVm.setEnabled(type, true)
+                                        notifPrefsVm.setEnabled(type, false)
                                     }
-                                } else {
-                                    notifPrefsVm.setEnabled(type, false)
-                                }
-                            },
-                        )
+                                },
+                            )
+                        }
                     }
                 }
             },
@@ -371,6 +407,34 @@ fun ProfileScreen(
                         .clickable { notifDialogOpen = false }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
+            },
+        )
+    }
+
+    if (classReminderDialogOpen) {
+        ClassReminderConfigDialog(
+            initialSelected = classReminderSlots,
+            onDismiss = {
+                classReminderDialogOpen = false
+                notifDialogOpen = true // 알림 다이얼로그로 복귀
+            },
+            onSave = { newSelected ->
+                notifPrefsVm.updateClassReminderSlots(newSelected)
+                classReminderDialogOpen = false
+                notifDialogOpen = true
+            },
+            onRequestPermissionIfNeeded = {
+                // 슬롯 1개 이상 선택 시 Android 13+ POST_NOTIFICATIONS 권한 확보.
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.POST_NOTIFICATIONS,
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (!granted) {
+                        pendingToggleType = com.unboundapex.octalink.data.schema.NotificationType.CLASS_REMINDER
+                        notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
             },
         )
     }
@@ -449,5 +513,290 @@ private fun NotificationToggleRow(
             checked = enabled,
             onCheckedChange = onToggle,
         )
+    }
+}
+
+/**
+ * 수업 30분 전 리마인더 — 슬롯별 세분화 설정 진입 row.
+ * 단순 Switch 대신 "N개 선택됨 · 설정 →" 안내 + 탭 시 슬롯 선택 다이얼로그 오픈.
+ */
+@Composable
+private fun ClassReminderConfigRow(
+    selectedCount: Int,
+    onClick: () -> Unit,
+) {
+    val type = com.unboundapex.octalink.data.schema.NotificationType.CLASS_REMINDER
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                type.displayName,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                if (selectedCount == 0) "비활성화 · 탭하여 슬롯 선택"
+                else "$selectedCount 개 슬롯 활성화 · 탭하여 변경",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "→",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+    }
+}
+
+/**
+ * 수업 리마인더 슬롯 선택 다이얼로그.
+ * weekly schedule 의 모든 (요일, 수업) 슬롯을 요일별 그룹으로 LazyColumn 에 나열, 체크박스로 토글.
+ * 저장 시 선택 셋을 [NotificationPrefsViewModel.updateClassReminderSlots] 로 일괄 push.
+ */
+@Composable
+private fun ClassReminderConfigDialog(
+    initialSelected: Set<String>,
+    onDismiss: () -> Unit,
+    onSave: (Set<String>) -> Unit,
+    onRequestPermissionIfNeeded: () -> Unit,
+) {
+    // 다이얼로그 열린 동안 로컬 편집 상태 — 저장 시점에 외부로 commit.
+    var selected by remember(initialSelected) { mutableStateOf(initialSelected) }
+    val allSlots = remember { com.unboundapex.octalink.data.allWeeklyClassSlots() }
+    val grouped = remember(allSlots) {
+        allSlots.groupBy({ it.first }, { it.second })
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("수업 리마인더 설정", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            LazyColumn(modifier = Modifier.height(420.dp)) {
+                item {
+                    Text(
+                        "참석할 수업을 선택하면 시작 30분 전에 알림을 보냅니다.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                grouped.forEach { (day, slots) ->
+                    item {
+                        // 요일 헤더 + 일괄 선택/해제 토글
+                        val dayKeys = slots.map { com.unboundapex.octalink.data.classSlotKey(day, it) }.toSet()
+                        val allOn = dayKeys.isNotEmpty() && dayKeys.all { it in selected }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                dayOfWeekKr(day),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                if (allOn) "전체 해제" else "전체 선택",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clickable {
+                                        selected = if (allOn) selected - dayKeys else selected + dayKeys
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                    items(slots) { slot ->
+                        val key = com.unboundapex.octalink.data.classSlotKey(day, slot)
+                        val checked = key in selected
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selected = if (checked) selected - key else selected + key
+                                }
+                                .padding(vertical = 4.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.material3.Checkbox(
+                                checked = checked,
+                                onCheckedChange = {
+                                    selected = if (it) selected + key else selected - key
+                                },
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "${slot.timeRangeText} · ${slot.name}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Text(
+                "저장",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable {
+                        if (selected.isNotEmpty()) onRequestPermissionIfNeeded()
+                        onSave(selected)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        },
+        dismissButton = {
+            Text(
+                "취소",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clickable { onDismiss() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        },
+    )
+}
+
+/**
+ * 테마 선택 카드 — 두 가지 옵션을 시각적 swatch + 라벨 한 행으로 비교.
+ * 각 스와치는 그 테마의 background / surface / primary 3색을 미니 미리보기로 노출 →
+ * 토글 후 바로 적용되니 사용자가 결과를 미리 보고 선택 가능.
+ */
+@Composable
+private fun ThemePickerCard(
+    current: AppTheme,
+    onSelect: (AppTheme) -> Unit,
+) {
+    PosseCard {
+        Text("UI 테마", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "탭하여 다크 / 라이트 즉시 전환. 기기별 선호로 저장됩니다.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ThemeOptionTile(
+                option = AppTheme.DARK,
+                selected = current == AppTheme.DARK,
+                onClick = { onSelect(AppTheme.DARK) },
+                modifier = Modifier.weight(1f),
+                background = com.unboundapex.octalink.ui.theme.Ink,
+                surface = com.unboundapex.octalink.ui.theme.Canvas,
+                accent = com.unboundapex.octalink.ui.theme.Blood,
+                textColor = com.unboundapex.octalink.ui.theme.Bone,
+            )
+            ThemeOptionTile(
+                option = AppTheme.LIGHT,
+                selected = current == AppTheme.LIGHT,
+                onClick = { onSelect(AppTheme.LIGHT) },
+                modifier = Modifier.weight(1f),
+                background = com.unboundapex.octalink.ui.theme.Cloud,
+                surface = com.unboundapex.octalink.ui.theme.Paper,
+                accent = com.unboundapex.octalink.ui.theme.Blood,
+                textColor = com.unboundapex.octalink.ui.theme.Slate,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeOptionTile(
+    option: AppTheme,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    background: Color,
+    surface: Color,
+    accent: Color,
+    textColor: Color,
+) {
+    val borderColor = if (selected) accent else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val borderWidth = if (selected) 2.dp else 1.dp
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .border(borderWidth, borderColor, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+    ) {
+        // 미니 미리보기 — 배경 위에 카드(surface) + 액센트 도트.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(background)
+                .padding(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.78f)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(surface),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(accent),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .height(3.dp)
+                            .fillMaxWidth(0.7f)
+                            .background(textColor.copy(alpha = 0.7f)),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                option.displayName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
+                color = if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.weight(1f))
+            if (selected) {
+                Text(
+                    "✓",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
     }
 }
