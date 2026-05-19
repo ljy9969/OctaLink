@@ -18,9 +18,7 @@ import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Place
-import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Shop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,7 +29,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.unboundapex.octalink.BuildConfig
 import com.unboundapex.octalink.data.GymInfo
 import com.unboundapex.octalink.data.weeklyPlan
 import com.unboundapex.octalink.ui.components.PosseCard
@@ -170,62 +167,6 @@ fun InfoScreen(onBack: () -> Unit) {
                             onClick = { open(GymInfo.BLOG_URL) },
                             modifier = Modifier.weight(1f),
                         )
-                    }
-                }
-            }
-
-            item {
-                PosseCard {
-                    Text(
-                        "정책 / 링크",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SocialCell(
-                            icon = Icons.Outlined.PrivacyTip,
-                            primary = "개인정보처리방침",
-                            secondary = "외부 브라우저로 열기",
-                            onClick = { open(GymInfo.PRIVACY_POLICY_URL) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        SocialCell(
-                            icon = Icons.Outlined.Shop,
-                            primary = "Play 스토어",
-                            secondary = "앱 페이지 열기",
-                            onClick = { open(GymInfo.PLAY_STORE_URL) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-
-            item {
-                PosseCard {
-                    Text(
-                        "앱 정보",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("버전", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("패키지", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(BuildConfig.APPLICATION_ID, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }

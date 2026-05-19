@@ -46,6 +46,7 @@ import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.screens.home.SaveState
 import com.unboundapex.octalink.ui.screens.home.WeeklyMissionViewModel
+import kotlin.math.roundToInt
 
 /**
  * 운영진/관장/창조자 전용 페이지 — 하단 nav 탭 "운영" 진입점.
@@ -470,7 +471,7 @@ private fun SkillSlider(label: String, value: Float, onChange: (Float) -> Unit) 
                 .padding(horizontal = 8.dp),
         )
         Text(
-            "${(value * 100).toInt()}",
+            "${(value * 100).roundToInt()}",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.width(36.dp),
         )
@@ -509,7 +510,7 @@ private fun PendingSkillScoreRow(
     onReject: () -> Unit,
 ) {
     val s = item.score
-    val avg = (((s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed) / 6f) * 100).toInt()
+    val avg = (((s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed) / 6f) * 100).roundToInt()
     val date = s.evaluatedAt.atZone(reviewSeoulZone).toLocalDate().format(reviewDateFmt)
     Column(
         modifier = Modifier
@@ -544,8 +545,8 @@ private fun PendingSkillScoreRow(
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "스트라이킹 ${(s.striking * 100).toInt()} · 그래플링 ${(s.grappling * 100).toInt()} · 체력 ${(s.stamina * 100).toInt()}\n" +
-                "기술 ${(s.technique * 100).toInt()} · 멘탈 ${(s.mental * 100).toInt()} · 스피드 ${(s.speed * 100).toInt()}",
+            "스트라이킹 ${(s.striking * 100).roundToInt()} · 그래플링 ${(s.grappling * 100).roundToInt()} · 체력 ${(s.stamina * 100).roundToInt()}\n" +
+                "기술 ${(s.technique * 100).roundToInt()} · 멘탈 ${(s.mental * 100).roundToInt()} · 스피드 ${(s.speed * 100).roundToInt()}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -566,8 +567,14 @@ private fun PendingMemberRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(member.name, style = MaterialTheme.typography.titleMedium)
+            // 성별 · 체급 · 벨트 — 카카오 비즈 미통과 환경에선 회원이 가입 폼에서 직접 입력한 값.
+            val genderLabel = when (member.gender?.uppercase()) {
+                "MALE" -> "남"
+                "FEMALE" -> "여"
+                else -> "성별 미입력"
+            }
             Text(
-                "${member.weightClass.displayName} · ${member.belt.displayName} 벨트",
+                "$genderLabel · ${member.weightClass.displayName} · ${member.belt.displayName} 벨트",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -643,7 +650,7 @@ private fun SkillTargetRow(
 ) {
     val avg = member.skills?.let { s ->
         val sum = s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed
-        (sum / 6f * 100).toInt()
+        (sum / 6f * 100).roundToInt()
     }
     Row(
         modifier = modifier

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -65,6 +66,7 @@ import com.unboundapex.octalink.ui.screens.onboarding.PendingApprovalScreen
 import com.unboundapex.octalink.ui.screens.onboarding.RejectedScreen
 import com.unboundapex.octalink.ui.screens.onboarding.SignupScreen
 import com.unboundapex.octalink.ui.screens.profile.ProfileScreen
+import com.unboundapex.octalink.ui.screens.profile.ProfileSettingsScreen
 import com.unboundapex.octalink.ui.screens.splash.SplashScreen
 
 sealed class Route(val path: String, val label: String, val icon: ImageVector) {
@@ -73,6 +75,7 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object Attendance : Route("attendance", "출석", Icons.Outlined.CheckCircle)
     data object Community : Route("community", "커뮤니티", Icons.Outlined.Forum)
     data object Profile : Route("profile", "프로필", Icons.Outlined.Person)
+    data object ProfileSettings : Route("profile_settings", "프로필 설정", Icons.Outlined.Settings)
     data object Bracket : Route("bracket", "대진표", Icons.Outlined.CheckCircle)
     data object BracketAdmin : Route("bracket_admin", "대진표 관리", Icons.Outlined.CheckCircle)
     data object BracketDraw : Route("bracket_draw", "추첨", Icons.Outlined.CheckCircle)
@@ -242,6 +245,13 @@ fun PosseApp() {
                 ProfileScreen(
                     sessionVm = sessionVm,
                     onOpenTournamentHistory = { navController.navigate(Route.TournamentHistory.path) },
+                    onOpenSettings = { navController.navigate(Route.ProfileSettings.path) },
+                )
+            }
+            composable(Route.ProfileSettings.path) {
+                ProfileSettingsScreen(
+                    sessionVm = sessionVm,
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(Route.Info.path) {

@@ -20,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.unboundapex.octalink.data.CurriculumDay
@@ -28,6 +27,7 @@ import com.unboundapex.octalink.data.dayLabelKor
 import com.unboundapex.octalink.data.weeklyCurriculum
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import com.unboundapex.octalink.ui.components.TagChip
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -114,25 +114,3 @@ private fun DayBadge(label: String, highlight: Boolean) {
     }
 }
 
-private fun tagColor(tag: String): Color = when (tag) {
-    "스트라이킹" -> Color(0xFFFF6B35) // 오렌지
-    "킥복싱" -> Color(0xFF1E88E5)     // 블루 (복싱 + 킥복싱 통합)
-    "그래플링" -> Color(0xFF6D4C41)   // 브라운 (도복/땀 느낌)
-    "MMA" -> Color(0xFFC8102E)        // 블러드 (브랜드 컬러)
-    "스파링" -> Color(0xFF27AE60)     // 그린
-    else -> Color(0xFF6E6E78)         // 폴백 ash
-}
-
-@Composable
-private fun TagChip(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = Color.White,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(tagColor(text))
-            .padding(horizontal = 8.dp, vertical = 3.dp)
-    )
-}

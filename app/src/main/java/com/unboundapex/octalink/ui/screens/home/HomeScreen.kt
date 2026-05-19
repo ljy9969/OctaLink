@@ -57,6 +57,7 @@ import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.CageIcon
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import com.unboundapex.octalink.ui.components.TagChip
 import com.unboundapex.octalink.ui.screens.attendance.GYM_DAYS_PER_WEEK
 import com.unboundapex.octalink.ui.screens.profile.MyCommentsViewModel
 import kotlinx.coroutines.launch
@@ -170,13 +171,7 @@ fun HomeScreen(
     val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
     val todayCurriculum = remember(today) { curriculumForToday(today) }
     val gymClosedToday = remember(today) { isClosed(today) }
-    val todayCurriculumItem = if (todayCurriculum != null && !gymClosedToday) {
-        FeedItem(
-            title = "오늘의 커리큘럼",
-            meta = "${todayCurriculum.coach} · ${todayCurriculum.tag}",
-            body = todayCurriculum.theme,
-        )
-    } else null
+    // 오늘의 커리큘럼 카드는 태그를 색깔 칩으로 노출하므로 일반 FeedItem 대신 dedicated 렌더.
 
     PosseScreen(
         subtitle = "개인의 성장, 함께하는 진화",
@@ -318,8 +313,14 @@ fun HomeScreen(
                     }
                 }
             }
-            if (todayCurriculumItem != null) {
-                item { TitleMetaCard(todayCurriculumItem) }
+            if (todayCurriculum != null && !gymClosedToday) {
+                item {
+                    TodayCurriculumCard(
+                        coach = todayCurriculum.coach,
+                        tag = todayCurriculum.tag,
+                        theme = todayCurriculum.theme,
+                    )
+                }
             }
             item { TitleMetaCard(sparringMatchItem) }
             item { TitleMetaCard(oneLineComment) }
@@ -352,7 +353,7 @@ private fun GymInfoCard(onClick: () -> Unit) {
             androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
                 Text("체육관 정보", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "주소 · 전화 · 운영시간 · 소셜 · 정책",
+                    "주소 · 전화 · 운영시간 · 소셜",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -388,6 +389,37 @@ private fun TitleMetaCard(item: FeedItem) {
             item.body,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * 오늘의 커리큘럼 — meta 우측에 [TagChip] 색깔 pill 로 태그 노출.
+ * 코치명은 그 왼쪽에 회색 라벨 텍스트로 분리해 [CurriculumScreen] 와 시각적 어휘 통일.
+ */
+@Composable
+private fun TodayCurriculumCard(coach: String, tag: String, theme: String) {
+    PosseCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "오늘의 커리큘럼",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "$coach · ",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TagChip(tag)
+        }
+        Text(
+            theme,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

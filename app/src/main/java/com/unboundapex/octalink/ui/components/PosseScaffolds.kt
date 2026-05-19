@@ -40,6 +40,8 @@ fun PosseScreen(
     subtitle: String? = null,
     subtitleEmphasis: List<String> = emptyList(),
     header: (@Composable () -> Unit)? = null,
+    /** 타이틀 행 우측에 노출할 액션(예: 톱니바퀴). subtitle 과 동시 지정 시 subtitle 다음에 렌더. */
+    trailing: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Column(
@@ -72,7 +74,9 @@ fun PosseScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.Bottom
+                // subtitle 있으면 baseline 정렬 위해 Bottom, 없으면 (trailing 만 있는 경우)
+                // title 과 trailing 의 시각 중앙을 일치시키기 위해 CenterVertically.
+                verticalAlignment = if (subtitle != null) Alignment.Bottom else Alignment.CenterVertically
             ) {
                 Text(
                     text = title.uppercase(),
@@ -92,6 +96,11 @@ fun PosseScreen(
                             .weight(1f)
                             .padding(bottom = 4.dp)
                     )
+                }
+                if (trailing != null) {
+                    if (subtitle == null) Spacer(Modifier.weight(1f))
+                    // Row 의 verticalAlignment 가 case 별로 적절히 잡혀 있어서 Box 자체엔 override 불필요.
+                    Box { trailing() }
                 }
             }
             Spacer(Modifier.height(20.dp))
