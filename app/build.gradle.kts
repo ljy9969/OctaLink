@@ -33,8 +33,8 @@ android {
         applicationId = "com.unboundapex.octalink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 6
+        versionName = "0.6.0"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")

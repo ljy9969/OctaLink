@@ -23,20 +23,25 @@ import kotlin.coroutines.resumeWithException
 private const val TAG = "OctaLink.KakaoAuth"
 
 /**
- * 카카오 비즈앱 검수 통과 시 사용자에게 추가 요청할 OAuth scope ID 목록.
+ * 카카오 비즈앱 검수 통과 시 사용자에게 추가 요청할 OAuth scope ID 목록 — *희망* 셋.
  *
- * Kakao Developer Console → 내 애플리케이션 → 카카오 로그인 → 동의 항목 페이지에서
- * 각 항목의 ID 를 확인 가능. 콘솔에서 검수 완료된 항목만 실제 응답에 반환되며, 미검수
- * 항목은 scope 로 요청해도 OAuth 거절 처리됨.
+ * 실제 요청은 [requestNewScopesIfMissing] 가 *콘솔 등록 ∩ 미동의* 만 골라 [loginWithNewScopes]
+ * 호출. 콘솔 미등록 항목은 silently skip 되므로 이 리스트에 다 적어두고 그대로 두면 됨 — 추후
+ * 콘솔에 항목이 추가될 때마다 자동 활성. 미등록 = OAuth 거절이 아니라 *요청 자체 안 함*.
+ *
+ * **2026-05-18 운영 앱(1453976) 현황**: 비즈니스 정보 심사 ✅ / 개인정보 동의항목 ⏸ (사업자등록증
+ * 등록 필요). 현재 콘솔 등록 항목 = 닉네임 / 프로필 사진 / 이메일(`account_email`). 그 외 6개는
+ * 미등록 상태라 요청 안 됨 → SignupScreen 의 fallback(성별 chip 직접 선택 / 이름·전화 수동 입력)
+ * 이 활성. 사업자등록증 발급 후 콘솔 추가 신청 통과 시 코드 변경 없이 자동 활성.
  */
 private val BIZ_SCOPES = listOf(
-    "name",          // 이름 (실명) — 비즈앱 검수 필요
-    "phone_number",  // 전화번호 — 비즈앱 검수 필요
-    "account_email", // 카카오계정(이메일)
-    "gender",        // 성별
-    "age_range",     // 연령대
-    "birthday",      // 생일
-    "birthyear",     // 출생연도
+    "name",          // 이름 (실명) — 사업자 등록 후 동의 항목 신청 필요
+    "phone_number",  // 전화번호 — 사업자 등록 후 동의 항목 신청 필요
+    "account_email", // 카카오계정(이메일) — 운영 앱 등록 ✅
+    "gender",        // 성별 — 사업자 등록 후
+    "age_range",     // 연령대 — 사업자 등록 후
+    "birthday",      // 생일 — 사업자 등록 후
+    "birthyear",     // 출생연도 — 사업자 등록 후
 )
 
 /**

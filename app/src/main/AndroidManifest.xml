@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- FCM: Android 13(API 33)+ 알림 표시 권한. 실제 runtime 요청은 푸시 알림 작업 시점에. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Firebase Analytics(play-services-measurement) 가 자동 머지하는 광고 ID 권한 제거. -->
+    <!-- 광고 ID 미사용 → Play Console 의 광고 ID 선언 '아니요' 응답과 일치. -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
 
     <application
         android:name=".OctaLinkApplication"

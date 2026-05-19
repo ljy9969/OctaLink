@@ -108,9 +108,9 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     val session by sessionVm.state.collectAsState()
     val kakaoIdentity = session.kakaoIdentity
 
-    // 카카오 자동 제공 값 (실명) — null/blank 아니면 read-only 로 고정.
+    // 카카오 자동 제공 값. 비즈앱 검수 미통과 운영 앱(1453976)에선 닉네임(임의 문자열) 이
+    // 그대로 들어와 실명이 아닐 수 있음 → prefill 만 하고 사용자가 수정 가능.
     val kakaoName = kakaoIdentity?.displayName?.takeIf { it.isNotBlank() }
-    val nameAutoFilled = kakaoName != null
 
     // 전화번호는 가입 폼 UI 에서 받지 않지만, 카카오 비즈앱 동의 항목으로 받아온 값이 있으면
     // Firestore members.{uid}.phone 에 그대로 저장. 사용자에게는 노출하지 않음 (조용히 보관).
@@ -139,7 +139,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     var datePickerOpen by remember { mutableStateOf(false) }
     var weightInfoOpen by remember { mutableStateOf(false) }
 
-    // 카카오 prefill (자동 — 이후 비활성 필드라 LaunchedEffect 한 번이면 충분)
+    // 카카오 닉네임 → 이름 필드 초기 prefill (입력 비었을 때만). 이후 사용자가 자유 수정 가능.
     LaunchedEffect(kakaoName) {
         if (kakaoName != null && nameValue.text.isEmpty()) {
             nameValue = TextFieldValue(kakaoName, selection = TextRange(kakaoName.length))
@@ -182,13 +182,12 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 }
             }
 
-            // 이름 — 카카오에서 받아왔으면 read-only (변조 방지).
+            // 이름 — 카카오 닉네임은 실명이 아닐 수 있어 prefill 후 자유 수정 허용.
             // 전화번호는 폼에서 받지 않음 — 카카오 비즈앱 동의 항목으로만 수집.
             PosseCard {
                 OutlinedTextField(
                     value = nameValue,
-                    onValueChange = { if (!nameAutoFilled) nameValue = it },
-                    enabled = !nameAutoFilled,
+                    onValueChange = { nameValue = it },
                     label = { Text("이름")},
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
