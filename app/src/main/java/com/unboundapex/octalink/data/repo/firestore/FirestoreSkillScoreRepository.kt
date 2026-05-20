@@ -29,11 +29,15 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
         membersCol.document(memberId).collection(Collections.SKILL_SCORES)
 
     /**
-     * 6축 점수 저장 정밀도 — 슬라이더 raw float (예: 0.5086712837219238) 을 0.01 단위로 truncate.
-     * UI 의 `(value * 100).toInt()` 표시(0~100 정수) 와 1:1 매칭. Firestore doc 가독성/일관성 목적.
+     * 6축 점수 저장 정밀도 — 슬라이더 raw float (예: 0.5086712837219238) 을 0.01 단위로 양자화.
+     * UI 의 `(value * 100).roundToInt()` 표시(0~100 정수) 와 1:1 매칭.
+     *
+     * round (not floor) 인 이유: Float 0.7f → Double 0.69999998807... → ×100 = 69.9999... 인데
+     * floor 쓰면 69 로 떨어져 0.69 가 저장됨 (슬라이더 "70" 위치 → DB 에 0.69 라는 실명 버그).
+     * round 면 70.0 로 올라가 0.7 저장 → UI 의 roundToInt 표시(70) 와 정확히 일치.
      */
     private fun Float.toFirestoreScore(): Double =
-        kotlin.math.floor(this.toDouble() * 100) / 100
+        kotlin.math.round(this.toDouble() * 100) / 100
 
     override fun observeByMember(memberId: String): Flow<List<SkillScoreDoc>> = callbackFlow {
         val sub = memberScores(memberId)

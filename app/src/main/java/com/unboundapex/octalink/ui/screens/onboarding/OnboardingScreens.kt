@@ -34,8 +34,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.app.Activity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -70,6 +72,9 @@ private val kakaoText = Color(0xFF3C1E1E)
  */
 @Composable
 fun LoginScreen(sessionVm: SessionViewModel) {
+    // 카카오 SDK 는 카톡 앱 / 웹 OAuth 띄우려고 startActivity 호출 — Activity context 필수.
+    // LocalContext.current 는 컴포저블이 호스팅된 Activity 를 반환 (MainActivity 단일 호스트).
+    val activity = LocalContext.current as Activity
     PosseScreen(title = "OctaLink", subtitle = "회원 로그인") {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -88,7 +93,7 @@ fun LoginScreen(sessionVm: SessionViewModel) {
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(24.dp))
-            KakaoSignInButton(onClick = { sessionVm.signInWithKakao() })
+            KakaoSignInButton(onClick = { sessionVm.signInWithKakao(activity) })
             Spacer(Modifier.height(12.dp))
             Text(
                 "가입 승인 후 이용 가능합니다.",

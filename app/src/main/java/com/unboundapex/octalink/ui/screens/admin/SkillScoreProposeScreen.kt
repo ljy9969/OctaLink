@@ -44,6 +44,7 @@ import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 /**
  * 운영진 스킬 점수 제안 화면 — AdminScreen 의 "스킬 점수 입력 (제안 → 관장 검토)" 진입점.
@@ -222,7 +223,7 @@ private fun ScoreList(
 
 @Composable
 private fun ScoreRow(s: SkillScoreDoc, byUserName: String?) {
-    val avgPct = (((s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed) / 6f) * 100).toInt()
+    val avgPct = (((s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed) / 6f) * 100).roundToInt()
     val ld = s.evaluatedAt.atZone(seoul).toLocalDate()
     val dateStr = "${ld.format(dateFmt)} (${dayOfWeekKr(ld.dayOfWeek)})"
     // 제안자 이름이 풀에 없으면(탈퇴/CREATOR 이름 동기화 전 등) "·" 자체를 생략
@@ -248,7 +249,7 @@ private fun ScoreRow(s: SkillScoreDoc, byUserName: String?) {
  * 3개씩 2줄로 분리 → SkillSlider 다이얼로그 라벨과 동일한 풀네임 사용 가능.
  */
 private fun skillSummary(s: SkillScoreDoc): String {
-    fun pct(f: Float) = (f * 100).toInt()
+    fun pct(f: Float) = (f * 100).roundToInt()
     val line1 = "스트라이킹 ${pct(s.striking)} · 그래플링 ${pct(s.grappling)} · 체력 ${pct(s.stamina)}"
     val line2 = "기술 ${pct(s.technique)} · 멘탈 ${pct(s.mental)} · 스피드 ${pct(s.speed)}"
     return "$line1\n$line2"
@@ -356,7 +357,7 @@ private fun SkillSlider(label: String, value: Float, onChange: (Float) -> Unit) 
                 .padding(horizontal = 8.dp),
         )
         Text(
-            "${(value * 100).toInt()}",
+            "${(value * 100).roundToInt()}",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.width(36.dp),
         )

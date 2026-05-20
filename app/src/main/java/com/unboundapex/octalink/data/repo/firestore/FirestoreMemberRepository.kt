@@ -184,9 +184,9 @@ class FirestoreMemberRepository : MemberRepository {
         col.document(memberId).update(updates).await()
     }
 
-    /** [FirestoreSkillScoreRepository] 와 동일 정밀도 — 슬라이더 raw float 을 0.01 단위로 truncate. */
+    /** [FirestoreSkillScoreRepository] 와 동일 정밀도 — 슬라이더 raw float 을 0.01 단위로 양자화 (round). */
     private fun Float.toFirestoreScore(): Double =
-        kotlin.math.floor(this.toDouble() * 100) / 100
+        kotlin.math.round(this.toDouble() * 100) / 100
 
     /** Query 의 snapshot 을 List<MemberDoc> Flow 로 변환. */
     private fun Query.snapshotsAsList(): Flow<List<MemberDoc>> = callbackFlow {

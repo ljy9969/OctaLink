@@ -1,5 +1,6 @@
 package com.unboundapex.octalink.data.repo.kakao
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import com.google.firebase.Firebase
@@ -81,18 +82,20 @@ class KakaoAuthRepository(
         }
     }
 
-    override suspend fun signInWithKakao(): Result<KakaoIdentity> = runCatching {
+    override suspend fun signInWithKakao(activity: Activity): Result<KakaoIdentity> = runCatching {
         // 1) 카카오 OAuth 토큰 획득 — 카톡 앱 우선, 없으면 웹 계정 로그인.
+        // Activity context 필수 — 카카오 SDK 가 startActivity 로 카톡 앱/웹뷰를 띄우는데,
+        // ApplicationContext 로 호출하면 "FLAG_ACTIVITY_NEW_TASK 필요" 런타임 예외.
         Log.d(TAG, "[1/4] Kakao OAuth 시작")
-        val kakaoTalkAvailable = UserApiClient.instance.isKakaoTalkLoginAvailable(context)
+        val kakaoTalkAvailable = UserApiClient.instance.isKakaoTalkLoginAvailable(activity)
         Log.d(TAG, "[1/4] kakaoTalkAvailable=$kakaoTalkAvailable")
         val oAuthToken = if (kakaoTalkAvailable) {
             awaitKakaoLogin { cb ->
-                UserApiClient.instance.loginWithKakaoTalk(context, callback = cb)
+                UserApiClient.instance.loginWithKakaoTalk(activity, callback = cb)
             }
         } else {
             awaitKakaoLogin { cb ->
-                UserApiClient.instance.loginWithKakaoAccount(context, callback = cb)
+                UserApiClient.instance.loginWithKakaoAccount(activity, callback = cb)
             }
         }
         Log.d(TAG, "[1/4] accessToken 획득 ${PiiMask.id(oAuthToken.accessToken)}")
@@ -100,7 +103,7 @@ class KakaoAuthRepository(
         // 1b) 비즈 동의 항목 보충 — 초기 로그인은 기본 scope (e.g. profile_nickname) 만 가져오므로
         // `name` / `phone_number` 등 비즈 검수 항목은 명시적으로 추가 동의를 받아야 함.
         // 현재 agree 상태를 조회 후 누락 항목만 loginWithNewScopes 로 요청 (이미 동의됨이면 skip).
-        ensureBizScopes()
+        ensureBizScopes(activity)
 
         // 2) Cloud Function 으로 카카오 accessToken → Firebase Custom Token 교환
         Log.d(TAG, "[2/4] Cloud Function kakaoSignIn 호출")
@@ -167,7 +170,7 @@ class KakaoAuthRepository(
      * [BIZ_SCOPES] 중 미동의 항목을 [UserApiClient.loginWithNewScopes] 로 추가 요청.
      * 모두 동의됨 / 또는 모두 미적용(콘솔 미등록) 이면 no-op.
      */
-    private suspend fun ensureBizScopes() {
+    private suspend fun ensureBizScopes(activity: Activity) {
         Log.d(TAG, "[1b/4] ensureBizScopes 진입")
         val info = runCatching { awaitScopes() }
             .onFailure { Log.w(TAG, "[1b/4] scopes 조회 실패 — skip", it) }
@@ -188,7 +191,7 @@ class KakaoAuthRepository(
         }
         Log.d(TAG, "[1b/4] loginWithNewScopes(missing=$missing)")
         suspendCancellableCoroutine<OAuthToken> { cont ->
-            UserApiClient.instance.loginWithNewScopes(context, missing) { token, error ->
+            UserApiClient.instance.loginWithNewScopes(activity, missing) { token, error ->
                 when {
                     error != null -> cont.resumeWithException(error)
                     token != null -> cont.resume(token)

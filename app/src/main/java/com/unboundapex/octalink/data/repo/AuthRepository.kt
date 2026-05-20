@@ -1,5 +1,6 @@
 package com.unboundapex.octalink.data.repo
 
+import android.app.Activity
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -23,8 +24,11 @@ interface AuthRepository {
     /**
      * 카카오 OAuth 시작 → 토큰 교환 → Firebase signIn 까지 1-shot.
      * mock 구현은 즉시 [KakaoIdentity] 반환.
+     *
+     * @param activity 카카오 SDK 가 카카오톡 앱(또는 웹 OAuth) 을 띄우기 위한 Activity context.
+     * ApplicationContext 를 쓰면 `Calling startActivity() from outside of an Activity context` 런타임 예외.
      */
-    suspend fun signInWithKakao(): Result<KakaoIdentity>
+    suspend fun signInWithKakao(activity: Activity): Result<KakaoIdentity>
 
     suspend fun signOut()
 }

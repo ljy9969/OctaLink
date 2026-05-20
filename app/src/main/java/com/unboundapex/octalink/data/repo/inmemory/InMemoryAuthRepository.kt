@@ -1,5 +1,6 @@
 package com.unboundapex.octalink.data.repo.inmemory
 
+import android.app.Activity
 import com.unboundapex.octalink.data.repo.AuthRepository
 import com.unboundapex.octalink.data.repo.KakaoIdentity
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +24,7 @@ class InMemoryAuthRepository(
 
     private var fakeKakaoCounter = 0
 
-    override suspend fun signInWithKakao(): Result<KakaoIdentity> {
+    override suspend fun signInWithKakao(activity: Activity): Result<KakaoIdentity> {
         fakeKakaoCounter++
         val id = "kakao:mock-${System.currentTimeMillis()}-$fakeKakaoCounter"
         _currentUid.value = id

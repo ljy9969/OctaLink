@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 data class SkillStat(val label: String, val value: Float)
@@ -72,7 +73,7 @@ fun HexagonSkillChart(
             val anchorY = center.y + (radius + labelGap) * sin(angle)
 
             val labelLayout = textMeasurer.measure(AnnotatedString(stat.label), labelStyle)
-            val pct = "${(stat.value * 100).toInt()}"
+            val pct = "${(stat.value * 100).roundToInt()}"
             val valueLayout = textMeasurer.measure(AnnotatedString(pct), valueStyle)
 
             val blockHeight = labelLayout.size.height + valueLayout.size.height + 2.dp.toPx()

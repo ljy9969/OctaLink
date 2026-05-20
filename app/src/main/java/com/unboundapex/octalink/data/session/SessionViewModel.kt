@@ -1,5 +1,6 @@
 package com.unboundapex.octalink.data.session
 
+import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unboundapex.octalink.data.Belt
@@ -105,13 +106,16 @@ class SessionViewModel : ViewModel() {
         }
     }
 
-    fun signInWithKakao() {
+    fun signInWithKakao(activity: Activity) {
         // 카카오 SDK 호출 시작 즉시 LOADING — Kakao auth + Firebase signIn + Firestore snapshot 도착
         // 시점까지의 갭에서 LoginScreen 이 재노출되는 깜빡임을 차단. uid 갱신 후 init flow 가
         // PENDING_SIGNUP/AUTHENTICATED 로 자연스럽게 전환.
+        // activity: 카카오 SDK 가 카톡 앱/웹 OAuth 띄울 Activity context. ApplicationContext 전달 시
+        // "Calling startActivity() from outside of an Activity context" 런타임 예외 → 카톡 설치된
+        // 실기기에서 로그인 버튼 무반응(보이는 화면 변화 없이 silent fail).
         _state.value = _state.value.copy(phase = SessionState.Phase.LOADING)
         viewModelScope.launch {
-            val result = auth.signInWithKakao()
+            val result = auth.signInWithKakao(activity)
             if (result.isFailure) {
                 android.util.Log.e(
                     "OctaLink.Auth",
