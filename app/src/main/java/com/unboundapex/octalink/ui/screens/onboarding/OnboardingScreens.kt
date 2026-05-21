@@ -238,9 +238,9 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 }
             }
 
-            // 입관일 — 도장에 처음 등록한 날 (앱 가입일과 별개)
+            // 입관일 — 체육관에 처음 등록한 날 (앱 가입일과 별개)
             PosseCard(modifier = Modifier.clickable { datePickerOpen = true }) {
-                Text("도장 입관일", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("체육관 입관일", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 Text(joinDateLabel, style = MaterialTheme.typography.titleMedium)
                 Text(

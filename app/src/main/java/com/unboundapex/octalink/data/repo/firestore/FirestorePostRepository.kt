@@ -9,6 +9,7 @@ import com.unboundapex.octalink.data.repo.PostRepository
 import com.unboundapex.octalink.data.schema.Collections
 import com.unboundapex.octalink.data.schema.PostDoc
 import com.unboundapex.octalink.data.schema.PostTag
+import com.unboundapex.octalink.data.schema.PostVisibility
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -50,8 +51,14 @@ class FirestorePostRepository : PostRepository {
         tag: PostTag,
         imageUrl: String?,
         videoUrl: String?,
+        mentionedMemberIds: List<String>,
     ): PostDoc {
         val ref = col.document()
+        // 미디어(이미지/영상) + 멘션 조합이면 비공개(승인 대기) — 멘션된 회원 전원 승인 필요.
+        // 멘션만 있고 미디어 없으면 일반 PUBLIC (단순 호명, 프라이버시 이슈 없음).
+        val hasMedia = imageUrl != null || videoUrl != null
+        val effectiveMentions = mentionedMemberIds.distinct().filter { it != authorId }
+        val isPending = hasMedia && effectiveMentions.isNotEmpty()
         val data = mapOf(
             "id" to ref.id,
             "authorId" to authorId,
@@ -64,11 +71,54 @@ class FirestorePostRepository : PostRepository {
             "videoUrl" to videoUrl,
             "likedBy" to emptyList<String>(),
             "createdAt" to FieldValue.serverTimestamp(),
+            "mentionedMemberIds" to effectiveMentions,
+            "visibility" to if (isPending) PostVisibility.PENDING_APPROVAL.name else PostVisibility.PUBLIC.name,
+            "pendingApprovalFrom" to if (isPending) effectiveMentions else emptyList(),
+            "rejectedBy" to emptyList<String>(),
         )
         ref.set(data).await()
         // 서버 timestamp 포함된 doc 재조회
         val snap = ref.get().await()
         return snap.toPostDoc() ?: error("create 후 posts/${ref.id} 조회 실패")
+    }
+
+    override suspend fun approveMention(postId: String, memberId: String) {
+        val ref = col.document(postId)
+        // 트랜잭션 — 동시에 여러 멘션이 승인할 때 pending 셋 race 차단.
+        db.runTransaction { tx ->
+            val snap = tx.get(ref)
+            val pending = (snap.get("pendingApprovalFrom") as? List<*>)
+                ?.filterIsInstance<String>().orEmpty()
+            val remaining = pending - memberId
+            val updates = mutableMapOf<String, Any>(
+                "pendingApprovalFrom" to remaining,
+            )
+            if (remaining.isEmpty()) {
+                // 모두 승인 → PUBLIC 전이.
+                updates["visibility"] = PostVisibility.PUBLIC.name
+            }
+            tx.update(ref, updates)
+            null
+        }.await()
+    }
+
+    override suspend fun rejectMention(postId: String, memberId: String) {
+        val ref = col.document(postId)
+        db.runTransaction { tx ->
+            val snap = tx.get(ref)
+            val pending = (snap.get("pendingApprovalFrom") as? List<*>)
+                ?.filterIsInstance<String>().orEmpty()
+            tx.update(
+                ref,
+                mapOf(
+                    "visibility" to PostVisibility.REJECTED.name,
+                    "rejectedBy" to FieldValue.arrayUnion(memberId),
+                    // REJECTED 후엔 추가 승인 의미 없음 — 빈 셋으로.
+                    "pendingApprovalFrom" to (pending - memberId),
+                ),
+            )
+            null
+        }.await()
     }
 
     override suspend fun toggleLike(postId: String, memberId: String) {

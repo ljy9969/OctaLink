@@ -10,6 +10,7 @@ import com.unboundapex.octalink.data.media.VideoUploader
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.schema.PostDoc
 import com.unboundapex.octalink.data.schema.PostTag
+import com.unboundapex.octalink.data.schema.PostVisibility
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,54 @@ import java.time.ZoneId
  */
 class PostsViewModel : ViewModel() {
     private val posts = RepositoryProvider.posts
+    private val postComments = RepositoryProvider.postComments
+    private val members = RepositoryProvider.members
 
+    /**
+     * 멘션 picker 가 노출할 회원 목록 — APPROVED 만. 본인 제외는 호출자(UI) 책임.
+     * 12명 규모 비공개 베타 가정 — 페이지네이션 / 검색 인덱스 불필요.
+     */
+    val approvedMembers: StateFlow<List<com.unboundapex.octalink.data.schema.MemberDoc>> =
+        members.observeByStatus(com.unboundapex.octalink.data.schema.MembershipStatus.APPROVED)
+            .catch { e ->
+                android.util.Log.e("OctaLink.Posts", "approvedMembers flow error", e)
+                emit(emptyList())
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * 피드 정렬 + 가시성 필터.
+     * - PUBLIC: 모두에게 노출
+     * - PENDING_APPROVAL: 작성자 본인 + 멘션된 회원만 노출 (Firestore rules 도 동일 강제)
+     * - REJECTED: 작성자 본인 + 멘션된 회원만 (정리/재게시 결정 컨텍스트)
+     *
+     * NOTICE 우선 → createdAt DESC.
+     */
+    fun sortedPostsFor(currentMemberId: String?): kotlinx.coroutines.flow.Flow<List<PostDoc>> =
+        posts.observeAll()
+            .map { list ->
+                list
+                    .filter { p ->
+                        when (p.visibility) {
+                            PostVisibility.PUBLIC -> true
+                            else -> currentMemberId != null &&
+                                (p.authorId == currentMemberId || currentMemberId in p.mentionedMemberIds)
+                        }
+                    }
+                    .sortedWith(
+                        compareByDescending<PostDoc> { it.tag == PostTag.NOTICE }
+                            .thenByDescending { it.createdAt }
+                    )
+            }
+            .catch { e ->
+                android.util.Log.e("OctaLink.Posts", "sortedPosts flow error", e)
+                emit(emptyList())
+            }
+
+    /**
+     * 호환용 — 가시성 필터 없는 전체 정렬 피드. 신규 코드는 [sortedPostsFor] 사용 권장.
+     * (PENDING/REJECTED 도 보이므로 Firestore rules read 권한이 없는 doc 은 자동으로 client 에서 빠짐)
+     */
     val sortedPosts: StateFlow<List<PostDoc>> = posts.observeAll()
         .map { list ->
             list.sortedWith(
@@ -43,6 +91,14 @@ class PostsViewModel : ViewModel() {
             emit(emptyList())
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Map<postId, 댓글 수> — 카드의 "댓글 N" 배지. 모든 글 댓글 한 listener 로 집계. */
+    val commentCounts: StateFlow<Map<String, Int>> = postComments.observeCommentCounts()
+        .catch { e ->
+            android.util.Log.e("OctaLink.Posts", "commentCounts flow error", e)
+            emit(emptyMap())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val _writeState = MutableStateFlow<WriteState>(WriteState.Idle)
     val writeState: StateFlow<WriteState> = _writeState.asStateFlow()
@@ -65,6 +121,7 @@ class PostsViewModel : ViewModel() {
         tag: PostTag,
         imageUri: Uri?,
         videoUri: Uri? = null,
+        mentionedMemberIds: List<String> = emptyList(),
     ) {
         if (title.isBlank()) {
             _writeState.value = WriteState.Error("제목을 입력하세요.")
@@ -119,6 +176,7 @@ class PostsViewModel : ViewModel() {
                     tag = tag,
                     imageUrl = imageUrl,
                     videoUrl = videoUrl,
+                    mentionedMemberIds = mentionedMemberIds,
                 )
             }.onSuccess {
                 _writeState.value = WriteState.Done
@@ -178,6 +236,22 @@ class PostsViewModel : ViewModel() {
         viewModelScope.launch {
             runCatching { posts.delete(postId) }
                 .onFailure { android.util.Log.e("OctaLink.Posts", "delete FAILED", it) }
+        }
+    }
+
+    /** 멘션된 회원의 공개 승인. UI 의 "공개 승인" 버튼 onClick. */
+    fun approveMention(postId: String, memberId: String) {
+        viewModelScope.launch {
+            runCatching { posts.approveMention(postId, memberId) }
+                .onFailure { android.util.Log.e("OctaLink.Posts", "approveMention FAILED", it) }
+        }
+    }
+
+    /** 멘션된 회원의 공개 거부 — 글이 REJECTED 로 잠금. */
+    fun rejectMention(postId: String, memberId: String) {
+        viewModelScope.launch {
+            runCatching { posts.rejectMention(postId, memberId) }
+                .onFailure { android.util.Log.e("OctaLink.Posts", "rejectMention FAILED", it) }
         }
     }
 }

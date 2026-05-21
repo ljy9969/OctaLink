@@ -543,7 +543,9 @@ type NotificationTypeKey =
   | "TOURNAMENT_DRAWN"
   | "NEW_NOTICE"
   | "SIGNUP_RESULT"
-  | "SKILL_UPDATED";
+  | "SKILL_UPDATED"
+  | "NEW_POST_COMMENT"
+  | "MENTION";
 
 /** [NotificationType.defaultEnabled] 과 일치 — 클라이언트에서 prefs 키 누락 시 기본값. */
 const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
@@ -552,6 +554,8 @@ const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
   NEW_NOTICE: true,
   SIGNUP_RESULT: true,
   SKILL_UPDATED: true,
+  NEW_POST_COMMENT: true,
+  MENTION: true,
 };
 
 /**
@@ -565,6 +569,8 @@ const CHANNEL_ID: Record<NotificationTypeKey, string> = {
   NEW_NOTICE: "octalink_notice",
   SIGNUP_RESULT: "octalink_signup",
   SKILL_UPDATED: "octalink_skill",
+  NEW_POST_COMMENT: "octalink_post_comment",
+  MENTION: "octalink_mention",
 };
 
 /**
@@ -782,5 +788,81 @@ export const notifyOnSkillsUpdated = onDocumentUpdated(
       "스킬 점수 갱신됨",
       "프로필에서 새 스킬 차트를 확인해보세요.",
     );
+  },
+);
+
+/**
+ * 새 댓글 — `posts/{postId}/postComments/{commentId}` create 시 글 작성자에게 알림.
+ * 본인이 본인 글에 댓글 단 경우는 skip (자기 알림 차단).
+ */
+export const notifyOnPostCommentCreated = onDocumentCreated(
+  {
+    document: "posts/{postId}/postComments/{commentId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    const postId = event.params.postId;
+    const commenterId = data.authorId as string | undefined;
+    const commenterName = (data.authorName as string | undefined) ?? "회원";
+    const body = (data.body as string | undefined) ?? "";
+    const snippet = body.length > 60 ? body.slice(0, 60) + "…" : body;
+
+    // 부모 글에서 작성자 id 조회.
+    const postSnap = await admin.firestore().collection("posts").doc(postId).get();
+    const postAuthorId = postSnap.data()?.authorId as string | undefined;
+    if (!postAuthorId) return;
+    if (postAuthorId === commenterId) return; // 자기 글에 자기 댓글 — skip
+
+    await sendNotificationTo(
+      [postAuthorId],
+      "NEW_POST_COMMENT",
+      `${commenterName} 님의 댓글`,
+      snippet,
+    );
+  },
+);
+
+/**
+ * @멘션 알림 + 사진/영상 공개 승인 요청 — `posts/{postId}` create 시.
+ *
+ *  - 멘션만 (미디어 없음): MENTION 타입. 일반 호명 — 알림으로 인지만.
+ *  - 미디어 + 멘션 조합: 글이 PENDING_APPROVAL 로 생성됨. 멘션된 회원에게 승인 요청 알림.
+ *
+ * 작성자 자신이 멘션 리스트에 있으면 클라이언트에서 제거하지만 안전망으로 서버에서도 한 번 더 거름.
+ */
+export const notifyOnPostMention = onDocumentCreated(
+  {
+    document: "posts/{postId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    const mentions = (data.mentionedMemberIds as string[] | undefined) ?? [];
+    if (mentions.length === 0) return;
+
+    const authorId = data.authorId as string | undefined;
+    const authorName = (data.authorName as string | undefined) ?? "회원";
+    const visibility = data.visibility as string | undefined;
+    const needsApproval = visibility === "PENDING_APPROVAL";
+
+    // 작성자 본인 + 중복 제거.
+    const targets = Array.from(new Set(mentions)).filter((id) => id !== authorId);
+    if (targets.length === 0) return;
+
+    // 글 제목 — 빈 문자열 허용 스키마라 trim 후 비어있으면 body 에 첨부 안 함.
+    const postTitle = ((data.title as string | undefined) ?? "").trim();
+    const quotedTitle = postTitle ? `"${postTitle}"` : "";
+
+    const title = needsApproval
+      ? `${authorName}님이 사진/영상을 담은 글에서 회원님을 멘션했어요.`
+      : `${authorName}님이 커뮤니티에서 회원님을 멘션했어요. :)`;
+    const body = needsApproval
+      ? `공개 전 승인이 필요해요. 커뮤니티에서 확인해주세요. :)${quotedTitle ? ` ${quotedTitle}` : ""}`
+      : quotedTitle;
+
+    await sendNotificationTo(targets, "MENTION", title, body);
   },
 );

@@ -174,14 +174,8 @@ private fun MemberPicker(
 }
 
 private val seoul = ZoneId.of("Asia/Seoul")
-private val dateFmt = DateTimeFormatter.ofPattern("M/d")
-
-private fun dayOfWeekKr(d: java.time.DayOfWeek): String = when (d) {
-    java.time.DayOfWeek.MONDAY -> "월"; java.time.DayOfWeek.TUESDAY -> "화"
-    java.time.DayOfWeek.WEDNESDAY -> "수"; java.time.DayOfWeek.THURSDAY -> "목"
-    java.time.DayOfWeek.FRIDAY -> "금"; java.time.DayOfWeek.SATURDAY -> "토"
-    java.time.DayOfWeek.SUNDAY -> "일"
-}
+// 앱 전체 통일 날짜 포맷 — "5/20(수)".
+private val dateFmt = DateTimeFormatter.ofPattern("M/d(EEE)", java.util.Locale.KOREAN)
 
 @Composable
 private fun ScoreList(
@@ -225,7 +219,7 @@ private fun ScoreList(
 private fun ScoreRow(s: SkillScoreDoc, byUserName: String?) {
     val avgPct = (((s.striking + s.grappling + s.stamina + s.technique + s.mental + s.speed) / 6f) * 100).roundToInt()
     val ld = s.evaluatedAt.atZone(seoul).toLocalDate()
-    val dateStr = "${ld.format(dateFmt)} (${dayOfWeekKr(ld.dayOfWeek)})"
+    val dateStr = ld.format(dateFmt)
     // 제안자 이름이 풀에 없으면(탈퇴/CREATOR 이름 동기화 전 등) "·" 자체를 생략
     val titleLine = if (byUserName.isNullOrBlank()) "$dateStr · 평균 ${avgPct}점"
         else "$dateStr · 평균 ${avgPct}점 · $byUserName"

@@ -262,11 +262,15 @@ fun ProfileSettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
+                    // 표시 순서 — 사용 빈도/중요도 기준. SIGNUP_RESULT 는 PENDING 단계 전용이라 제외.
+                    // 설정 카드 카운트(visiblePrefs.size) 와 1:1 일치하도록 enum 의 다른 6종은 모두 노출.
                     listOf(
                         NotificationType.COMMENT,
                         NotificationType.SKILL_UPDATED,
                         NotificationType.TOURNAMENT_DRAWN,
                         NotificationType.NEW_NOTICE,
+                        NotificationType.NEW_POST_COMMENT,
+                        NotificationType.MENTION,
                         NotificationType.CLASS_REMINDER,
                     ).forEach { type ->
                         if (type == NotificationType.CLASS_REMINDER) {

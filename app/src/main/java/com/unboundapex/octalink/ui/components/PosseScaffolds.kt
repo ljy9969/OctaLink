@@ -182,7 +182,9 @@ fun PosseCard(
         // drawBehind 는 measure 후 draw 단계에서 그리므로 stripe 가 실제 column 높이를 그대로
         // 따라가며, intrinsic 의존이 없어 어떤 자식 modifier 와도 안전하게 호환됨.
         val hasStripe = leftStripeBrush != null || leftStripeColor != null
-        val stripeWidth = 8.dp
+        // 8dp → 12dp 로 두툼하게: 라이트 테마의 WHITE 벨트처럼 stripe 색이 배경과 유사한
+        // 경우에도 존재감 확보 (드러나는 두께 자체로 시각 강조).
+        val stripeWidth = 15.dp
         val columnMod = if (hasStripe) {
             Modifier
                 .fillMaxWidth()

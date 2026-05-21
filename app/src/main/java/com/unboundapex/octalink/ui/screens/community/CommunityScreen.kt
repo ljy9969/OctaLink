@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,8 +22,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -47,8 +54,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.unboundapex.octalink.data.Belt
+import com.unboundapex.octalink.data.schema.PostCommentDoc
 import com.unboundapex.octalink.data.schema.PostDoc
 import com.unboundapex.octalink.data.schema.PostTag
+import com.unboundapex.octalink.data.schema.isMaster
 import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
@@ -63,11 +73,18 @@ fun CommunityScreen(
     postsVm: PostsViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
-    val posts by postsVm.sortedPosts.collectAsState()
+    // visibility 필터링된 피드 — 본인 + 멘션된 PENDING/REJECTED 만 노출.
+    val myId = session.member?.id
+    val posts by remember(myId) { postsVm.sortedPostsFor(myId) }
+        .collectAsState(initial = emptyList())
+    val commentCounts by postsVm.commentCounts.collectAsState()
+    val approvedMembers by postsVm.approvedMembers.collectAsState()
     val writeState by postsVm.writeState.collectAsState()
     val context = LocalContext.current
     var dialogTag by remember { mutableStateOf<PostTag?>(null) }
     var editingPost by remember { mutableStateOf<PostDoc?>(null) }
+    // 펼친 글의 id 셋 — 스크롤 후 다시 보여도 상태 유지. 동시에 여러 글 펼치기 허용.
+    var expandedPostIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     PosseScreen(title = "Community", subtitle = "팀원들의 기록과 응원") {
         LazyColumn(
@@ -99,17 +116,37 @@ fun CommunityScreen(
                 }
             }
             items(posts, key = { it.id }) { p ->
-                val canModify = session.member?.id == p.authorId || session.role.isStaff
+                // 수정: 작성자 본인 전용 — 운영진이라도 남의 글 본문 편집 금지(데이터 무결성).
+                // 삭제: 작성자 본인 + 관장급(MASTER/CREATOR) — 모더레이션용. 코치는 제외.
+                val isAuthor = session.member?.id == p.authorId
+                val isExpanded = p.id in expandedPostIds
+                val meMentioned = myId != null && myId in p.mentionedMemberIds
                 PostCard(
                     post = p,
                     myMemberId = session.member?.id,
-                    canEdit = canModify,
-                    canDelete = canModify,
+                    myMemberName = session.member?.name,
+                    myMemberBelt = session.member?.belt,
+                    commentCount = commentCounts[p.id] ?: 0,
+                    isExpanded = isExpanded,
+                    canEdit = isAuthor,
+                    canDelete = isAuthor || session.role.isMaster,
+                    canModerateComments = session.role.isMaster,
+                    canApproveMention = meMentioned && myId in p.pendingApprovalFrom,
                     onToggleLike = {
                         session.member?.id?.let { postsVm.toggleLike(p.id, it) }
                     },
+                    onToggleExpand = {
+                        expandedPostIds = if (isExpanded) expandedPostIds - p.id
+                        else expandedPostIds + p.id
+                    },
                     onEdit = { editingPost = p },
                     onDelete = { postsVm.delete(p.id) },
+                    onApproveMention = {
+                        myId?.let { postsVm.approveMention(p.id, it) }
+                    },
+                    onRejectMention = {
+                        myId?.let { postsVm.rejectMention(p.id, it) }
+                    },
                 )
             }
         }
@@ -122,10 +159,13 @@ fun CommunityScreen(
             initialTag = effectiveTag,
             isStaff = session.role.isStaff,
             writeState = writeState,
+            approvedMembers = approvedMembers,
+            myMemberId = myId,
             editing = editingPost,
-            onSubmit = { title, body, tag, imageUri, videoUri ->
+            onSubmit = { title, body, tag, imageUri, videoUri, mentions ->
                 val editTarget = editingPost
                 if (editTarget != null) {
+                    // 수정 모드 — 멘션 변경은 v1 미지원 (편집은 본문만).
                     postsVm.updatePost(
                         postId = editTarget.id,
                         title = title,
@@ -144,6 +184,7 @@ fun CommunityScreen(
                         tag = tag,
                         imageUri = imageUri,
                         videoUri = videoUri,
+                        mentionedMemberIds = mentions,
                     )
                 }
             },
@@ -175,7 +216,7 @@ private val seoul = ZoneId.of("Asia/Seoul")
 /** 글 카드 본문 미리보기 줄 수. 초과분은 ellipsis 로 잘림 — 펼치기는 별도 상세 화면에서 처리. */
 private const val BODY_PREVIEW_LINES = 2
 // 날짜는 한국 요일 약자("토"), 시간은 AM/PM 강제 → 두 formatter 를 별도 Locale 로 구성.
-private val postDateFmt = DateTimeFormatter.ofPattern("MM/dd(EEE)", java.util.Locale.KOREAN)
+private val postDateFmt = DateTimeFormatter.ofPattern("M/d(EEE)", java.util.Locale.KOREAN)
 private val postTimeFmt = DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.US)
 
 private fun postTimestamp(createdAt: Instant): String {
@@ -187,17 +228,87 @@ private fun postTimestamp(createdAt: Instant): String {
 private fun PostCard(
     post: PostDoc,
     myMemberId: String?,
+    myMemberName: String?,
+    myMemberBelt: Belt?,
+    commentCount: Int,
+    isExpanded: Boolean,
     canEdit: Boolean,
     canDelete: Boolean,
+    canModerateComments: Boolean,
+    canApproveMention: Boolean,
     onToggleLike: () -> Unit,
+    onToggleExpand: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onApproveMention: () -> Unit,
+    onRejectMention: () -> Unit,
 ) {
     val likedByMe = myMemberId != null && myMemberId in post.likedBy
     // title 이 tag 라벨(공지/질문/팁/기록)과 동일하면 chip 과 중복이라 표시하지 않음
     val showTitle = post.title.isNotBlank() &&
         post.title.trim() != post.tag.label()
+    val isPending = post.visibility == com.unboundapex.octalink.data.schema.PostVisibility.PENDING_APPROVAL
+    val isRejected = post.visibility == com.unboundapex.octalink.data.schema.PostVisibility.REJECTED
     PosseCard {
+        // 비공개/거부 상태 배지 — 작성자 + 멘션 회원만 보는 글이라는 시각 신호.
+        if (isPending || isRejected) {
+            val (label, bg) = when {
+                isPending -> "🔒 비공개 (멘션 승인 대기)" to Color(0xFFB45309) // amber 700
+                else -> "⛔ 비공개 (멘션 거부됨)" to Color(0xFF9CA3AF)            // gray 400
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(bg)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+        // 본인이 멘션됐고 승인 대기 상태 → 승인/거부 액션 행.
+        if (canApproveMention) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFFFF7ED))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${post.authorName}님이 사진/영상을 담은 글에서 회원님을 멘션했어요.\n공개할까요?",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF9A3412),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "공개",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF16A34A))
+                        .clickable { onApproveMention() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "거부",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFDC2626))
+                        .clickable { onRejectMention() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -211,18 +322,27 @@ private fun PostCard(
             )
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
+                // 라이트 테마의 WHITE 벨트처럼 ringColor 가 배경과 거의 동색일 때 윤곽이 살아나도록
+                // outline 한 줄 깔고 위에 컬러 stroke. drawBehind 라 레이아웃은 동일.
+                val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
                 Text(
                     post.authorName,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    // 이름 너비만큼 벨트색 underline. 두께 2dp.
                     modifier = Modifier.drawBehind {
-                        val strokePx = 2.dp.toPx()
+                        val colorStrokePx = 3.dp.toPx()
+                        val outlineStrokePx = colorStrokePx + 1.5.dp.toPx()
+                        drawLine(
+                            color = outlineColor,
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = outlineStrokePx,
+                        )
                         drawLine(
                             color = post.authorBelt.ringColor,
                             start = Offset(0f, size.height),
                             end = Offset(size.width, size.height),
-                            strokeWidth = strokePx,
+                            strokeWidth = colorStrokePx,
                         )
                     },
                 )
@@ -315,6 +435,44 @@ private fun PostCard(
                     .clickable(enabled = myMemberId != null) { onToggleLike() }
                     .padding(horizontal = 6.dp, vertical = 4.dp),
             )
+            Spacer(Modifier.width(4.dp))
+            // 댓글 카운트 — 좋아요 하트의 ♡/♥ 패턴과 시각 어휘 통일.
+            // 이모지(💬) 는 OS 컬러 폰트라 tint 불가 → Material vector 아이콘으로 교체.
+            // - 0건: 외곽선 아이콘 (ChatBubbleOutline) + 회색 — 저참여 상태
+            // - 1건+: 채워진 아이콘 (ChatBubble) + 파란색 + 카운트 bold — 활동성 강조
+            val hasComments = commentCount > 0
+            val commentColor = if (hasComments) Color(0xFF1E88E5)
+            else MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onToggleExpand() }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            ) {
+                Icon(
+                    imageVector = if (hasComments) Icons.Filled.ChatBubble
+                    else Icons.Outlined.ChatBubbleOutline,
+                    contentDescription = "댓글",
+                    tint = commentColor,
+                    modifier = Modifier.size(16.dp),
+                )
+                // 접힘/펼침 시각 — 작은 텍스트 글리프(▸/▾) 대신 Material chevron 으로 교체.
+                // 18dp 라 chat bubble(16dp) 보다 약간 커서 토글 어포던스 강조.
+                Icon(
+                    imageVector = if (isExpanded) Icons.Filled.KeyboardArrowDown
+                    else Icons.Filled.KeyboardArrowRight,
+                    contentDescription = if (isExpanded) "접기" else "펼치기",
+                    tint = commentColor,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = "$commentCount",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = commentColor,
+                    fontWeight = if (hasComments) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
             Spacer(Modifier.weight(1f))
             // 수정/삭제 칩 색상은 TAG 칩(빨강/파랑/노랑/보라)과 충돌하지 않게 선택.
             // 수정 = 청록(teal), 삭제 = 진한 주황(deep orange) — destructive 톤이지만 NOTICE 빨강과 구분.
@@ -344,6 +502,251 @@ private fun PostCard(
                         .clickable { onDelete() }
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                 )
+            }
+        }
+        // 펼친 상태 — 카드 하단에 댓글 섹션 (입력 + 리스트). 접힌 카드는 listener 안 붙음.
+        if (isExpanded) {
+            Spacer(Modifier.height(12.dp))
+            PostCommentSection(
+                postId = post.id,
+                myMemberId = myMemberId,
+                myMemberName = myMemberName,
+                myMemberBelt = myMemberBelt ?: Belt.UNKNOWN,
+                canModerate = canModerateComments,
+            )
+        }
+    }
+}
+
+/**
+ * 글 한 건의 댓글 영역 — 입력창 + 리스트. 펼친 PostCard 안에서만 호출됨.
+ *
+ * ViewModel 은 `key = "comments-{postId}"` 로 글마다 별도 인스턴스 — 다른 글 펼쳤다 접어도
+ * listener 재구독 비용 최소화 (WhileSubscribed 5s).
+ */
+@Composable
+private fun PostCommentSection(
+    postId: String,
+    myMemberId: String?,
+    myMemberName: String?,
+    myMemberBelt: Belt,
+    canModerate: Boolean,
+    commentsVm: PostCommentsViewModel = viewModel(key = "comments-$postId"),
+) {
+    androidx.compose.runtime.LaunchedEffect(postId) { commentsVm.observeFor(postId) }
+    val comments by commentsVm.comments.collectAsState()
+    val submitState by commentsVm.submitState.collectAsState()
+    var input by remember(postId) { mutableStateOf("") }
+
+    // 작성 성공 시 입력창 비우기.
+    androidx.compose.runtime.LaunchedEffect(submitState) {
+        if (submitState is PostCommentsViewModel.SubmitState.Done) {
+            input = ""
+            commentsVm.resetSubmitState()
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // 입력창 — 본인 로그인 + member doc 있을 때만 활성. (PENDING/UNAPPROVED 회원은 read-only)
+        if (myMemberId != null && myMemberName != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = input,
+                    onValueChange = { if (it.length <= 80) input = it },
+                    placeholder = { Text("댓글 작성…", style = MaterialTheme.typography.bodySmall) },
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    singleLine = false,
+                    maxLines = 4,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(6.dp))
+                val busy = submitState is PostCommentsViewModel.SubmitState.Submitting
+                val submitEnabled = !busy && input.isNotBlank()
+                Text(
+                    text = if (busy) "..." else "등록",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (submitEnabled) Color.White else Color.White.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            if (submitEnabled) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        )
+                        .clickable(enabled = submitEnabled) {
+                            commentsVm.submit(
+                                postId = postId,
+                                authorId = myMemberId,
+                                authorName = myMemberName,
+                                authorBelt = myMemberBelt,
+                                body = input,
+                            )
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+            (submitState as? PostCommentsViewModel.SubmitState.Error)?.let {
+                Text(
+                    it.message,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        if (comments.isEmpty()) {
+            Text(
+                "첫 댓글을 작성해보세요.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        } else {
+            comments.forEach { c ->
+                CommentRow(
+                    comment = c,
+                    myMemberId = myMemberId,
+                    canDelete = c.authorId == myMemberId || canModerate,
+                    onToggleLike = {
+                        if (myMemberId != null) commentsVm.toggleLike(postId, c.id, myMemberId)
+                    },
+                    onEditSubmit = { newBody -> commentsVm.edit(postId, c.id, newBody) },
+                    onDelete = { commentsVm.delete(postId, c.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentRow(
+    comment: PostCommentDoc,
+    myMemberId: String?,
+    canDelete: Boolean,
+    onToggleLike: () -> Unit,
+    onEditSubmit: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    val isAuthor = myMemberId != null && comment.authorId == myMemberId
+    var editing by remember(comment.id) { mutableStateOf(false) }
+    var editBuffer by remember(comment.id) { mutableStateOf(comment.body) }
+    val likedByMe = myMemberId != null && myMemberId in comment.likedBy
+
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                comment.authorName,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                postTimestamp(comment.createdAt) + if (comment.updatedAt != null) " · 수정됨" else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (editing) {
+            // 인라인 수정 모드 — 본문 자리에 OutlinedTextField + 저장/취소.
+            androidx.compose.material3.OutlinedTextField(
+                value = editBuffer,
+                onValueChange = { if (it.length <= 80) editBuffer = it },
+                textStyle = MaterialTheme.typography.bodyMedium,
+                singleLine = false,
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            )
+            Row(modifier = Modifier.padding(top = 4.dp)) {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "취소",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable {
+                            editing = false
+                            editBuffer = comment.body
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                // 빈 문자열 / 원본과 동일이면 비활성. clickable.enabled 만으론 시각 신호가 없어
+                // 배경색·텍스트색도 함께 흐려서 사용자에게 disabled 상태를 명확히 보여줌.
+                val saveEnabled = editBuffer.isNotBlank() && editBuffer != comment.body
+                Text(
+                    "저장",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (saveEnabled) Color.White else Color.White.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            if (saveEnabled) Color(0xFF00897B)
+                            else Color(0xFF00897B).copy(alpha = 0.4f)
+                        )
+                        .clickable(enabled = saveEnabled) {
+                            onEditSubmit(editBuffer)
+                            editing = false
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        } else {
+            Text(
+                comment.body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // 좋아요 (♥ N) — primary 빨강 강조 (글 좋아요 패턴과 동일).
+                Text(
+                    text = (if (likedByMe) "♥ " else "♡ ") + comment.likedBy.size,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (likedByMe) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(enabled = myMemberId != null) { onToggleLike() }
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                if (isAuthor) {
+                    Text(
+                        "수정",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF00897B))
+                            .clickable {
+                                editing = true
+                                editBuffer = comment.body
+                            }
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                if (canDelete) {
+                    Text(
+                        "삭제",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFD84315))
+                            .clickable { onDelete() }
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                    )
+                }
             }
         }
     }
@@ -393,7 +796,11 @@ private fun WritePostDialog(
     initialTag: PostTag,
     isStaff: Boolean,
     writeState: WriteState,
-    onSubmit: (title: String, body: String, tag: PostTag, imageUri: Uri?, videoUri: Uri?) -> Unit,
+    /** 멘션 picker 후보 — APPROVED 회원. 작성 모드에서만 사용. */
+    approvedMembers: List<com.unboundapex.octalink.data.schema.MemberDoc> = emptyList(),
+    /** 본인 member id — picker 후보에서 본인 제외 + 본인 멘션 차단. */
+    myMemberId: String? = null,
+    onSubmit: (title: String, body: String, tag: PostTag, imageUri: Uri?, videoUri: Uri?, mentionedMemberIds: List<String>) -> Unit,
     onDismiss: () -> Unit,
     /** 이미지 교체/제거 등 사용자 액션 시 stale 에러 메시지 초기화용. */
     onResetError: () -> Unit,
@@ -407,6 +814,9 @@ private fun WritePostDialog(
     var tag by remember(editing?.id) { mutableStateOf(editing?.tag ?: initialTag) }
     var imageUri by remember(editing?.id) { mutableStateOf<Uri?>(null) }
     var videoUri by remember(editing?.id) { mutableStateOf<Uri?>(null) }
+    // 멘션된 회원 id — 작성 모드 전용 (편집 모드는 기존 멘션 유지).
+    var mentionedIds by remember(editing?.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var pickerOpen by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val pickImage = rememberLauncherForActivityResult(
@@ -537,6 +947,16 @@ private fun WritePostDialog(
                             onResetError()
                         },
                     )
+                    Spacer(Modifier.height(6.dp))
+                    // 멘션 picker 행 — 작성 모드 전용. 선택된 멘션은 칩 형태.
+                    MentionPickerRow(
+                        mentionedIds = mentionedIds,
+                        candidates = approvedMembers.filter { it.id != myMemberId },
+                        hasMedia = imageUri != null || videoUri != null,
+                        enabled = !isUploading,
+                        onOpenPicker = { pickerOpen = true },
+                        onRemove = { id -> mentionedIds = mentionedIds - id },
+                    )
                 }
                 if (writeState is WriteState.Error) {
                     Spacer(Modifier.height(6.dp))
@@ -573,7 +993,9 @@ private fun WritePostDialog(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
-                        .clickable(enabled = canSubmit) { onSubmit(title, body, tag, imageUri, videoUri) }
+                        .clickable(enabled = canSubmit) {
+                            onSubmit(title, body, tag, imageUri, videoUri, mentionedIds.toList())
+                        }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
@@ -587,6 +1009,183 @@ private fun WritePostDialog(
                     .clickable(enabled = !isUploading) { onDismiss() }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
+        },
+    )
+    if (pickerOpen) {
+        MentionPickerDialog(
+            candidates = approvedMembers.filter { it.id != myMemberId },
+            initiallySelected = mentionedIds,
+            onConfirm = { picked ->
+                mentionedIds = picked
+                pickerOpen = false
+            },
+            onDismiss = { pickerOpen = false },
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun MentionPickerRow(
+    mentionedIds: Set<String>,
+    candidates: List<com.unboundapex.octalink.data.schema.MemberDoc>,
+    hasMedia: Boolean,
+    enabled: Boolean,
+    onOpenPicker: () -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    val nameById = remember(candidates) { candidates.associateBy({ it.id }, { it.name }) }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "@ 멘션",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "+ 회원 선택",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (enabled) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(enabled = enabled) { onOpenPicker() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+        if (mentionedIds.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            // 선택된 멘션 칩 — FlowRow 로 다이얼로그 폭 초과 시 자동 줄바꿈.
+            // Row 만 쓰면 4번째 이후 칩이 viewport 밖으로 잘려 보이지 않는 버그가 있었음.
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                mentionedIds.forEach { id ->
+                    val name = nameById[id] ?: id
+                    Text(
+                        "@$name ✕",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        // 좁은 잔여 폭에서 글자별 세로 wrap 막기 — Text 가 자연 폭을 요구해야
+                        // FlowRow 가 "안 들어감" 판단하고 다음 줄로 chip 전체를 wrap 함.
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF6366F1))
+                            .clickable(enabled = enabled) { onRemove(id) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+        }
+        if (hasMedia && mentionedIds.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "ⓘ 사진/영상 + 멘션 조합은 멘션된 회원 전원 승인 후 공개됩니다.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MentionPickerDialog(
+    candidates: List<com.unboundapex.octalink.data.schema.MemberDoc>,
+    initiallySelected: Set<String>,
+    onConfirm: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selected by remember { mutableStateOf(initiallySelected) }
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(query, candidates) {
+        if (query.isBlank()) candidates
+        else candidates.filter { it.name.contains(query, ignoreCase = true) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("회원 선택", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("이름 검색…", style = MaterialTheme.typography.bodySmall) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.height(280.dp)) {
+                    items(filtered, key = { it.id }) { m ->
+                        val checked = m.id in selected
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selected = if (checked) selected - m.id else selected + m.id
+                                }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                if (checked) "☑" else "☐",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (checked) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                m.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Text(
+                "확인 (${selected.size}명)",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clickable { onConfirm(selected) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        },
+        dismissButton = {
+            // AlertDialog 의 dismissButton 슬롯에 두 버튼을 함께 배치 — "선택 해제" 가 가장 왼쪽,
+            // "취소" 는 그 우측. 두 버튼을 한 Row 로 묶어야 AlertDialog 의 좌측 정렬 영역에 함께 들어감.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val canClear = selected.isNotEmpty()
+                Text(
+                    "선택 해제",
+                    // 확인(red primary) 옆 두 빨강 충돌 회피 — destructive 가 아닌 reset 성격이라
+                    // 정보 액션 블루(#1E88E5, 내 참가 칩과 동일 톤) 사용.
+                    color = if (canClear) Color(0xFF1E88E5)
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable(enabled = canClear) { selected = emptySet() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+                Text(
+                    "취소",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable { onDismiss() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
         },
     )
 }

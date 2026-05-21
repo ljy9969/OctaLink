@@ -82,8 +82,8 @@ fun AttendanceScreen(
     val checkedIn = mySelfCheckIn != null
     val myCheckInTimeLabel = mySelfCheckIn?.attendance?.checkInAt?.let {
         it.atZone(ZoneId.of("Asia/Seoul")).toLocalTime()
-            .format(DateTimeFormatter.ofPattern("HH:mm"))
-    } ?: LocalTime.now(ZoneId.of("Asia/Seoul")).format(DateTimeFormatter.ofPattern("HH:mm"))
+            .format(DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
+    } ?: LocalTime.now(ZoneId.of("Asia/Seoul")).format(DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
 
     PosseScreen(title = "Attendance", subtitle = "$dateLabel\n$classLabel") {
         LazyColumn(
@@ -198,7 +198,7 @@ fun AttendanceScreen(
                         val timeLabel = peer.attendance.checkInAt
                             .atZone(ZoneId.of("Asia/Seoul"))
                             .toLocalTime()
-                            .format(DateTimeFormatter.ofPattern("HH:mm"))
+                            .format(DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
                         PosseCard(
                             modifier = Modifier.weight(1f),
                             padding = PaddingValues(12.dp),

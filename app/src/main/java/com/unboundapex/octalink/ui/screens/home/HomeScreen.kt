@@ -77,12 +77,8 @@ private val emptyOneLineComment = FeedItem(
     body = "아직 받은 코멘트가 없습니다.",
 )
 
-private val commentDateFmt = DateTimeFormatter.ofPattern("M/d", Locale.KOREAN)
-private fun dayKr(d: DayOfWeek): String = when (d) {
-    DayOfWeek.MONDAY -> "월"; DayOfWeek.TUESDAY -> "화"; DayOfWeek.WEDNESDAY -> "수"
-    DayOfWeek.THURSDAY -> "목"; DayOfWeek.FRIDAY -> "금"; DayOfWeek.SATURDAY -> "토"
-    DayOfWeek.SUNDAY -> "일"
-}
+// 앱 전체 통일 날짜 포맷 — "5/20(수)".
+private val commentDateFmt = DateTimeFormatter.ofPattern("M/d(EEE)", Locale.KOREAN)
 
 // 원본 PNG: 흰색 배경 + 검정 로고/텍스트.
 // 흰색 픽셀은 알파 0(투명)으로 빼고, 알파는 입력 RGB 평균을 반전(밝을수록 투명, 어두울수록 불투명) →
@@ -144,7 +140,7 @@ fun HomeScreen(
         val date = m.drawnAt.atZone(ZoneId.of("Asia/Seoul")).toLocalDate()
         FeedItem(
             title = "스파링 매치",
-            meta = "${date.format(commentDateFmt)} ${dayKr(date.dayOfWeek)} · ${m.title}",
+            meta = "${date.format(commentDateFmt)} · ${m.title}",
             body = "대진표가 업데이트 되었습니다. 확인하고 컨디션 체크해주세요.",
         )
     } ?: FeedItem(
@@ -161,7 +157,7 @@ fun HomeScreen(
     val oneLineComment = latestComment?.let { c ->
         FeedItem(
             title = "한 줄 코멘트",
-            meta = "${c.classDate.format(commentDateFmt)} ${dayKr(c.classDate.dayOfWeek)} · ${c.byMasterName}",
+            meta = "${c.classDate.format(commentDateFmt)} · ${c.byMasterName}",
             body = c.text,
         )
     } ?: emptyOneLineComment
@@ -206,10 +202,18 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         } else {
+                            // 활성도 3단계 색 분기 — 시각만으로 오늘 도장 분위기 인지.
+                            // 저(<30%) = ash gray (한산), 중(30~69%) = amber (보통),
+                            // 고(≥70%) = green (붐빔, 스파링 태그 그린과 동일 톤).
+                            val activityColor = when {
+                                gymActivity.percent >= 70 -> Color(0xFF27AE60)
+                                gymActivity.percent >= 30 -> Color(0xFFFBC02D)
+                                else -> Color(0xFF9E9E9E)
+                            }
                             Text(
                                 "${gymActivity.percent}%",
                                 style = MaterialTheme.typography.displayLarge,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = activityColor,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -234,10 +238,16 @@ fun HomeScreen(
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        // 본인 주간 출석률 — 활성도와 동일 3단계 색 분기.
+                        val weeklyColor = when {
+                            weeklyPct >= 70 -> Color(0xFF27AE60)
+                            weeklyPct >= 30 -> Color(0xFFFBC02D)
+                            else -> Color(0xFF9E9E9E)
+                        }
                         Text(
                             "$weeklyPct%",
                             style = MaterialTheme.typography.displayLarge,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = weeklyColor,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -282,12 +292,11 @@ fun HomeScreen(
                             .clickable { onOpenBracket() }
                     ) {
                         Text(
-                            "이번 주 대진표",
+                            "이번 주\n대진표",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            softWrap = false,
+                            maxLines = 2,
                             modifier = Modifier.fillMaxWidth()
                         )
                         androidx.compose.foundation.layout.Column(

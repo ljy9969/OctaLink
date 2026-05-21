@@ -4,6 +4,7 @@ import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.repo.PostRepository
 import com.unboundapex.octalink.data.schema.PostDoc
 import com.unboundapex.octalink.data.schema.PostTag
+import com.unboundapex.octalink.data.schema.PostVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +32,11 @@ class InMemoryPostRepository(
         tag: PostTag,
         imageUrl: String?,
         videoUrl: String?,
+        mentionedMemberIds: List<String>,
     ): PostDoc {
+        val hasMedia = imageUrl != null || videoUrl != null
+        val effectiveMentions = mentionedMemberIds.distinct().filter { it != authorId }
+        val isPending = hasMedia && effectiveMentions.isNotEmpty()
         val doc = PostDoc(
             id = UUID.randomUUID().toString(),
             authorId = authorId,
@@ -43,9 +48,36 @@ class InMemoryPostRepository(
             imageUrl = imageUrl,
             videoUrl = videoUrl,
             createdAt = Instant.now(),
+            mentionedMemberIds = effectiveMentions,
+            visibility = if (isPending) PostVisibility.PENDING_APPROVAL else PostVisibility.PUBLIC,
+            pendingApprovalFrom = if (isPending) effectiveMentions else emptyList(),
         )
         _posts.value = _posts.value + doc
         return doc
+    }
+
+    override suspend fun approveMention(postId: String, memberId: String) {
+        _posts.value = _posts.value.map { p ->
+            if (p.id != postId) p
+            else {
+                val remaining = p.pendingApprovalFrom - memberId
+                p.copy(
+                    pendingApprovalFrom = remaining,
+                    visibility = if (remaining.isEmpty()) PostVisibility.PUBLIC else p.visibility,
+                )
+            }
+        }
+    }
+
+    override suspend fun rejectMention(postId: String, memberId: String) {
+        _posts.value = _posts.value.map { p ->
+            if (p.id != postId) p
+            else p.copy(
+                visibility = PostVisibility.REJECTED,
+                rejectedBy = (p.rejectedBy + memberId).distinct(),
+                pendingApprovalFrom = p.pendingApprovalFrom - memberId,
+            )
+        }
     }
 
     override suspend fun toggleLike(postId: String, memberId: String) {

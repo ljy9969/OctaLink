@@ -155,6 +155,20 @@ enum class NotificationType(
         channelName = "스킬 점수",
         channelDescription = "스킬 점수 갱신 알림",
     ),
+    NEW_POST_COMMENT(
+        displayName = "내 글에 댓글",
+        description = "내가 작성한 커뮤니티 글에 다른 회원이 댓글을 달았을 때",
+        channelId = "octalink_post_comment",
+        channelName = "댓글",
+        channelDescription = "내 글에 달린 댓글 알림",
+    ),
+    MENTION(
+        displayName = "@멘션",
+        description = "다른 회원이 글에서 나를 멘션했을 때 (사진/영상 첨부 시 공개 승인 요청 포함)",
+        channelId = "octalink_mention",
+        channelName = "@멘션 / 공개 승인",
+        channelDescription = "글 멘션 및 사진/영상 공개 승인 요청",
+    ),
 }
 
 /** 정기 클래스 정의 (요일별 운영 슬롯 — 변경 빈도 낮음) */
@@ -221,6 +235,16 @@ data class SkillScoreDoc(
 enum class PostTag { NOTICE, RECORD, TIP, QUESTION }
 
 /**
+ * 글 노출 상태 — @멘션 + 미디어(사진/영상) 조합 시 프라이버시 보호용.
+ *
+ *  - [PUBLIC]: 일반 노출. 모든 APPROVED 회원이 피드에서 봄.
+ *  - [PENDING_APPROVAL]: 사진/영상 + @멘션 조합으로 작성된 글, 멘션된 회원 전원 승인 전까지 비공개.
+ *    피드엔 작성자 본인 + 멘션된 회원만 볼 수 있음.
+ *  - [REJECTED]: 멘션된 회원이 1명이라도 거부함. 피드에서 숨김. 작성자가 사진 제거 후 재게시 가능 (TBD).
+ */
+enum class PostVisibility { PUBLIC, PENDING_APPROVAL, REJECTED }
+
+/**
  * 커뮤니티 글 한 건. 모든 회원이 작성하지만 NOTICE 태그는 운영진만 사용 가능.
  *
  * 비정규화 필드(authorName/authorBelt) — 회원 정보 join 회피로 list 쿼리 단순화.
@@ -243,6 +267,36 @@ data class PostDoc(
     /** 좋아요 누른 회원 id 셋. 토글 시 arrayUnion / arrayRemove 사용 */
     val likedBy: List<String> = emptyList(),
     val createdAt: Instant,
+    /** @멘션된 회원 id 목록. 작성 시 picker 로 추가. */
+    val mentionedMemberIds: List<String> = emptyList(),
+    /** 노출 상태 — 기본 PUBLIC. 미디어+멘션 조합이면 PENDING_APPROVAL 로 생성. */
+    val visibility: PostVisibility = PostVisibility.PUBLIC,
+    /** PENDING_APPROVAL 상태에서 아직 승인 안 한 회원 id 목록. 모두 빠지면 PUBLIC 전이. */
+    val pendingApprovalFrom: List<String> = emptyList(),
+    /** 거부한 멘션 회원 id — REJECTED 상태 사유 추적. */
+    val rejectedBy: List<String> = emptyList(),
+)
+
+/**
+ * 글 한 건에 대한 댓글. `posts/{postId}/comments/{commentId}` 서브컬렉션.
+ *
+ * 비정규화 — authorName/authorBelt 는 createdAt 시점 스냅샷.
+ * 권한 정책 ([PostDoc] 과 동일):
+ *  - 수정: 작성자만
+ *  - 삭제: 작성자 + 관장급(MASTER/CREATOR) 모더레이션
+ */
+data class PostCommentDoc(
+    val id: String,
+    val postId: String,                 // 부모 글 id (collectionGroup 쿼리 시 식별)
+    val authorId: String,
+    val authorName: String,             // 비정규화 — createdAt 스냅샷
+    val authorBelt: Belt,               // 비정규화 — 좌측 벨트 점 색
+    val body: String,
+    val createdAt: Instant,
+    /** 좋아요 누른 회원 id 셋. 토글 시 arrayUnion / arrayRemove 사용. */
+    val likedBy: List<String> = emptyList(),
+    /** 마지막 수정 시각 — 작성자가 수정하면 갱신. null 이면 미수정. */
+    val updatedAt: Instant? = null,
 )
 
 /** 토너먼트 라운드 enum — TournamentDoc 로 그룹핑 */
@@ -293,6 +347,9 @@ object Collections {
     const val TOURNAMENTS = "tournaments"
     const val MATCHES = "matches"
     const val POSTS = "posts"
+    /** posts/{postId}/postComments/{commentId} — 글 댓글. members/{uid}/comments 와 이름 분리하여
+     *  collectionGroup("postComments") 가 한 줄 코멘트와 섞이지 않도록 함. */
+    const val POST_COMMENTS = "postComments"
     /** 도장 전역 설정 — 주간 미션 등 단일 doc 들이 들어가는 컬렉션. */
     const val GYM_SETTINGS = "gymSettings"
     /** [GYM_SETTINGS] 내 주간 미션 doc 의 고정 ID (싱글톤). */

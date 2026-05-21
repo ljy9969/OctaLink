@@ -46,13 +46,8 @@ private fun membershipLabel(joinDate: LocalDate, today: LocalDate = LocalDate.no
     }
 }
 
-private val commentDateFormatter = java.time.format.DateTimeFormatter.ofPattern("M/d")
-private fun dayOfWeekKr(d: java.time.DayOfWeek): String = when (d) {
-    java.time.DayOfWeek.MONDAY -> "월"; java.time.DayOfWeek.TUESDAY -> "화"
-    java.time.DayOfWeek.WEDNESDAY -> "수"; java.time.DayOfWeek.THURSDAY -> "목"
-    java.time.DayOfWeek.FRIDAY -> "금"; java.time.DayOfWeek.SATURDAY -> "토"
-    java.time.DayOfWeek.SUNDAY -> "일"
-}
+// 앱 전체 통일 날짜 포맷 — "5/20(수)". KOREAN locale 이라 EEE = 한 글자 요일.
+private val commentDateFormatter = java.time.format.DateTimeFormatter.ofPattern("M/d(EEE)", java.util.Locale.KOREAN)
 
 @Composable
 fun ProfileScreen(
@@ -229,8 +224,7 @@ fun ProfileScreen(
                         )
                     } else {
                         coachComments.forEach { c ->
-                            val dateLabel = c.classDate.format(commentDateFormatter) +
-                                " " + dayOfWeekKr(c.classDate.dayOfWeek)
+                            val dateLabel = c.classDate.format(commentDateFormatter)
                             Text(
                                 "$dateLabel · ${c.byMasterName}",
                                 style = MaterialTheme.typography.labelMedium,

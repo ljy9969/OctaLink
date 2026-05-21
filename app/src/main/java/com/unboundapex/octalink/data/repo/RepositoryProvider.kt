@@ -4,6 +4,7 @@ import android.content.Context
 import com.unboundapex.octalink.data.repo.firestore.FirestoreAttendanceRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreCommentRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreMemberRepository
+import com.unboundapex.octalink.data.repo.firestore.FirestorePostCommentRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestorePostRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreSkillScoreRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreTournamentRepository
@@ -32,6 +33,8 @@ object RepositoryProvider {
         private set
     lateinit var posts: PostRepository
         private set
+    lateinit var postComments: PostCommentRepository
+        private set
     lateinit var comments: CommentRepository
         private set
     lateinit var skillScores: SkillScoreRepository
@@ -53,6 +56,7 @@ object RepositoryProvider {
             members = FirestoreMemberRepository()
             attendance = FirestoreAttendanceRepository()
             posts = FirestorePostRepository()
+            postComments = FirestorePostCommentRepository()
             comments = FirestoreCommentRepository()
             skillScores = FirestoreSkillScoreRepository()
             tournaments = FirestoreTournamentRepository()

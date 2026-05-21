@@ -40,7 +40,7 @@ import com.unboundapex.octalink.data.schema.isMaster
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
-import java.time.DayOfWeek
+import com.unboundapex.octalink.ui.components.WeightClassChip
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -63,7 +63,17 @@ fun TournamentHistoryScreen(
     LaunchedEffect(myMemberId) { vm.observeForMember(myMemberId) }
 
     val items by vm.items.collectAsState()
-    val totalLabel = if (items.isEmpty()) "기록 없음" else "총 ${items.size}개"
+    // "내 참가만" 토글 — 본인 참가 토너먼트만 노출. 본인 참가 0건이면 빈 상태 안내.
+    var filterMine by remember { mutableStateOf(false) }
+    val myParticipationCount = remember(items) { items.count { it.isMyParticipation } }
+    val visibleItems = remember(items, filterMine) {
+        if (filterMine) items.filter { it.isMyParticipation } else items
+    }
+    val totalLabel = when {
+        items.isEmpty() -> "기록 없음"
+        filterMine -> "내 참가 ${visibleItems.size}개 / 총 ${items.size}개"
+        else -> "총 ${items.size}개"
+    }
 
     // 우발 클릭 방지 — 삭제는 confirm 다이얼로그 거침. null = 닫힘.
     var deleteTarget by remember { mutableStateOf<TournamentHistoryItem?>(null) }
@@ -80,6 +90,15 @@ fun TournamentHistoryScreen(
                     fg = MaterialTheme.colorScheme.onSurface,
                     onClick = onBack,
                 )
+                Spacer(Modifier.weight(1f))
+                // 본인 참가 토너먼트가 한 건이라도 있을 때만 필터 노출 — 0건이면 토글 의미 없음.
+                if (myParticipationCount > 0) {
+                    FilterChipBtn(
+                        text = if (filterMine) "✓ 내 참가만 (${myParticipationCount})" else "내 참가만 (${myParticipationCount})",
+                        active = filterMine,
+                        onClick = { filterMine = !filterMine },
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
 
@@ -91,12 +110,22 @@ fun TournamentHistoryScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            } else if (visibleItems.isEmpty()) {
+                // 필터 ON 인데 결과 0 — 이론상 myParticipationCount > 0 일 때만 토글 노출하므로
+                // 도달 안 함. 안전망으로 안내 카드.
+                PosseCard {
+                    Text(
+                        "필터 조건에 맞는 토너먼트가 없습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
-                    items(items, key = { it.tournament.id }) { item ->
+                    items(visibleItems, key = { it.tournament.id }) { item ->
                         TournamentHistoryCard(
                             item = item,
                             onClick = { onOpenTournament(item.tournament.id) },
@@ -165,17 +194,23 @@ private fun TournamentHistoryCard(
     val t = item.tournament
     val finished = t.finishedAt != null
     PosseCard(modifier = Modifier.clickable { onClick() }) {
-        // 1행: 제목 + 상태 칩 + 본인 참가 배지 + 관장 삭제 칩
+        // 1행: 체급 칩 (또는 폴백 텍스트) + 상태 칩 + 본인 참가 배지 + 관장 삭제 칩
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                t.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+            val wc = t.weightClass
+            if (wc != null) {
+                WeightClassChip(weightClass = wc)
+            } else {
+                // 구버전 doc 등 weightClass 누락 — title 텍스트로 폴백.
+                Text(
+                    t.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Spacer(Modifier.weight(1f))
             if (item.isMyParticipation) {
                 StatusChip(text = "내 참가", bg = Color(0xFF1E88E5))
                 Spacer(Modifier.width(6.dp))
@@ -228,17 +263,27 @@ private fun TournamentHistoryCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 val belt = item.championBelt
+                // 라이트 테마의 WHITE 벨트처럼 ringColor 가 배경과 거의 동색일 때 stroke 윤곽이
+                // 살아나도록 outline 한 줄 깔고 위에 컬러 stroke. drawBehind 라 레이아웃은 동일.
+                val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
                 Text(
                     item.championName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = if (belt != null) Modifier.drawBehind {
-                        val strokePx = 2.dp.toPx()
+                        val colorStrokePx = 3.dp.toPx()
+                        val outlineStrokePx = colorStrokePx + 1.5.dp.toPx()
+                        drawLine(
+                            color = outlineColor,
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = outlineStrokePx,
+                        )
                         drawLine(
                             color = belt.ringColor,
                             start = Offset(0f, size.height),
                             end = Offset(size.width, size.height),
-                            strokeWidth = strokePx,
+                            strokeWidth = colorStrokePx,
                         )
                     } else Modifier,
                 )
@@ -290,16 +335,43 @@ private fun ChipBtn(
     }
 }
 
+/**
+ * 토글 필터 칩 — active = "내 참가" 칩과 동일 블루(#1E88E5) + 흰 글씨,
+ * inactive = surfaceVariant + 본문 색. 카드 안의 "내 참가" 배지와 시각 어휘 통일.
+ */
+@Composable
+private fun FilterChipBtn(
+    text: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val bg = if (active) Color(0xFF1E88E5) else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (active) Color.White else MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .border(
+                1.dp,
+                if (active) Color(0xFF1E88E5) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                RoundedCornerShape(6.dp),
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            color = fg,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
 private val seoul = ZoneId.of("Asia/Seoul")
-private val historyDateFmt = DateTimeFormatter.ofPattern("MM/dd")
+// 앱 전체 통일 날짜 포맷 — "5/20(수)".
+private val historyDateFmt = DateTimeFormatter.ofPattern("M/d(EEE)", java.util.Locale.KOREAN)
 
-private fun dayKr(d: DayOfWeek): String = when (d) {
-    DayOfWeek.MONDAY -> "월"; DayOfWeek.TUESDAY -> "화"; DayOfWeek.WEDNESDAY -> "수"
-    DayOfWeek.THURSDAY -> "목"; DayOfWeek.FRIDAY -> "금"; DayOfWeek.SATURDAY -> "토"
-    DayOfWeek.SUNDAY -> "일"
-}
-
-private fun formatHistoryDate(instant: java.time.Instant): String {
-    val d = instant.atZone(seoul).toLocalDate()
-    return "${d.format(historyDateFmt)} (${dayKr(d.dayOfWeek)})"
-}
+private fun formatHistoryDate(instant: java.time.Instant): String =
+    instant.atZone(seoul).toLocalDate().format(historyDateFmt)

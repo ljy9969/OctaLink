@@ -236,30 +236,85 @@ service cloud.firestore {
     // posts — 커뮤니티 글 (NOTICE/RECORD/TIP/QUESTION)
     // ════════════════════════════════════════════════════════
     match /posts/{postId} {
-      allow read: if isApproved();
+      // 읽기 — visibility 기반 접근 제어:
+      //   PUBLIC: 모든 APPROVED 회원
+      //   PENDING_APPROVAL: 작성자 본인 + 멘션된 회원만
+      //   REJECTED: 작성자 본인 + 멘션된 회원만 (정리/재게시 결정 위해)
+      //   (기존 doc 호환: visibility 필드 없으면 PUBLIC 으로 간주)
+      allow read: if isApproved() && (
+        !('visibility' in resource.data)
+        || resource.data.visibility == 'PUBLIC'
+        || resource.data.authorId == request.auth.uid
+        || request.auth.uid in resource.data.get('mentionedMemberIds', [])
+      );
 
       // 작성: 모든 APPROVED. NOTICE 태그는 운영진만. authorId 위조 차단.
+      // 미디어+멘션 조합 → PENDING_APPROVAL 초기 상태로 작성됨 (클라가 set).
       allow create: if isApproved()
         && request.resource.data.authorId == request.auth.uid
         && (request.resource.data.tag != 'NOTICE' || isStaff());
 
-      // 수정 — 두 케이스:
-      //   (a) 좋아요 토글: 모든 APPROVED 가 likedBy 만 변경 (본인 uid 추가/제거 검증은 클라이언트
-      //       신뢰. 체육관 커뮤니티 저신뢰 환경에선 충분. 악용 시 룰 강화)
-      //   (b) 본인 글 본문 편집 또는 운영진 모더레이션: authorId/createdAt 불변
+      // 수정 — 세 케이스:
+      //   (a) 좋아요 토글: 모든 APPROVED 가 likedBy 만 변경
+      //   (b) 본인 글 본문 편집: **작성자 전용**. authorId/createdAt 불변.
+      //       NOTICE 태그 부여/유지 변경은 변경자가 운영진일 때만.
+      //   (c) 멘션 승인/거부 (visibility / pendingApprovalFrom / rejectedBy 만 변경):
+      //       멘션된 회원이 본인 id 를 pendingApprovalFrom 에서 제거 또는 rejectedBy 에 추가.
+      //       서버측 정밀 검증은 향후 Cloud Function 으로 강화 가능.
       allow update: if (
         isApproved()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
       ) || (
-        (resource.data.authorId == request.auth.uid || isStaff())
+        isApproved()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['visibility', 'pendingApprovalFrom', 'rejectedBy'])
+        && request.auth.uid in resource.data.get('mentionedMemberIds', [])
+      ) || (
+        resource.data.authorId == request.auth.uid
         && request.resource.data.authorId == resource.data.authorId
         && request.resource.data.createdAt == resource.data.createdAt
         && (request.resource.data.tag != 'NOTICE' || isStaff())
       );
 
-      // 삭제: 본인 글 + 운영진 (모더레이션)
+      // 삭제: 본인 글 + 관장급(MASTER/CREATOR) 모더레이션. 코치는 제외 (모더레이션 권한 분리).
       allow delete: if isApproved()
-        && (resource.data.authorId == request.auth.uid || isStaff());
+        && (resource.data.authorId == request.auth.uid || isMaster());
+
+      // ─────────────────────────────────────
+      // posts/{postId}/postComments/{commentId} — 글 댓글
+      // 이름이 postComments 인 이유: members/{uid}/comments 와 collectionGroup 충돌 회피.
+      // 권한 정책은 부모 글(posts)과 동일:
+      //   read: 모든 APPROVED. create: APPROVED + authorId 위조 차단.
+      //   update: 작성자 본인만 (운영진도 남의 댓글 본문 못 바꿈).
+      //   delete: 작성자 + 관장급(MASTER/CREATOR) 모더레이션. 코치 제외.
+      // ─────────────────────────────────────
+      match /postComments/{commentId} {
+        allow read: if isApproved();
+
+        allow create: if isApproved()
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.postId == postId;
+
+        // (a) 좋아요 토글: 모든 APPROVED 가 likedBy 만 변경.
+        // (b) 본인 본문 편집: 작성자만, body/updatedAt 만 변경.
+        allow update: if (
+          isApproved()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
+        ) || (
+          resource.data.authorId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['body', 'updatedAt'])
+        );
+
+        allow delete: if isApproved()
+          && (resource.data.authorId == request.auth.uid || isMaster());
+      }
+    }
+
+    // collectionGroup("postComments") — 카드 목록의 댓글 카운트 배지 집계용.
+    // 모든 APPROVED 회원이 전 글의 댓글 카운트를 보는 게 의도된 노출.
+    match /{path=**}/postComments/{commentId} {
+      allow read: if isApproved();
     }
 
     // ════════════════════════════════════════════════════════

@@ -38,7 +38,6 @@ import com.unboundapex.octalink.data.schema.MemberDoc
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -218,12 +217,8 @@ private fun CommentList(
     }
 }
 
-private val dateFmt = DateTimeFormatter.ofPattern("M/d")
-private fun dayKr(d: DayOfWeek): String = when (d) {
-    DayOfWeek.MONDAY -> "월"; DayOfWeek.TUESDAY -> "화"; DayOfWeek.WEDNESDAY -> "수"
-    DayOfWeek.THURSDAY -> "목"; DayOfWeek.FRIDAY -> "금"; DayOfWeek.SATURDAY -> "토"
-    DayOfWeek.SUNDAY -> "일"
-}
+// 앱 전체 통일 날짜 포맷 — "5/20(수)".
+private val dateFmt = DateTimeFormatter.ofPattern("M/d(EEE)", java.util.Locale.KOREAN)
 
 @Composable
 private fun CommentRow(
@@ -237,7 +232,7 @@ private fun CommentRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "${comment.classDate.format(dateFmt)} ${dayKr(comment.classDate.dayOfWeek)} · ${comment.byMasterName}",
+                "${comment.classDate.format(dateFmt)} · ${comment.byMasterName}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -278,7 +273,7 @@ private fun WriteCommentDialog(
         text = {
             Column {
                 Text(
-                    "기준일: ${classDate.format(dateFmt)} ${dayKr(classDate.dayOfWeek)}",
+                    "기준일: ${classDate.format(dateFmt)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

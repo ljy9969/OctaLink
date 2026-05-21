@@ -37,7 +37,6 @@ import com.unboundapex.octalink.data.schema.AttendanceDoc
 import com.unboundapex.octalink.data.schema.MemberDoc
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
-import java.time.DayOfWeek
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -310,19 +309,12 @@ private fun AttendanceList(
     }
 }
 
-private val dateFormatter = DateTimeFormatter.ofPattern("MM/dd")
-private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+// 앱 전체 통일 포맷 — 날짜 "5/20(수)", 시간 "오후 8:59".
+private val dateFormatter = DateTimeFormatter.ofPattern("M/d(EEE)", java.util.Locale.KOREAN)
+private val timeFormatter = DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN)
 private val seoul = ZoneId.of("Asia/Seoul")
 
-private fun dayOfWeekKr(d: DayOfWeek): String = when (d) {
-    DayOfWeek.MONDAY -> "월"; DayOfWeek.TUESDAY -> "화"; DayOfWeek.WEDNESDAY -> "수"
-    DayOfWeek.THURSDAY -> "목"; DayOfWeek.FRIDAY -> "금"; DayOfWeek.SATURDAY -> "토"
-    DayOfWeek.SUNDAY -> "일"
-}
-
-/** "MM/DD (요일)" 한 줄 포맷. 예: 05/17 (일). 화면 전반에서 일관 사용. */
-private fun formatShortDate(d: java.time.LocalDate): String =
-    "${d.format(dateFormatter)} (${dayOfWeekKr(d.dayOfWeek)})"
+private fun formatShortDate(d: java.time.LocalDate): String = d.format(dateFormatter)
 
 @Composable
 private fun AttendanceRow(

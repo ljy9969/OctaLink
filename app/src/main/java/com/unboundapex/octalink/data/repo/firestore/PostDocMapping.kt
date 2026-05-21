@@ -5,6 +5,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.schema.PostDoc
 import com.unboundapex.octalink.data.schema.PostTag
+import com.unboundapex.octalink.data.schema.PostVisibility
 import java.time.Instant
 
 /**
@@ -23,6 +24,10 @@ internal fun PostDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "videoUrl" to videoUrl,
     "likedBy" to likedBy,
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
+    "mentionedMemberIds" to mentionedMemberIds,
+    "visibility" to visibility.name,
+    "pendingApprovalFrom" to pendingApprovalFrom,
+    "rejectedBy" to rejectedBy,
 )
 
 @Suppress("UNCHECKED_CAST")
@@ -44,5 +49,12 @@ internal fun DocumentSnapshot.toPostDoc(): PostDoc? {
         createdAt = (get("createdAt") as? Timestamp)?.let {
             Instant.ofEpochSecond(it.seconds, it.nanoseconds.toLong())
         } ?: Instant.EPOCH,
+        mentionedMemberIds = (get("mentionedMemberIds") as? List<String>) ?: emptyList(),
+        // 기존 doc 호환 — visibility 필드 없으면 PUBLIC 기본.
+        visibility = runCatching {
+            PostVisibility.valueOf(getString("visibility") ?: "PUBLIC")
+        }.getOrDefault(PostVisibility.PUBLIC),
+        pendingApprovalFrom = (get("pendingApprovalFrom") as? List<String>) ?: emptyList(),
+        rejectedBy = (get("rejectedBy") as? List<String>) ?: emptyList(),
     )
 }

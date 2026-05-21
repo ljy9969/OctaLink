@@ -1,6 +1,8 @@
 package com.unboundapex.octalink.ui.screens.admin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,8 +38,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.alpha
 import com.unboundapex.octalink.data.Belt
 import com.unboundapex.octalink.data.SkillSet
+import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.schema.MemberDoc
 import com.unboundapex.octalink.data.schema.isCreator
 import com.unboundapex.octalink.data.schema.isMaster
@@ -80,6 +87,8 @@ fun AdminScreen(
 
     // 스킬 점수 편집 다이얼로그 — null 이면 닫힘.
     var skillEditTarget by remember { mutableStateOf<MemberDoc?>(null) }
+    // 회원 선택 다이얼로그(필터 가능) — 스킬 점수 입력 진입점.
+    var skillTargetPickerOpen by remember { mutableStateOf(false) }
     // 주간 미션 작성/수정 다이얼로그 토글.
     var missionDialogOpen by remember { mutableStateOf(false) }
 
@@ -211,43 +220,41 @@ fun AdminScreen(
                     }
                 }
                 // 관장 전용 — 회원 스킬 점수 입력 (HexagonSkillChart 데이터)
+                // 회원 수가 늘어도 카드가 길어지지 않도록 다이얼로그 진입식. 안에서 성별/체급/벨트 필터.
                 item {
-                    PosseCard(leftStripeColor = StripeMaster) {
-                        Text(
-                            "회원 스킬 점수 입력",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = StripeMaster,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "탭하면 프로필 차트 (6축) 점수를 0~100 슬라이더로 설정",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        if (approvedMembers.isEmpty()) {
-                            Text(
-                                "승인된 회원이 없습니다.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            // 2열 그리드 — 회원 수가 늘면 카드가 너무 길어지지 않도록.
-                            approvedMembers.chunked(2).forEach { pair ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    pair.forEach { m ->
-                                        SkillTargetRow(
-                                            member = m,
-                                            onClick = { skillEditTarget = m },
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    }
-                                    // 홀수 인원의 마지막 행 — 빈 칸으로 폭 균형 유지
-                                    if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
-                                }
+                    PosseCard(
+                        leftStripeColor = StripeMaster,
+                        modifier = Modifier.clickable(
+                            enabled = approvedMembers.isNotEmpty(),
+                            onClick = { skillTargetPickerOpen = true },
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "회원 스킬 점수 입력",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = StripeMaster,
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    if (approvedMembers.isEmpty())
+                                        "승인된 회원이 없습니다."
+                                    else
+                                        "승인 회원 ${approvedMembers.size}명 · 탭하여 필터 + 선택",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (approvedMembers.isNotEmpty()) {
+                                Text(
+                                    "→",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = StripeMaster,
+                                )
                             }
                         }
                     }
@@ -270,6 +277,17 @@ fun AdminScreen(
                 }
             }
         }
+    }
+
+    if (skillTargetPickerOpen) {
+        SkillTargetPickerDialog(
+            members = approvedMembers,
+            onDismiss = { skillTargetPickerOpen = false },
+            onSelect = { member ->
+                skillTargetPickerOpen = false
+                skillEditTarget = member
+            },
+        )
     }
 
     skillEditTarget?.let { target ->
@@ -500,7 +518,8 @@ private val StripeCreatorBrush = androidx.compose.ui.graphics.Brush.verticalGrad
 private val StripeCreatorAccent = Color(0xFFAB47BC)   // 보라 — 타이틀 텍스트 (그라데이션 상단과 매칭)
 
 private val reviewSeoulZone = java.time.ZoneId.of("Asia/Seoul")
-private val reviewDateFmt = java.time.format.DateTimeFormatter.ofPattern("MM/dd")
+// 앱 전체 통일 날짜 포맷 — "5/20(수)".
+private val reviewDateFmt = java.time.format.DateTimeFormatter.ofPattern("M/d(EEE)", java.util.Locale.KOREAN)
 
 /** 검토 큐 한 행 — 회원 이름 + 6축 점수 평균 + 제안자 + 평가일 + 승인/반려 칩. */
 @Composable
@@ -671,6 +690,195 @@ private fun SkillTargetRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * 회원 스킬 점수 입력 진입용 — 성별/체급/벨트 필터 + 필터된 회원 리스트.
+ * 회원 탭 → [onSelect] 호출 후 다이얼로그 닫고 caller 가 SkillEditDialog 오픈.
+ */
+@Composable
+private fun SkillTargetPickerDialog(
+    members: List<MemberDoc>,
+    onDismiss: () -> Unit,
+    onSelect: (MemberDoc) -> Unit,
+) {
+    // null = 전체. 같은 칩 재탭 시 해제.
+    var genderFilter by remember { mutableStateOf<String?>(null) }
+    var weightFilter by remember { mutableStateOf<WeightClass?>(null) }
+    var beltFilter by remember { mutableStateOf<Belt?>(null) }
+
+    val filtered = remember(members, genderFilter, weightFilter, beltFilter) {
+        members.filter { m ->
+            (genderFilter == null || m.gender?.uppercase() == genderFilter) &&
+                (weightFilter == null || m.weightClass == weightFilter) &&
+                (beltFilter == null || m.belt == beltFilter)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("회원 스킬 점수 입력", style = MaterialTheme.typography.titleLarge)
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "필터로 좁힌 뒤 회원을 탭하면 6축 점수 슬라이더 다이얼로그가 열립니다.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                FilterLabel("성별")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SimpleFilterChip(
+                        label = "남",
+                        selected = genderFilter == "MALE",
+                        onClick = { genderFilter = if (genderFilter == "MALE") null else "MALE" },
+                        modifier = Modifier.weight(1f),
+                    )
+                    SimpleFilterChip(
+                        label = "여",
+                        selected = genderFilter == "FEMALE",
+                        onClick = { genderFilter = if (genderFilter == "FEMALE") null else "FEMALE" },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                FilterLabel("체급")
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    WeightClass.values().forEach { wc ->
+                        SimpleFilterChip(
+                            label = wc.shortLabel,
+                            selected = weightFilter == wc,
+                            onClick = { weightFilter = if (weightFilter == wc) null else wc },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                FilterLabel("벨트")
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Belt.gradedValues.forEach { b ->
+                        BeltFilterChip(
+                            belt = b,
+                            selected = beltFilter == b,
+                            onClick = { beltFilter = if (beltFilter == b) null else b },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "회원 ${filtered.size}명",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                if (filtered.isEmpty()) {
+                    Text(
+                        "필터 조건에 맞는 회원이 없습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                    ) {
+                        filtered.forEach { m ->
+                            SkillTargetRow(
+                                member = m,
+                                onClick = { onSelect(m) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Text(
+                "닫기",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clickable { onDismiss() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        },
+    )
+}
+
+@Composable
+private fun FilterLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun SimpleFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bg = if (selected) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary
+    else MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .clickable { onClick() }
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = fg,
+            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun BeltFilterChip(
+    belt: Belt,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val borderColor = if (selected) Color.White else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    val fg = if (belt == Belt.WHITE) Color(0xFF111111) else Color.White
+    Box(
+        modifier = modifier
+            .height(32.dp)
+            .alpha(if (selected) 1f else 0.45f)
+            .clip(RoundedCornerShape(50))
+            .background(belt.ringColor)
+            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor), RoundedCornerShape(50))
+            .clickable { onClick() }
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            belt.displayName,
+            style = MaterialTheme.typography.labelSmall,
+            color = fg,
+            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }
 

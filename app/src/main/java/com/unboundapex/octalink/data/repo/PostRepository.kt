@@ -20,6 +20,9 @@ interface PostRepository {
     /**
      * 글 작성. id 는 Firestore 자동 생성. 작성 시점이 createdAt.
      * imageUrl / videoUrl 은 사전 Storage 업로드 후 호출자가 전달. 둘 중 하나만 채워야 함 (UI 가 강제).
+     *
+     * @param mentionedMemberIds @멘션된 회원 id. 미디어(imageUrl/videoUrl) + mentions 조합이면
+     * 자동으로 visibility=PENDING_APPROVAL + pendingApprovalFrom=mentions 로 생성.
      */
     suspend fun create(
         authorId: String,
@@ -30,7 +33,19 @@ interface PostRepository {
         tag: PostTag,
         imageUrl: String? = null,
         videoUrl: String? = null,
+        mentionedMemberIds: List<String> = emptyList(),
     ): PostDoc
+
+    /**
+     * 멘션된 회원의 공개 승인 — pendingApprovalFrom 에서 본인 id 제거.
+     * 모두 빠지면 visibility=PUBLIC 으로 전이.
+     */
+    suspend fun approveMention(postId: String, memberId: String)
+
+    /**
+     * 멘션된 회원의 공개 거부 — visibility=REJECTED + rejectedBy 에 본인 id 추가.
+     */
+    suspend fun rejectMention(postId: String, memberId: String)
 
     /** 좋아요 토글 — likedBy 에 memberId 추가/제거. */
     suspend fun toggleLike(postId: String, memberId: String)
