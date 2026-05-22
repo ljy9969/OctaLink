@@ -1025,9 +1025,13 @@ private fun FullscreenMediaDialog(
                         .padding(start = 12.dp, bottom = 64.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    // 저장 = 중성 (어두운 반투명) — 시스템 액션 톤.
                     MediaActionIconButton(
                         icon = androidx.compose.material.icons.Icons.Outlined.FileDownload,
                         contentDescription = "저장",
+                        bg = androidx.compose.ui.graphics.SolidColor(Color.White.copy(alpha = 0.15f)),
+                        iconTint = Color.White,
+                        borderColor = Color.White.copy(alpha = 0.3f),
                     ) {
                         scope.launch {
                             val ok = saveImageToGallery(context, imageUrl)
@@ -1038,9 +1042,13 @@ private fun FullscreenMediaDialog(
                             ).show()
                         }
                     }
+                    // 카카오톡 = 공식 Kakao yellow (#FEE500) + 다크 톤 아이콘.
                     MediaActionIconButton(
                         icon = androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Chat,
                         contentDescription = "카카오톡 공유",
+                        bg = androidx.compose.ui.graphics.SolidColor(Color(0xFFFEE500)),
+                        iconTint = Color(0xFF3C1E1E),
+                        borderColor = Color.Transparent,
                     ) {
                         scope.launch {
                             val ok = shareImageToApp(context, imageUrl, "com.kakao.talk")
@@ -1050,9 +1058,19 @@ private fun FullscreenMediaDialog(
                             ).show()
                         }
                     }
+                    // 인스타 = Instagram 공식 브랜드 그라데이션 (보라 → 빨강 → 오렌지).
                     MediaActionIconButton(
                         icon = androidx.compose.material.icons.Icons.Outlined.PhotoCamera,
                         contentDescription = "인스타 공유",
+                        bg = androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(
+                                Color(0xFF833AB4),
+                                Color(0xFFFD1D1D),
+                                Color(0xFFFCB045),
+                            ),
+                        ),
+                        iconTint = Color.White,
+                        borderColor = Color.Transparent,
                     ) {
                         scope.launch {
                             val ok = shareImageToApp(context, imageUrl, "com.instagram.android")
@@ -1072,26 +1090,26 @@ private fun FullscreenMediaDialog(
 private fun MediaActionIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
+    bg: androidx.compose.ui.graphics.Brush,
+    iconTint: Color,
+    borderColor: Color = Color.Transparent,
     onClick: () -> Unit,
 ) {
+    val shape = androidx.compose.foundation.shape.CircleShape
     Box(
         modifier = Modifier
-            .size(44.dp)
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(Color.White.copy(alpha = 0.15f))
-            .border(
-                1.dp,
-                Color.White.copy(alpha = 0.3f),
-                androidx.compose.foundation.shape.CircleShape,
-            )
+            .size(38.dp)
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, borderColor, shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = Color.White,
-            modifier = Modifier.size(22.dp),
+            tint = iconTint,
+            modifier = Modifier.size(20.dp),
         )
     }
 }

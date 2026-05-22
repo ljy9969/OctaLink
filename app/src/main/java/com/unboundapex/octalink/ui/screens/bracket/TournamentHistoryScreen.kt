@@ -71,7 +71,7 @@ fun TournamentHistoryScreen(
     }
     val totalLabel = when {
         items.isEmpty() -> "기록 없음"
-        filterMine -> "내 참가 ${visibleItems.size}개 / 총 ${items.size}개"
+        filterMine -> "내 참가 ${visibleItems.size} / 총 ${items.size}개"
         else -> "총 ${items.size}개"
     }
 
