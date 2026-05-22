@@ -47,7 +47,7 @@ Strava, Smashr를 참고. 궁극 목표는 **개인의 성장**.
   - MainActivity.onCreate에서 `init()` 호출 → 백그라운드로 현재+다음 해 갱신
   - API 키는 `local.properties`의 `HOLIDAY_API_KEY` → BuildConfig 주입
 - **벨트** (`data/BeltColors.kt`): 화이트/블루/퍼플/브라운/블랙. 텍스트 표기 ❌ → 아바타 링 + 매치카드 스트라이프 컬러로 표현
-- **캐릭터 카탈로그** (`data/AvatarCatalog.kt`): USF4 44명. 이미지 미존재 시 컬러 + 이니셜 자동 폴백
+- **캐릭터 카탈로그** (`data/AvatarCatalog.kt`): 자체 파이터 스프라이트 10종 (5체급 × 남/여 2). 가입 시 성별 + 체급 조합으로 자동 부여 (사용자 선택 X)
 - **회원 풀** (`data/Member.kt`): 5체급 × 8명 = **40명** (페더/라이트/웰터/미들/헤비)
 - **세션 상태** (`data/session/SessionViewModel.kt`): name/belt/avatarId/role을 `StateFlow<SessionState>`로 노출. 프로필 변경이 collectAsState 하는 모든 화면에 자동 전파
 - **토너먼트 상태** (`data/tournament/TournamentViewModel.kt`): round1/round2/final + weightClass + beltGroup을 `StateFlow<TournamentUiState>`로 노출
@@ -117,7 +117,7 @@ app/src/main/
 │   ├── OctaLinkApplication.kt         # KakaoSdk.init + Utility.getKeyHash 로그 + HolidayRepository.init + RepositoryProvider.init
 │   ├── navigation/PosseApp.kt         # 세션 phase + status 라우팅 + 커스텀 Row 44dp nav + NavHost
 │   ├── data/
-│   │   ├── AvatarCatalog.kt           # USF4 44명 카탈로그
+│   │   ├── AvatarCatalog.kt           # 파이터 스프라이트 10종 카탈로그 (5체급×남/여)
 │   │   ├── BeltColors.kt              # 벨트 → 컬러 매핑
 │   │   ├── GymInfo.kt                 # 체육관 운영 정보 + 외부 링크
 │   │   ├── HolidayRepository.kt       # 공공데이터 API + 캐시
@@ -181,8 +181,7 @@ app/src/main/
     ├── drawable-nodpi/
     │   ├── logo_octalink.png               # 마스터 로고 (홈 배너용 워드마크)
     │   ├── mark_octalink.png                # 마크 단독 (Play Store 아이콘 마스터)
-    │   ├── mark_octalink.jpg                # 운영자 손제작 마스터 (PIL 파생 소스)
-    │   └── avatar_<id>.png × 44             # USF4 캐릭터
+    │   └── {m,f}_{feather,light,welter,middle,heavy}.png × 10  # 자체 파이터 스프라이트 (성별×체급)
     ├── mipmap-{m,h,xh,xxh,xxxh}dpi/
     │   ├── ic_launcher.webp                  # 레거시 정사각 (BONE bg)
     │   ├── ic_launcher_round.webp            # 원형 (BONE bg)
@@ -220,7 +219,7 @@ tools/                                        # 빌드/디자인 보조 스크�
 | 체크인 색상 | **체크인 = 파랑(#1E88E5)** / **체크인 취소 = 빨강(#C8102E)** |
 | 휴무일 | 체크인 비활성 + 동료 명단 비표시 (subtitle "오늘 휴무") |
 | 홈 헤더 | 텍스트 대신 로고 배너 (90% 폭 + 진입 시 정권 1초 임팩트) |
-| 캐릭터 | USF4 44명 중 선택. 모든 아바타 흰 배경으로 통일 |
+| 캐릭터 | 자체 파이터 스프라이트 10종 (5체급 × 남/여). 가입 폼의 성별 + 체급 조합으로 자동 부여 (사용자 직접 선택 ❌) |
 | 벨트 표시 | 아바타 링 색 / 매치 카드 스트라이프 색 (텍스트 ❌) |
 | 스킬 차트 평가 | **코치 입력 (PROPOSED) → 관장 검토 → 확정 (APPROVED)** 워크플로. 자기/상호 평가 ❌. `SkillScoreDoc.status` enum (PROPOSED/APPROVED/REJECTED) |
 | 권한 4단계 | MEMBER (회원, 본인 출결/프로필/커뮤니티 글) · COACH (부관리자, 일상 운영) · MASTER (관장, 운영 전권 — 단 권한 부여 ❌) · **CREATOR (앱 제작자, 회원 역할 부여 단독 + MASTER 권한 자동 포함)**. `Role.isStaff = MASTER+COACH+CREATOR`, `Role.isMaster = MASTER+CREATOR`, `Role.isCreator = CREATOR`. UI 진입점은 **하단 nav "운영" 탭** (`AdminScreen`, isStaff에게만 동적 표시), 그 안에서 권한별 카드 노출 + 창조자는 권한 부여 페이지(`CreatorScreen`)로 진입. 창조자 권한 격리 이유: 관장 계정 탈취 시 무차별 코치 승격 공격 차단 |
@@ -256,7 +255,7 @@ tools/                                        # 빌드/디자인 보조 스크�
 - [x] **타겟 API Level 35 마이그레이션** — `compileSdk` / `targetSdk` 34 → 35, Compose BOM 2024.06.00 → 2024.10.00, `themes.xml`의 `statusBarColor`/`navigationBarColor` 제거 (edge-to-edge에서 무시됨). `MainActivity.enableEdgeToEdge()` + `Scaffold` 자동 inset 처리. **2026-05-10 작업 PC에서 빌드 통과 + Pixel 8 API 37 에뮬레이터 시각 검증 완료** (status bar / bottom nav / InfoScreen 푸터 모두 정상)
 - [x] **체육관 로고 우회 (자체 OctaLink 브랜딩)** — Team Posse Striking 로고 사용 불가 → 자체 옥타곤+슬래시 마크 + "OctaLink" 워드마크로 교체 (2026-05-09). 체육관 명칭 텍스트는 InfoScreen에 유지 (카카오톡 등 사용 동의 별도 권장)
 - [x] **앱 내 비공식 표기** — `InfoScreen.kt` 최하단에 "본 앱은 {체육관명} 회원이 자체 제작한 비공식 도구입니다. 체육관 공식 앱이 아닙니다." 푸터 추가 (labelSmall + onSurfaceVariant + 중앙 정렬, 카드 외부 footnote 스타일) (2026-05-10)
-- [x] **USF4 캐릭터 자산 처리 확정** — main 브랜치에서 제거(저작권 회피), `teamposse` 브랜치 원격 보존. 운영 방식: **유저 업로드 + 이니셜 폴백** (Firebase Storage 도입 후 회원 본인 사진 업로드, 그 전까지는 `AvatarCatalog.kt`의 컬러+이니셜 자동 폴백)
+- [x] **캐릭터 자산 자체 제작 확정** — USF4 자산은 저작권 회피 위해 main 브랜치에서 제거(`teamposse` 브랜치 원격 백업). 대체로 **자체 파이터 스프라이트 10종** (5체급 × 남/여) 제작. 사용자 선택 ❌, 가입 폼의 성별 + 체급 조합으로 자동 부여 → 동일 성별·체급 회원이 같은 아바타를 공유하는 단순화된 정체성 모델
 
 ## 알려진 함정
 
