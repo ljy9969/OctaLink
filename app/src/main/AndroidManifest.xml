@@ -53,5 +53,22 @@
                     android:scheme="kakao${KAKAO_NATIVE_APP_KEY}" />
             </intent-filter>
         </activity>
+
+        <!-- 이미지 공유용 FileProvider — 캐시 디렉토리의 이미지를 다른 앱(카카오톡/인스타)에 안전하게 전달. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
+
+    <!-- 외부 앱 패키지 가시성 (Android 11+) — startActivity 로 카카오톡/인스타 호출 위해 필요. -->
+    <queries>
+        <package android:name="com.kakao.talk" />
+        <package android:name="com.instagram.android" />
+    </queries>
 </manifest>

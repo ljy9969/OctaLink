@@ -67,8 +67,28 @@ object ImageUploader {
             ?: error("이미지 URI 열기 실패 (스트림 null): $uri")
     }
 
-    /** content URI → 리사이즈 + JPEG 압축된 바이트. */
+    /** content URI → EXIF 회전 적용 + 리사이즈 + JPEG 압축된 바이트. */
     private fun compressImage(context: Context, uri: Uri): ByteArray {
+        // 0. EXIF orientation 읽기 — BitmapFactory.decodeStream 는 EXIF 무시하므로
+        //    여기서 직접 읽어 회전 각도 산출. JPEG 출력은 EXIF 첨부 안 되므로 (Bitmap.compress
+        //    가 자동 첨부 X) 회전을 픽셀에 baking 해야 뷰어가 올바른 방향으로 표시.
+        val exifRotation = runCatching {
+            openSource(context, uri).use { stream ->
+                val exif = android.media.ExifInterface(stream)
+                when (
+                    exif.getAttributeInt(
+                        android.media.ExifInterface.TAG_ORIENTATION,
+                        android.media.ExifInterface.ORIENTATION_NORMAL,
+                    )
+                ) {
+                    android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                    android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                    android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                    else -> 0f
+                }
+            }
+        }.getOrDefault(0f)
+
         // 1. 사이즈만 먼저 조회 (메모리 안 올림)
         val sizeOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         openSource(context, uri).use {
@@ -89,7 +109,7 @@ object ImageUploader {
 
         // 3. 정확히 MAX_DIM 으로 리사이즈 (sample 만으로는 약간 더 클 수 있음)
         val sampledLong = maxOf(sampled.width, sampled.height)
-        val finalBitmap = if (sampledLong <= MAX_DIM) sampled else {
+        val resized = if (sampledLong <= MAX_DIM) sampled else {
             val scale = MAX_DIM.toFloat() / sampledLong
             val w = (sampled.width * scale).toInt()
             val h = (sampled.height * scale).toInt()
@@ -98,7 +118,19 @@ object ImageUploader {
             }
         }
 
-        // 4. JPEG 압축
+        // 4. EXIF 회전 적용 (0° 면 no-op).
+        val finalBitmap = if (exifRotation == 0f) resized else {
+            val matrix = android.graphics.Matrix().apply { postRotate(exifRotation) }
+            android.util.Log.i(
+                "OctaLink.ImageUploader",
+                "EXIF rotation ${exifRotation.toInt()}° applied to pixels",
+            )
+            Bitmap.createBitmap(resized, 0, 0, resized.width, resized.height, matrix, true).also {
+                if (it !== resized) resized.recycle()
+            }
+        }
+
+        // 5. JPEG 압축
         val out = ByteArrayOutputStream()
         finalBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
         finalBitmap.recycle()

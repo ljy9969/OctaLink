@@ -588,17 +588,28 @@ async function sendNotificationTo(
   const defaultEnabled = DEFAULT_ENABLED[type];
 
   // distinct id → 토큰/uid 쌍 수집. 빠진 doc / 토큰 없음 / pref OFF 는 모두 skip.
+  // 각 단계 drop 시 명시적 로깅 — 클라이언트 미수신 진단 시 추적 가능.
   const idTokenPairs: Array<{ uid: string; token: string }> = [];
   await Promise.all(
     Array.from(new Set(memberIds)).map(async (memberId) => {
       const snap = await db.collection("members").doc(memberId).get();
       const data = snap.data();
-      if (!data) return;
+      if (!data) {
+        logger.info(`[fcm] type=${type} skip ${memberId} — member doc 없음`);
+        return;
+      }
       const token = data.fcmToken as string | undefined;
-      if (!token) return;
+      if (!token) {
+        logger.info(`[fcm] type=${type} skip ${memberId} — fcmToken 없음`);
+        return;
+      }
       const prefs = (data.notificationPrefs as Record<string, boolean> | undefined) ?? {};
       const enabled = prefs[type] !== undefined ? prefs[type] : defaultEnabled;
-      if (!enabled) return;
+      if (!enabled) {
+        logger.info(`[fcm] type=${type} skip ${memberId} — prefs[${type}]=false`);
+        return;
+      }
+      logger.info(`[fcm] type=${type} → ${memberId} token=${token.substring(0, 16)}...`);
       idTokenPairs.push({ uid: memberId, token });
     }),
   );
@@ -854,14 +865,14 @@ export const notifyOnPostMention = onDocumentCreated(
 
     // 글 제목 — 빈 문자열 허용 스키마라 trim 후 비어있으면 body 에 첨부 안 함.
     const postTitle = ((data.title as string | undefined) ?? "").trim();
-    const quotedTitle = postTitle ? `"${postTitle}"` : "";
+    const titleLine = postTitle ? `글 제목: "${postTitle}"` : "";
 
     const title = needsApproval
       ? `${authorName}님이 사진/영상을 담은 글에서 회원님을 멘션했어요.`
       : `${authorName}님이 커뮤니티에서 회원님을 멘션했어요. :)`;
     const body = needsApproval
-      ? `공개 전 승인이 필요해요. 커뮤니티에서 확인해주세요. :)${quotedTitle ? ` ${quotedTitle}` : ""}`
-      : quotedTitle;
+      ? `공개 전 승인이 필요해요. 커뮤니티에서 확인해주세요. :)${titleLine ? `\n${titleLine}` : ""}`
+      : titleLine;
 
     await sendNotificationTo(targets, "MENTION", title, body);
   },

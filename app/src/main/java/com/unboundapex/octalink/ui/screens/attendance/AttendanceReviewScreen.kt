@@ -197,18 +197,22 @@ private fun MemberPickerList(
                             leftStripeColor = m.belt.ringColor,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.Bottom,
-                                ) {
-                                    Text(m.name, style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.width(6.dp))
+                                // 이름(위) + 체급(아래) 세로 배치 — 옆 출석률 badge 와 폭 충돌 없게.
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        m.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
                                     Text(
                                         m.weightClass.displayName,
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
                                     )
                                 }
+                                Spacer(Modifier.width(8.dp))
                                 WeeklyRateBadge(count = weeklyCount[m.id] ?: 0)
                             }
                         }

@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -162,8 +163,23 @@ fun PosseApp() {
     // 로그인 직후 1회 — 오늘 남은 수업의 CLASS_REMINDER 스케줄. prefs OFF 면 내부에서 skip.
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     LaunchedEffect(session.member?.id) {
-        if (session.member?.id != null) {
-            ClassReminderScheduler.scheduleAll(appContext)
+        val mid = session.member?.id ?: return@LaunchedEffect
+        ClassReminderScheduler.scheduleAll(appContext)
+        // FCM 토큰 보장 영속화 — onNewToken 콜백은 토큰 회전 시에만 fire 이라 신규 로그인
+        // (혹은 첫 설치 후 회전 누락) 케이스에서 members.{uid}.fcmToken 누락 가능. 매 세션
+        // 시작마다 한 번 fetch → write. 같은 토큰이면 멱등.
+        runCatching {
+            val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+            if (token.isNotBlank()) {
+                com.unboundapex.octalink.data.repo.RepositoryProvider.members
+                    .updateFcmToken(mid, token)
+                android.util.Log.i(
+                    "OctaLink.Fcm",
+                    "token ensured for member=$mid (${token.take(12)}…)",
+                )
+            }
+        }.onFailure {
+            android.util.Log.w("OctaLink.Fcm", "ensure token FAILED for $mid", it)
         }
     }
 
