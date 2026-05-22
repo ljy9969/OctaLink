@@ -82,7 +82,7 @@ class CoachCommentViewModel : ViewModel() {
                     toMemberId = toMemberId,
                     byMasterId = byMasterId,
                     byMasterName = byMasterName,
-                    text = text.trim().take(300),
+                    text = text.trim().take(80),
                     classDate = classDate,
                 )
             }.onFailure {

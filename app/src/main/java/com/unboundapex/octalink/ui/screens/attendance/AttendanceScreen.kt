@@ -128,14 +128,16 @@ fun AttendanceScreen(
                     )
                     Text(
                         when {
-                            isMasterRole -> "도장 영업일에 상시 운영 중이라 별도 체크인이 없습니다. 🥋"
+                            isMasterRole -> "체육관을 상시 운영 중이라 별도 체크인이 없습니다. 🥋"
                             closedToday -> "오늘은 $closedReason 입니다. 🧘"
                             classesEnded -> "다음 수업에서 봐요! 👋"
-                            tooEarly -> "수업 시작 30분 전부터 가능. 🕰️"
+                            tooEarly -> "수업 시작 30분 전부터 체크인 가능합니다. 🕰️"
                             checkedIn -> "오늘도 불태워봅시다! 🔥"
-                            else -> "지금 체크인 가능합니다. ✅"
+                            else -> "지금 체크인 가능합니다\n(수업 시작 10분 후까지). ✅"
                         },
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(

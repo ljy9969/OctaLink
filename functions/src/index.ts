@@ -5,8 +5,36 @@ import {
 } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
+import { VertexAI } from "@google-cloud/vertexai";
 
 admin.initializeApp();
+
+/**
+ * Vertex AI 클라이언트 — Gemini 1.5 Flash 로 주간 보강 루틴 생성.
+ *
+ * 권역 us-central1 (Vertex AI 의 generative 모델은 asia-northeast3 미지원 — 2026-05 기준).
+ * Firebase 프로젝트 ID 는 GCLOUD_PROJECT 환경변수에서 자동 주입.
+ */
+const vertex = new VertexAI({
+  project: process.env.GCLOUD_PROJECT ?? "",
+  location: "us-central1",
+});
+// 2026-05: gemini-1.5-flash 는 Vertex AI 에서 retire 됨 → 2.5 라인 사용.
+// gemini-2.5-flash 가 cost-perf 최적, structured JSON 출력 지원.
+//
+// thinkingConfig.thinkingBudget=0 : 2.5 는 기본으로 thinking 토큰을 먼저 소비해서
+// maxOutputTokens 안에서 실제 응답이 잘림. 짧은 routine 생성엔 thinking 불필요.
+// maxOutputTokens=8192 : 한국어 6일×3드릴 + feedback ≒ 4~5k 토큰 예상, 여유 잡음.
+const gemini = vertex.getGenerativeModel({
+  model: "gemini-2.5-flash",
+  generationConfig: {
+    temperature: 0.7,
+    maxOutputTokens: 8192,
+    responseMimeType: "application/json",
+    // @ts-expect-error thinkingConfig — vertexai SDK 타입 정의에 아직 미반영
+    thinkingConfig: { thinkingBudget: 0 },
+  },
+});
 
 /**
  * Kakao 사용자 정보 응답 타입 (Kakao API v2 /v2/user/me).
@@ -877,3 +905,490 @@ export const notifyOnPostMention = onDocumentCreated(
     await sendNotificationTo(targets, "MENTION", title, body);
   },
 );
+
+// =============================================================================
+// 출석 체크인 — 백도어 차단 (서버 시간 / role / 스케줄 검증)
+// =============================================================================
+
+/**
+ * 도장 수업 슬롯 — 클라이언트 [Schedule.kt] 와 동일 정의. 변경 시 양쪽 모두 갱신.
+ * KST 기준 시작 시각만 검증. 종료 시각은 윈도우 계산에 불필요 (start + 10분이 close).
+ */
+const WEEKDAY_SLOT_STARTS: Array<{ h: number; m: number }> = [
+  { h: 11, m: 0 },
+  { h: 12, m: 0 },
+  { h: 13, m: 0 },
+  { h: 18, m: 0 },
+  { h: 19, m: 30 },
+  { h: 21, m: 0 },
+];
+const SATURDAY_SLOT_STARTS: Array<{ h: number; m: number }> = [{ h: 11, m: 0 }];
+const CHECK_IN_OPEN_MIN_BEFORE = 30;
+const CHECK_IN_CLOSE_MIN_AFTER = 10;
+
+function slotStartsForKstDow(dow: number): Array<{ h: number; m: number }> {
+  // dow: 0=Sun, 1=Mon, ..., 6=Sat (KST 기준)
+  if (dow === 0) return [];
+  if (dow === 6) return SATURDAY_SLOT_STARTS;
+  return WEEKDAY_SLOT_STARTS;
+}
+
+/**
+ * 현재 KST 시각이 어느 슬롯의 체크인 윈도우 (`[start-30분, start+10분]`) 안에 들어가는지 검사.
+ * 들어가지 않으면 null, 들어가면 그 슬롯 시작 시각의 KST date string ("YYYY-MM-DD").
+ */
+function withinCheckInWindow(): { ok: boolean; classDate: string; reason?: string } {
+  const nowUtcMs = Date.now();
+  const kstMs = nowUtcMs + 9 * 60 * 60 * 1000;
+  const kst = new Date(kstMs);
+  const dow = kst.getUTCDay();
+  const slots = slotStartsForKstDow(dow);
+  if (slots.length === 0) {
+    return { ok: false, classDate: "", reason: "휴무일에는 체크인할 수 없어요." };
+  }
+
+  const hour = kst.getUTCHours();
+  const minute = kst.getUTCMinutes();
+  const nowMin = hour * 60 + minute;
+
+  for (const slot of slots) {
+    const slotMin = slot.h * 60 + slot.m;
+    if (nowMin >= slotMin - CHECK_IN_OPEN_MIN_BEFORE && nowMin <= slotMin + CHECK_IN_CLOSE_MIN_AFTER) {
+      const y = kst.getUTCFullYear();
+      const mo = String(kst.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(kst.getUTCDate()).padStart(2, "0");
+      return { ok: true, classDate: `${y}-${mo}-${d}` };
+    }
+  }
+  return { ok: false, classDate: "", reason: "지금은 체크인 가능 시간이 아니에요. 수업 시작 30분 전 ~ 10분 후 사이에 다시 시도해주세요." };
+}
+
+/**
+ * 출석 체크인 — 클라이언트 직접 Firestore write 는 rules 에서 차단되고, 이 함수만 통과.
+ *
+ *  - 본인 uid 명의로 `members/{uid}/attendance/{classDate}` 생성 (set with admin SDK).
+ *  - 서버 시각으로 슬롯 윈도우 검증 → 백도어 (UI 우회) 차단.
+ *  - role=MASTER 는 상시 운영 인력이라 체크인 자체가 무의미 → 거부.
+ *  - 같은 날 재호출은 set() 으로 checkInAt 갱신 (취소 후 재체크인 케이스).
+ */
+export const recordAttendance = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Login required");
+    }
+    const uid = request.auth.uid;
+    const classDefId = (request.data?.classDefId as string | undefined) ?? "default";
+    logger.info("[recordAttendance] entry", { uid: maskId(uid), classDefId });
+
+    const db = admin.firestore();
+    const memberSnap = await db.collection("members").doc(uid).get();
+    const member = memberSnap.data();
+    if (!member) {
+      throw new HttpsError("not-found", "회원 정보를 찾지 못했어요.");
+    }
+    if (member.status !== "APPROVED") {
+      throw new HttpsError("permission-denied", "승인된 회원만 체크인할 수 있어요.");
+    }
+    if (member.role === "MASTER") {
+      throw new HttpsError("permission-denied", "관장은 상시 운영이라 별도 체크인이 없어요.");
+    }
+
+    const window = withinCheckInWindow();
+    if (!window.ok) {
+      logger.warn("[recordAttendance] window closed", { uid: maskId(uid), reason: window.reason });
+      throw new HttpsError("failed-precondition", window.reason ?? "체크인 윈도우가 닫혀있어요.");
+    }
+
+    const docRef = db.doc(`members/${uid}/attendance/${window.classDate}`);
+    await docRef.set({
+      id: window.classDate,
+      memberId: uid,
+      classDefId,
+      classDate: window.classDate,
+      checkInAt: admin.firestore.FieldValue.serverTimestamp(),
+      verified: false,
+    });
+    logger.info("[recordAttendance] saved", { uid: maskId(uid), classDate: window.classDate });
+    return { ok: true, classDate: window.classDate };
+  },
+);
+
+/**
+ * 출석 체크인 취소 — 동일 권한 모델(본인). admin SDK 로 doc 삭제.
+ * 윈도우 검증은 안 함 (취소는 언제든 가능). 같은 날 doc 만 삭제 (`classDate` = today KST).
+ */
+export const cancelAttendance = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Login required");
+    }
+    const uid = request.auth.uid;
+    const nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const y = nowKst.getUTCFullYear();
+    const mo = String(nowKst.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(nowKst.getUTCDate()).padStart(2, "0");
+    const classDate = `${y}-${mo}-${d}`;
+
+    await admin.firestore().doc(`members/${uid}/attendance/${classDate}`).delete();
+    logger.info("[cancelAttendance] deleted", { uid: maskId(uid), classDate });
+    return { ok: true, classDate };
+  },
+);
+
+// =============================================================================
+// AI 주간 보강 루틴 — Phase 1 MVP
+// =============================================================================
+
+/** 6축 한국어 ↔ Schema 필드 매핑 (prompt 입력 + LLM 출력의 targetAxis 검증용). */
+const AXIS_FIELDS = [
+  "striking",
+  "grappling",
+  "stamina",
+  "technique",
+  "mental",
+  "speed",
+] as const;
+const AXIS_LABEL_KO: Record<string, string> = {
+  striking: "스트라이킹",
+  grappling: "그래플링",
+  stamina: "체력",
+  technique: "기술",
+  mental: "멘탈",
+  speed: "스피드",
+};
+
+/**
+ * ISO 8601 주키 — "2026-W22" 형식.
+ * 월요일 시작, 한 해의 첫 목요일이 속한 주가 1주차.
+ * Cloud Function 호출 시점의 KST 기준으로 계산.
+ */
+function isoWeekKey(now = new Date()): string {
+  const kstMs = now.getTime() + 9 * 60 * 60 * 1000;
+  const d = new Date(kstMs);
+  d.setUTCHours(0, 0, 0, 0);
+  // 목요일로 이동 (ISO 주 규칙).
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+/** 입관 개월 수 (요청 시점 기준). joinDate 가 잘못된 형식이면 0. */
+function monthsSinceJoin(joinDate: string | undefined): number {
+  if (!joinDate) return 0;
+  const join = new Date(joinDate);
+  if (isNaN(join.getTime())) return 0;
+  const now = new Date();
+  return Math.max(
+    0,
+    (now.getFullYear() - join.getFullYear()) * 12 +
+      (now.getMonth() - join.getMonth()),
+  );
+}
+
+/** ExerciseDB V1 Free 검색 — 키워드로 가장 첫 번째 매칭 운동 반환. 캐시 사용. */
+interface ExerciseDbEntry {
+  exerciseId: string;
+  name: string;
+  gifUrl: string;
+}
+async function lookupExerciseDb(
+  keyword: string,
+): Promise<ExerciseDbEntry | null> {
+  const norm = keyword.toLowerCase().trim();
+  if (!norm) return null;
+
+  const db = admin.firestore();
+  const cacheRef = db.collection("exerciseDbCache").doc(encodeKey(norm));
+  const cached = await cacheRef.get();
+  if (cached.exists) {
+    const c = cached.data();
+    if (c?.miss) return null;
+    return {
+      exerciseId: c?.exerciseId,
+      name: c?.name,
+      gifUrl: c?.gifUrl,
+    };
+  }
+
+  try {
+    const url = `https://oss.exercisedb.dev/api/v1/exercises?search=${encodeURIComponent(norm)}&limit=1`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      logger.warn("[exerciseDb] HTTP not ok", { keyword: norm, status: res.status });
+      await cacheRef.set({ miss: true, at: admin.firestore.FieldValue.serverTimestamp() });
+      return null;
+    }
+    const body = (await res.json()) as { data?: Array<{ exerciseId?: string; name?: string; gifUrl?: string }>; success?: boolean };
+    const first = body.data?.[0];
+    if (!first?.exerciseId || !first?.name) {
+      await cacheRef.set({ miss: true, at: admin.firestore.FieldValue.serverTimestamp() });
+      return null;
+    }
+    const entry: ExerciseDbEntry = {
+      exerciseId: first.exerciseId,
+      name: first.name,
+      gifUrl: first.gifUrl ?? `https://static.exercisedb.dev/media/${first.exerciseId}.gif`,
+    };
+    await cacheRef.set({ ...entry, at: admin.firestore.FieldValue.serverTimestamp() });
+    return entry;
+  } catch (e) {
+    logger.error("[exerciseDb] fetch failed", { keyword: norm, err: String(e) });
+    return null;
+  }
+}
+
+/** Firestore 문서 ID 안전 키 (영문/숫자 외 → underscore). */
+function encodeKey(s: string): string {
+  return s.replace(/[^a-z0-9]+/gi, "_").slice(0, 120);
+}
+
+/** Gemini 응답을 안전하게 파싱 — JSON 구조 보장 안 되면 null. */
+interface LlmDrill {
+  koName: string;
+  exerciseDbKeyword: string;
+  desc: string;
+  sets: string;
+  durationMin: number;
+  targetAxis: string;
+}
+interface LlmDay {
+  day: string;
+  title: string;
+  drills: LlmDrill[];
+}
+interface LlmRoutine {
+  focusSkills: string[];
+  weeklyFeedback: string;
+  days: LlmDay[];
+}
+
+function parseLlmRoutine(text: string): LlmRoutine | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || !Array.isArray(parsed.days)) return null;
+    return parsed as LlmRoutine;
+  } catch (e) {
+    logger.warn("[generateWeeklyRoutine] LLM JSON parse failed", { err: String(e), head: text.slice(0, 200) });
+    return null;
+  }
+}
+
+/**
+ * 회원의 이번 주 AI 보강 루틴 생성/조회.
+ *
+ * - 요청 본인 또는 회원 본인 uid 매칭. 운영진(MASTER/CREATOR/COACH)도 호출 가능 — 다른 회원 trigger.
+ * - 같은 weekId 의 문서가 이미 있으면 force 가 true 가 아닌 한 캐시 반환.
+ * - LLM 호출 + ExerciseDB 매핑은 동일 트랜잭션 외부에서 수행 → write 는 1회.
+ */
+export const generateWeeklyRoutine = onCall(
+  { region: "asia-northeast3", timeoutSeconds: 120 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Login required");
+    }
+    const callerUid = request.auth.uid;
+    const memberId = (request.data?.memberId as string | undefined) ?? callerUid;
+    const force = (request.data?.force as boolean | undefined) ?? false;
+    const weekId = isoWeekKey();
+    logger.info("[generateWeeklyRoutine] entry", { caller: maskId(callerUid), memberId: maskId(memberId), weekId, force });
+
+    const db = admin.firestore();
+
+    // 권한 — Phase 1 베타 비용 통제 위해 **CREATOR 만 호출 가능**.
+    // 모든 회원에게 열기 전 GCP Vertex AI 사용량 모니터링 + 프롬프트 품질 검증 필요.
+    // memberId 가 본인이든 타인이든 상관없이 caller 가 CREATOR 일 때만 통과.
+    const callerSnap = await db.collection("members").doc(callerUid).get();
+    const callerRole = callerSnap.data()?.role as string | undefined;
+    if (callerRole !== "CREATOR") {
+      logger.warn("[generateWeeklyRoutine] denied — not creator", { caller: maskId(callerUid), role: callerRole });
+      throw new HttpsError("permission-denied", "현재 베타 단계라 창조자만 사용할 수 있어요.");
+    }
+
+    const docRef = db.doc(`members/${memberId}/weeklyRoutines/${weekId}`);
+
+    if (!force) {
+      const existing = await docRef.get();
+      if (existing.exists) {
+        logger.info("[generateWeeklyRoutine] cached", { weekId });
+        return { weekId, cached: true, doc: existing.data() };
+      }
+    }
+
+    // 1) 회원 컨텍스트.
+    const memberSnap = await db.collection("members").doc(memberId).get();
+    if (!memberSnap.exists) {
+      throw new HttpsError("not-found", "회원을 찾지 못했어요");
+    }
+    const member = memberSnap.data() ?? {};
+    const skills = member.skills as Record<string, number> | undefined;
+    const belt = (member.belt as string | undefined) ?? "WHITE";
+    const weightClass = (member.weightClass as string | undefined) ?? "LIGHT";
+    const joinDate = member.joinDate as string | undefined;
+    const months = monthsSinceJoin(joinDate);
+
+    // 약축 2개 도출 (점수 낮은 순). skills 없으면 골고루.
+    const ranked: Array<{ axis: string; v: number }> = AXIS_FIELDS.map((axis) => ({
+      axis,
+      v: typeof skills?.[axis] === "number" ? (skills?.[axis] as number) : 0.5,
+    })).sort((a, b) => a.v - b.v);
+    const focusAxes = ranked.slice(0, 2).map((r) => r.axis);
+
+    // 2) 최근 5건 코멘트.
+    const commentsSnap = await db
+      .collection(`members/${memberId}/comments`)
+      .orderBy("createdAt", "desc")
+      .limit(5)
+      .get();
+    const recentComments = commentsSnap.docs.map((d) => ({
+      id: d.id,
+      text: (d.data().text as string | undefined) ?? "",
+      classDate: (d.data().classDate as string | undefined) ?? "",
+    }));
+
+    // 3) Prompt 구성.
+    const prompt = buildRoutinePrompt({
+      belt,
+      weightClass,
+      months,
+      skills: ranked,
+      focusAxes,
+      recentComments,
+    });
+    logger.info("[generateWeeklyRoutine] prompt built", { promptLen: prompt.length, focusAxes });
+
+    // 4) Gemini 호출.
+    let llmText: string;
+    try {
+      const result = await gemini.generateContent(prompt);
+      llmText = result.response.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    } catch (e) {
+      logger.error("[generateWeeklyRoutine] Gemini failed", e);
+      throw new HttpsError("internal", "AI 호출 실패 — 잠시 후 다시 시도해주세요");
+    }
+    const llm = parseLlmRoutine(llmText);
+    if (!llm) {
+      throw new HttpsError("internal", "AI 응답 파싱 실패");
+    }
+
+    // 5) ExerciseDB 매핑 — 각 드릴 키워드로 매핑.
+    const enrichedDays = await Promise.all(
+      llm.days.map(async (day) => ({
+        day: day.day,
+        title: day.title,
+        drills: await Promise.all(
+          (day.drills ?? []).map(async (drill) => {
+            const ex = await lookupExerciseDb(drill.exerciseDbKeyword);
+            return {
+              koName: drill.koName,
+              exerciseDbKeyword: drill.exerciseDbKeyword,
+              desc: drill.desc,
+              sets: drill.sets,
+              durationMin: drill.durationMin,
+              targetAxis: drill.targetAxis,
+              exerciseId: ex?.exerciseId ?? null,
+              gifUrl: ex?.gifUrl ?? null,
+              done: false,
+              skipped: false,
+            };
+          }),
+        ),
+      })),
+    );
+
+    const doc = {
+      weekId,
+      generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      focusSkills: llm.focusSkills?.length ? llm.focusSkills : focusAxes,
+      referencedCommentIds: recentComments.map((c) => c.id),
+      days: enrichedDays,
+      weeklyFeedback: llm.weeklyFeedback ?? "",
+    };
+    await docRef.set(doc);
+    logger.info("[generateWeeklyRoutine] saved", { weekId, days: enrichedDays.length });
+
+    return { weekId, cached: false, doc };
+  },
+);
+
+interface PromptArgs {
+  belt: string;
+  weightClass: string;
+  months: number;
+  skills: Array<{ axis: string; v: number }>;
+  focusAxes: string[];
+  recentComments: Array<{ id: string; text: string; classDate: string }>;
+}
+
+function buildRoutinePrompt(args: PromptArgs): string {
+  const { belt, weightClass, months, skills, focusAxes, recentComments } = args;
+
+  const skillLines = skills
+    .map((s) => `- ${AXIS_LABEL_KO[s.axis]} (${s.axis}): ${(s.v * 100).toFixed(0)}점`)
+    .join("\n");
+
+  const focusLine = focusAxes
+    .map((a) => `${AXIS_LABEL_KO[a]}(${a})`)
+    .join(", ");
+
+  const commentBlock =
+    recentComments.length === 0
+      ? "(최근 코멘트 없음)"
+      : recentComments
+          .map(
+            (c, i) =>
+              `[${i + 1}] (${c.classDate || "날짜 미상"}) ${c.text}`,
+          )
+          .join("\n");
+
+  return `당신은 종합격투기(MMA) 도장의 보조 코치입니다. 회원의 6축 스킬 점수와 관장의 한 줄 코멘트를 보고
+이번 주 보강용 개인 루틴(요일별 짧은 드릴 1~3개, 일별 총 30분 이내)을 제안합니다.
+
+# 회원 컨텍스트
+- 벨트: ${belt}
+- 체급: ${weightClass}
+- 입관 ${months}개월
+- 6축 점수(낮은 순):
+${skillLines}
+- 우선 보강 축: ${focusLine}
+
+# 관장의 한 줄 코멘트 (최근 5건)
+${commentBlock}
+
+# 작성 규칙
+1. days 는 **최대 3개**. 보강 효과가 큰 요일만 골라줘 (예: "월", "수", "금"). 나머지 요일은 도장 수업/휴식 가정이라 응답에 넣지 말 것.
+2. 각 day.drills 는 1~3개. day 총 durationMin 합이 30 이하.
+3. 우선 보강 축에 60% 이상 시간 배정.
+4. exerciseDbKeyword 는 영문 소문자 운동 검색어 (예: "push up", "burpee", "shadow boxing", "single leg deadlift").
+   ExerciseDB V1 데이터셋에서 찾을 수 있는 일반 운동명을 사용.
+5. targetAxis 는 정확히 다음 중 하나: ${AXIS_FIELDS.join(", ")}
+6. desc 는 한국어 1~2문장. sets 는 "3세트 × 12회" 또는 "3분 × 2라운드" 등 간결한 한국어.
+7. weeklyFeedback 은 코치 톤의 한국어 2~3문장 — 왜 이런 구성인지 + 관장 코멘트와 연결.
+
+# 출력 형식 (반드시 JSON, 다른 텍스트 금지)
+{
+  "focusSkills": ["${focusAxes[0]}", "${focusAxes[1] ?? focusAxes[0]}"],
+  "weeklyFeedback": "한국어 코치 톤 2~3문장",
+  "days": [
+    {
+      "day": "월",
+      "title": "예: 스트라이킹 정확도",
+      "drills": [
+        {
+          "koName": "한국어 운동 이름",
+          "exerciseDbKeyword": "english search keyword",
+          "desc": "한국어 설명 1~2문장",
+          "sets": "3세트 × 12회",
+          "durationMin": 10,
+          "targetAxis": "striking"
+        }
+      ]
+    }
+  ]
+}`;
+}
+

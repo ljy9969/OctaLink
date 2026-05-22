@@ -383,7 +383,22 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **카카오 앱 2개 운영 구조**: (a) 비즈 앱 ID `1453976` — 운영용, 검수 대기 중, `local.properties.KAKAO_NATIVE_APP_KEY` 기본값. (b) 테스트 앱 ID `1455062` — 이미 모든 동의 항목 활성, 단 팀 멤버(Owner/Manager)만 로그인 가능. 일반 회원 운영 배포는 반드시 비즈 앱 키 사용. 개발자 본인이 풀 데이터 흐름 즉시 검증하려면 `local.properties` 키만 1455062 로 임시 교체 (운영 빌드 전 1453976 복원 필수)
 
 **[중요도 ★★]**
-- [ ] `기능 / AI` **AI 개인 트레이닝 컨텐츠 추천** *(난이도 4~5, ~수일, 별도 스파이크 필요)* — 회원의 헥사곤 스킬 차트(스트라이킹/그래플링/체력/기술/멘탈/스피드) 기준으로 부족한 축을 보강할 드릴·콤비네이션·운동 루틴을 AI 가 큐레이팅해 개인화 컨텐츠로 제안. 참고: **RISE 앱** (운동 루틴 AI 추천 UX). MVP 흐름 후보 — (a) 6축 점수 + 회원 belt/체급/입관기간을 prompt 컨텍스트로 보내 LLM 이 1주일치 드릴 + 영상 키워드 + 셋트수 출력, (b) 출력 결과를 ProfileScreen 의 "이번 주 추천 루틴" 카드 + Curriculum 탭의 추가 섹션으로 노출, (c) 회원 피드백("했음"/"건너뜀") 으로 다음 추천 가중치 조정. 백엔드 옵션 — Vertex AI Gemini / OpenAI API. 컨텐츠 권리 이슈 회피 위해 영상 직접 호스팅 X, YouTube 검색 키워드 + 썸네일 카드(0.9.0 의 YouTube 썸네일 기능 재사용) 활용 권장
+- [ ] `기능 / AI` **AI 개인 트레이닝 컨텐츠 추천** *(난이도 4~5, 약 10~11일)* — 회원의 헥사곤 스킬 차트(스트라이킹/그래플링/체력/기술/멘탈/스피드) 기준 + **관장 한 줄 코멘트** (최근 5건, 점수만으론 안 잡히는 관찰 신호) + belt/체급/입관기간 컨텍스트로 LLM 이 1주일치 보강 루틴을 큐레이팅. **데일리 운동량 ≤30분** 강제 (도장 수업과 병행 가능한 짧은 보강 단위 — prompt 에 명시 + Phase 3 안전망에서 총 시간 검증). 참고: **RISE 앱** UX.
+  - **시각 자료 = ExerciseDB V1 OSS (Free)** — `https://oss.exercisedb.dev/api/v1/exercises` 베이스 URL, 인증/키 ❌, 1,500개 운동 + 180p GIF (`https://static.exercisedb.dev/media/{exerciseId}.gif`). Response 필드: `exerciseId / name / gifUrl / bodyParts[] / targetMuscles[] / secondaryMuscles[] / equipments[] / instructions[]`. Rate limit 명시 없으나 호출 절약 위해 Firestore 캐시 + Phase 1 베타 기간 동안 시각 만족도 검증.
+  - **Phase 1 MVP (7일)** — Cloud Function `generateWeeklyRoutine` + Gemini 1.5 Flash (Vertex AI, GCP 권역) + `WeeklyRoutineDoc` (`members/{uid}/recommendations/{yyyyW##}`, weekId idempotent). LLM 출력의 각 드릴마다 `koName / desc / sets / durationMin / exerciseDbKeyword(영문 검색어) / targetAxis(6축)` 포함. Cloud Function 이 ExerciseDB 호출 → 가장 가까운 운동의 `exerciseId / gifUrl` 캐시 → Firestore 저장. Home 화면 "AI 추천 이번 주 루틴" 카드 + 상세 화면 (헥사곤 약축 강조 + 요일별 드릴 카드 with ExerciseDB GIF + "AI 가 참고한 정보" 투명성 섹션).
+  - **Phase 2 자동화 + 피드백 (2일)** — Cloud Scheduler 매주 일요일 23시 KST batch + 드릴별 `했음/건너뜀` 입력 → 다음 주 prompt 가중치.
+  - **Phase 3 안전망 (1.5일)** — 일별 총 시간 30분 초과 시 LLM 재호출 (덜 빡빡한 셋트수) + 드릴명 부적절 어휘 차단 + ExerciseDB 매핑 실패 시 **YouTube 폴백** (0.9.0 의 `YouTubeThumbnail` 컴포넌트 재사용).
+  - **관장 검토 워크플로 제외** — 운영 현실(관장이 베타 설치 안 함) 고려해 자동화 우선.
+  - **비용**: Gemini 100명 주1회 ≈ $0.04/주, ExerciseDB V1 Free 무료. 베타 종료 후 시각 만족도 부족하면 **ExerciseDB V1 Paid (RapidAPI) 또는 ExerciseDB V2** 도입 추가 검토.
 
 **[중요도 ★]**
+- [ ] `수익화 / 광고` **AdMob 배너 + 네이티브 광고 통합** *(난이도 3, 베타 MVP 3~4일 / 풀 6.5~7.5일)* — 정식 운영 100+명 도달 시 의미있는 수익(~$30~50/월). 베타 12명 규모에선 인프라 미리 깔아두는 가치.
+  - **적용 위치 (UX 저해 적은 곳만)**: Home 하단 / Curriculum 하단 / Info 하단 = 배너 (320×50). 커뮤니티 피드 N=7글마다 1개 네이티브 인-피드 + "광고" 라벨 명시.
+  - **회피 위치**: 출석 체크인 / 프로필 / 설정 / 글 작성 다이얼로그 / 알림 다이얼로그 / 미디어 전체화면 / 토너먼트 대진표 / 로그인·가입 진입 (집중 또는 신뢰 영역). Interstitial 전체 비추 — high-frequency 사용자라 churn 위험.
+  - **Phase 1 배너 MVP (2~3일)**: AdMob 가입 + 앱 등록 + ad unit ID + `play-services-ads` 의존성 + `MobileAds.initialize` (`OctaLinkApplication.onCreate`) + Compose `AndroidView` 래퍼 `AdBanner` + 3 화면 적용. **AndroidManifest 의 `com.google.android.gms.permission.AD_ID` `tools:node="remove"` 되돌리기 필수** (AdMob SDK 가 권한 요구). Play Console "광고 ID 사용" 선언 "아니오" → "예" 변경.
+  - **Phase 2 네이티브 (2일)**: 피드 index % 7 == 0 위치에 NativeAd 삽입 + "광고" 라벨 + 로딩 실패 시 자리 무시. 베타 후 100명 규모에서 활성.
+  - **Phase 3 개인정보처리방침 + 사전 고지 (1일)**: `docs/privacy-policy.html` v1.5 — 광고 ID + AdMob 데이터 수집 항목 추가 + 변경 이력 표 + 시행일. 정책상 30일 전 앱 내 공지(`PostTag.NOTICE`) 발행 후 광고 활성화.
+  - **Phase 4 한국/EU 동의 다이얼로그 (1.5일)**: Google UMP SDK + 첫 실행 시 맞춤 광고 동의 dialog + 거부 시 비맞춤 광고만. 베타 종료 후 정식 출시 시점에 검토.
+  - **베타 권장**: Phase 1 + 3 만 (3~4일) + `BuildConfig.SHOW_ADS` flag — 회원 50명 미만일 땐 광고 비활성. 50명 넘으면 토글 ON.
+  - **수익 추정**: 베타 12명 ~$3~5/월 / 정식 100명 ~$30~50/월 / 500명 ~$150~250/월 (배너 + 네이티브 풀 시 1.5~2배).
 - [ ] `UX` **체크인 위치 검증** *(난이도 3, ~반나절, 옵션)* — GPS 체육관 반경 검증. `AttendanceDoc` 에 `checkInLat/Lng` 필드는 이미 정의됨. `ACCESS_FINE_LOCATION` 권한 + FusedLocationProvider + 거리 계산. 시간 30분 윈도우(05-08)는 이미 적용. 운영자가 ON/OFF 토글 가능하게 설계 권장

@@ -60,6 +60,7 @@ import com.unboundapex.octalink.ui.screens.creator.CreatorScreen
 import com.unboundapex.octalink.ui.screens.curriculum.CurriculumScreen
 import com.unboundapex.octalink.ui.screens.home.HomeScreen
 import com.unboundapex.octalink.ui.screens.home.MyAttendanceHistoryScreen
+import com.unboundapex.octalink.ui.screens.routine.WeeklyRoutineScreen
 import com.unboundapex.octalink.ui.screens.info.InfoScreen
 import com.unboundapex.octalink.ui.screens.onboarding.LeftScreen
 import com.unboundapex.octalink.ui.screens.onboarding.LoginScreen
@@ -87,6 +88,7 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object CoachComment : Route("coach_comment", "코멘트", Icons.Outlined.ManageAccounts)
     data object SkillScorePropose : Route("skill_score_propose", "스킬 제안", Icons.Outlined.ManageAccounts)
     data object MyAttendance : Route("my_attendance", "내 출석", Icons.Outlined.CheckCircle)
+    data object AiRoutine : Route("ai_routine", "AI 보강 루틴", Icons.Outlined.CheckCircle)
     data object TournamentHistory : Route("tournament_history", "토너먼트 히스토리", Icons.Outlined.CheckCircle)
     /** 히스토리에서 특정 토너먼트 read-only 진입 — path arg 로 tournamentId 전달. */
     data object BracketView : Route("bracket_view/{tournamentId}", "대진표 보기", Icons.Outlined.CheckCircle) {
@@ -238,6 +240,7 @@ fun PosseApp() {
                     onOpenBracket = { navController.navigate(Route.Bracket.path) },
                     onOpenInfo = { navController.navigate(Route.Info.path) },
                     onOpenMyAttendance = { navController.navigate(Route.MyAttendance.path) },
+                    onOpenAiRoutine = { navController.navigate(Route.AiRoutine.path) },
                 )
             }
             composable(Route.MyAttendance.path) {
@@ -245,6 +248,9 @@ fun PosseApp() {
                     onBack = { navController.popBackStack() },
                     sessionVm = sessionVm,
                 )
+            }
+            composable(Route.AiRoutine.path) {
+                WeeklyRoutineScreen(sessionVm = sessionVm)
             }
             composable(Route.Curriculum.path) { CurriculumScreen() }
             composable(Route.Attendance.path) {

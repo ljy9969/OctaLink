@@ -8,24 +8,32 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.unboundapex.octalink.data.schema.CommentDoc
 import com.unboundapex.octalink.data.avatarById
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.AvatarTile
@@ -35,6 +43,43 @@ import com.unboundapex.octalink.ui.components.PosseScreen
 import java.time.LocalDate
 import java.time.Period
 import kotlin.math.roundToInt
+
+/**
+ * 한 줄 코멘트 전체 보기 모달.
+ *
+ * 카드엔 최신 1건만 노출하므로, 누적된 코멘트를 한 번에 보고 싶을 때 진입.
+ * heightIn max=480.dp 로 화면 절반 정도까지만 늘어나고 그 이상은 내부 스크롤.
+ */
+@Composable
+private fun AllCommentsDialog(
+    comments: List<CommentDoc>,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("관장님 한 줄 코멘트") },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp),
+            ) {
+                items(comments) { c ->
+                    Text(
+                        "${c.classDate.format(commentDateFormatter)} · ${c.byMasterName}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(c.text, style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("닫기") }
+        },
+    )
+}
 
 private fun membershipLabel(joinDate: LocalDate, today: LocalDate = LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))): String {
     val period = Period.between(joinDate, today)
@@ -213,27 +258,50 @@ fun ProfileScreen(
                 }
             }
             item {
+                // 최신순 — classDate 내림차순, 같은 날짜면 createdAt 내림차순(나중에 입력된 것 위로).
+                // 코멘트가 누적되면 화면이 길어져, 카드엔 최신 1건만 노출하고 나머지는 [더보기] 모달.
+                val sortedComments = remember(coachComments) {
+                    coachComments.sortedWith(
+                        compareByDescending<CommentDoc> { it.classDate }
+                            .thenByDescending { it.createdAt }
+                    )
+                }
+                var showAllDialog by remember { mutableStateOf(false) }
+
                 PosseCard {
                     Text("관장님 한 줄 코멘트", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(4.dp))
-                    if (coachComments.isEmpty()) {
+                    if (sortedComments.isEmpty()) {
                         Text(
                             "아직 받은 코멘트가 없습니다.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        coachComments.forEach { c ->
-                            val dateLabel = c.classDate.format(commentDateFormatter)
-                            Text(
-                                "$dateLabel · ${c.byMasterName}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(c.text, style = MaterialTheme.typography.bodyLarge)
+                        val latest = sortedComments.first()
+                        Text(
+                            "${latest.classDate.format(commentDateFormatter)} · ${latest.byMasterName}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(latest.text, style = MaterialTheme.typography.bodyLarge)
+                        if (sortedComments.size > 1) {
                             Spacer(Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Spacer(Modifier.weight(1f))
+                                FilledTonalButton(onClick = { showAllDialog = true }) {
+                                    Text("더보기 (${sortedComments.size})")
+                                }
+                            }
                         }
                     }
+                }
+
+                if (showAllDialog) {
+                    AllCommentsDialog(
+                        comments = sortedComments,
+                        onDismiss = { showAllDialog = false },
+                    )
                 }
             }
         }

@@ -58,8 +58,10 @@ import com.unboundapex.octalink.ui.components.CageIcon
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.components.TagChip
+import com.unboundapex.octalink.data.schema.isCreator
 import com.unboundapex.octalink.ui.screens.attendance.GYM_DAYS_PER_WEEK
 import com.unboundapex.octalink.ui.screens.profile.MyCommentsViewModel
+import com.unboundapex.octalink.ui.screens.routine.WeeklyRoutineViewModel
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -114,11 +116,13 @@ fun HomeScreen(
     onOpenBracket: () -> Unit,
     onOpenInfo: () -> Unit = {},
     onOpenMyAttendance: () -> Unit = {},
+    onOpenAiRoutine: () -> Unit = {},
     myCommentsVm: MyCommentsViewModel = viewModel(),
     weeklyAttendanceVm: HomeWeeklyAttendanceViewModel = viewModel(),
     weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
     gymActivityVm: HomeGymActivityViewModel = viewModel(),
     sparringMatchVm: HomeSparringMatchViewModel = viewModel(),
+    weeklyRoutineVm: WeeklyRoutineViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
     val memberId = session.member?.id
@@ -126,7 +130,9 @@ fun HomeScreen(
     LaunchedEffect(memberId) {
         myCommentsVm.observeFor(memberId)
         weeklyAttendanceVm.observeFor(memberId)
+        weeklyRoutineVm.bind(memberId)
     }
+    val aiRoutine by weeklyRoutineVm.routine.collectAsState()
     val myComments by myCommentsVm.myComments.collectAsState()
     val weeklyAttendCount by weeklyAttendanceVm.weeklyCount.collectAsState()
     // REVIEW 화면 WeeklyRateBadge 와 동일 공식: count 는 6 으로 cap, % = capped*100/6
@@ -202,7 +208,7 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         } else {
-                            // 활성도 3단계 색 분기 — 시각만으로 오늘 도장 분위기 인지.
+                            // 활성도 3단계 색 분기 — 시각만으로 오늘 체육관 분위기 인지.
                             // 저(<30%) = ash gray (한산), 중(30~69%) = amber (보통),
                             // 고(≥70%) = green (붐빔, 스파링 태그 그린과 동일 톤).
                             val activityColor = when {
@@ -322,6 +328,11 @@ fun HomeScreen(
                     }
                 }
             }
+            // AI 보강 루틴 — Phase 1 베타 단계라 Vertex AI 비용 통제 위해 창조자에게만 노출.
+            // 모든 회원에게 열기 전 사용량/품질 검증 필요.
+            if (session.role.isCreator) {
+                item { AiRoutineCard(doc = aiRoutine, onClick = onOpenAiRoutine) }
+            }
             if (todayCurriculum != null && !gymClosedToday) {
                 item {
                     TodayCurriculumCard(
@@ -336,6 +347,82 @@ fun HomeScreen(
             item { GymInfoCard(onClick = onOpenInfo) }
         }
     }
+}
+
+/**
+ * AI 가 큐레이팅한 이번 주 보강 루틴 — 홈 카드.
+ *
+ *  - 루틴 doc 있음 → 약축 라벨 칩 + "총 N개 드릴 · 일별 평균 M분" 요약 + 화살표.
+ *  - 없음        → "AI 루틴 받기" 안내 (탭하면 상세 화면에서 생성 버튼).
+ *
+ * 시각 어휘는 OctaLink 브랜드 보라(primary) + 회색 본문으로 통일.
+ */
+@Composable
+private fun AiRoutineCard(
+    doc: com.unboundapex.octalink.data.schema.WeeklyRoutineDoc?,
+    onClick: () -> Unit,
+) {
+    PosseCard(modifier = Modifier.clickable { onClick() }) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "🧠 AI 보강 루틴",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            if (doc != null) {
+                Text(
+                    doc.weekId,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "→",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (doc == null) {
+            Text(
+                "이번 주 부족한 부분을 채워줄 AI 루틴을 받아보세요.\n수업과 병행 가능한 30분 이내의 짧은 드릴",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            val totalDrills = doc.days.sumOf { it.drills.size }
+            val totalMin = doc.days.sumOf { day -> day.drills.sumOf { it.durationMin } }
+            val daysWithDrills = doc.days.count { it.drills.isNotEmpty() }
+            val avgPerDay = if (daysWithDrills > 0) totalMin / daysWithDrills else 0
+            val focusLabel = doc.focusSkills
+                .joinToString(" · ") { axisLabelKo(it) }
+                .ifBlank { "이번 주 추천" }
+            Text(
+                focusLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                "총 ${totalDrills}개 드릴 · 일별 평균 ${avgPerDay}분",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** 6축 영문 키 → 한국어 표시명. 알 수 없는 키는 그대로 노출. */
+internal fun axisLabelKo(key: String): String = when (key.lowercase()) {
+    "striking" -> "스트라이킹"
+    "grappling" -> "그래플링"
+    "stamina" -> "체력"
+    "technique" -> "기술"
+    "mental" -> "멘탈"
+    "speed" -> "스피드"
+    else -> key
 }
 
 @Composable

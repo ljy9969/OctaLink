@@ -1,7 +1,12 @@
 package com.unboundapex.octalink
 
 import android.app.Application
+import android.os.Build
 import android.util.Log
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
 import com.kakao.sdk.common.KakaoSdk
 import com.kakao.sdk.common.util.Utility
 import com.unboundapex.octalink.data.HolidayRepository
@@ -22,7 +27,20 @@ import com.unboundapex.octalink.messaging.NotificationChannels
  * **startup 시 KeyHash 출력** — 카카오 콘솔에 등록해야 하는 SHA-1 base64 키해시를 logcat 에
  * 항상 찍어둠. debug/release 빌드별로 다른 값이 나오니 각각 등록 필요.
  */
-class OctaLinkApplication : Application() {
+class OctaLinkApplication : Application(), ImageLoaderFactory {
+    /**
+     * Coil 의 기본 ImageLoader 에 GIF 디코더 등록.
+     * - Android P 이상: 네이티브 [ImageDecoderDecoder] (애니메이션 PNG/WebP 도 함께 지원)
+     * - 이하: GIF 전용 [GifDecoder]
+     * AI 보강 루틴의 ExerciseDB GIF (`https://static.exercisedb.dev/media/{id}.gif`) 재생용.
+     */
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .components {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) add(ImageDecoderDecoder.Factory())
+            else add(GifDecoder.Factory())
+        }
+        .build()
+
     override fun onCreate() {
         super.onCreate()
         KakaoSdk.init(this, BuildConfig.KAKAO_NATIVE_APP_KEY)

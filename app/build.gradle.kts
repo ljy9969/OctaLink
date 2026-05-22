@@ -112,6 +112,8 @@ dependencies {
 
     // 이미지 로딩 (HTTPS URL → Compose) — CommunityScreen post 이미지, Firebase Storage download URL.
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // GIF 디코더 — AI 보강 루틴 ExerciseDB GIF 재생용.
+    implementation("io.coil-kt:coil-gif:2.7.0")
 
     // Media3 — 영상 재생(ExoPlayer + PlayerView) + 업로드 전 720p 재인코딩(Transformer + effect).
     // 도장 클립 (≤90초) 대상이라 1.4.x 안정 라인 사용. ffmpeg-kit 은 2025 deprecation 이후 Media3 가 사실상 표준.

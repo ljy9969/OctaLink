@@ -280,7 +280,7 @@ private fun WriteCommentDialog(
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it.take(300) },
+                    onValueChange = { text = it.take(80) },
                     label = { Text("코멘트") },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -288,7 +288,7 @@ private fun WriteCommentDialog(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "${text.length} / 300",
+                    "${text.length} / 80",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

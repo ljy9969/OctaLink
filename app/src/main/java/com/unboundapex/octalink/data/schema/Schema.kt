@@ -354,6 +354,9 @@ object Collections {
     const val GYM_SETTINGS = "gymSettings"
     /** [GYM_SETTINGS] 내 주간 미션 doc 의 고정 ID (싱글톤). */
     const val WEEKLY_MISSION_DOC_ID = "weeklyMission"
+
+    /** AI 가 생성한 회원별 주간 보강 루틴. doc ID = ISO week key ("2026-W22"). */
+    const val WEEKLY_ROUTINES = "weeklyRoutines"
 }
 
 /**
@@ -367,4 +370,66 @@ data class WeeklyMissionDoc(
     val updatedAt: Instant,
     /** 마지막 수정자 운영진 이름 (비정규화 — display 용). */
     val updatedByName: String,
+)
+
+/**
+ * AI 가 생성한 회원별 주간 보강 루틴.
+ *
+ * 경로: `members/{memberId}/weeklyRoutines/{yyyy-W##}` (예: `2026-W22`).
+ *
+ * 생성 정책:
+ *  - Cloud Function `generateWeeklyRoutine` 가 주1회 (일요일 23시 KST batch) 또는 수동 호출 시 작성.
+ *  - 같은 `weekId` 로 재호출 시 덮어쓰기 (idempotent).
+ *  - LLM 입력: 6축 점수 + 최근 5건 한 줄 코멘트 + belt / 체급 / 입관기간.
+ *  - LLM 출력 → ExerciseDB V1 OSS (`oss.exercisedb.dev/api/v1`) 매핑 → GIF URL 캐시.
+ *
+ * 시각 요소: 클라이언트는 [RoutineDrill.gifUrl] 을 `AsyncImage` 로 렌더, 폴백은
+ * [RoutineDrill.youtubeQuery] 로 YouTube 검색 (0.9.0 `YouTubeThumbnail` 컴포넌트 재사용).
+ */
+data class WeeklyRoutineDoc(
+    /** ISO week key — 예: "2026-W22". 일요일 23시 KST 기준 다음 주의 weekId 사용. */
+    val weekId: String,
+    val generatedAt: Instant,
+    /** 하위 2축 자동 추출 — 헥사곤 차트에서 빨강 highlight 대상. enum 키 (`STRIKING` 등). */
+    val focusSkills: List<String>,
+    /** LLM 이 참고한 한 줄 코멘트 id 목록 — 상세 화면 "AI 가 참고한 정보" 섹션 노출용. */
+    val referencedCommentIds: List<String>,
+    val days: List<RoutineDay>,
+    /** 회원이 한 주 끝나고 입력하는 텍스트 (선택). */
+    val weeklyFeedback: String = "",
+)
+
+/**
+ * 요일 단위 묶음. 일별 총 운동량은 [drills] 의 `durationMin` 합산 — 30분 이하 보장 (Cloud Function
+ * 검증 + 초과 시 LLM 재호출). day 는 `java.time.DayOfWeek.name` ("MONDAY" 등) 직렬화.
+ */
+data class RoutineDay(
+    val day: String,
+    /** 그날의 주제 — 예: "가드 패스 콤비 + 코어 보강". */
+    val title: String,
+    val drills: List<RoutineDrill>,
+)
+
+/**
+ * 개별 드릴. `exerciseId` / `gifUrl` 가 set 되어 있으면 ExerciseDB 매핑 성공, 아니면 YouTube 폴백.
+ */
+data class RoutineDrill(
+    /** 한국어 드릴 이름 — LLM 출력. */
+    val koName: String,
+    /** 영어 검색어 — ExerciseDB 매핑 + YouTube 폴백 검색 키워드. */
+    val exerciseDbKeyword: String,
+    /** 짧은 설명 (2~3줄). */
+    val desc: String,
+    /** 세트 / 반복 표기 — 예: "3R × 5분, 휴식 1분". */
+    val sets: String,
+    /** 30분 제약 검증용 분 단위. */
+    val durationMin: Int,
+    /** 6축 enum 키 ("STRIKING" / "GRAPPLING" / "STAMINA" / "TECHNIQUE" / "MENTAL" / "SPEED"). */
+    val targetAxis: String,
+    /** ExerciseDB 매핑 결과. 없으면 null → 클라이언트가 [exerciseDbKeyword] 로 YouTube 폴백. */
+    val exerciseId: String? = null,
+    val gifUrl: String? = null,
+    /** 회원 피드백 (Phase 2 에서 작성됨). 초기엔 null/false. */
+    val done: Boolean = false,
+    val skipped: Boolean = false,
 )

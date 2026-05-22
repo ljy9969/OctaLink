@@ -1,8 +1,8 @@
 package com.unboundapex.octalink.data.repo.firestore
 
 import com.google.firebase.Firebase
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
+import com.google.firebase.functions.functions
 import com.unboundapex.octalink.data.repo.AttendanceRepository
 import com.unboundapex.octalink.data.schema.AttendanceDoc
 import com.unboundapex.octalink.data.schema.Collections
@@ -24,6 +24,7 @@ import java.time.LocalDate
 class FirestoreAttendanceRepository : AttendanceRepository {
     private val db = Firebase.firestore
     private val membersCol = db.collection(Collections.MEMBERS)
+    private val functions = Firebase.functions("asia-northeast3")
 
     /** 특정 회원의 attendance 서브컬렉션 reference. */
     private fun memberAttendance(memberId: String) =
@@ -78,29 +79,39 @@ class FirestoreAttendanceRepository : AttendanceRepository {
         awaitClose { sub.remove() }
     }
 
+    /**
+     * 체크인 — Cloud Function `recordAttendance` 호출.
+     *
+     * 클라이언트 직접 Firestore write 는 rules 에서 차단되고 (`allow create: if false`),
+     * Function 이 서버 시각/role/슬롯 윈도우 (`[start-30분, start+10분]`) 검증 후
+     * admin SDK 로 doc 생성. 따라서 [memberId] / [classDate] 파라미터는 무시되고
+     * 서버가 callerUid + KST 오늘 날짜로 강제. (시그니처는 interface 호환 유지)
+     */
     override suspend fun checkIn(
         memberId: String,
         classDefId: String,
         classDate: LocalDate,
     ): AttendanceDoc {
+        functions
+            .getHttpsCallable("recordAttendance")
+            .call(mapOf("classDefId" to classDefId))
+            .await()
+        // Cloud Function 이 set 한 doc 을 다시 읽어서 반환 — 서버 timestamp 포함.
         val docId = classDate.toString()
-        val data = mapOf(
-            "id" to docId,
-            "memberId" to memberId,
-            "classDefId" to classDefId,
-            "classDate" to docId,
-            "checkInAt" to FieldValue.serverTimestamp(),
-            "verified" to false,
-        )
-        memberAttendance(memberId).document(docId).set(data).await()
-        // 작성 직후 1회 조회해서 서버 timestamp 포함된 doc 반환
         val snap = memberAttendance(memberId).document(docId).get().await()
         return snap.toAttendanceDoc()
             ?: error("checkIn 후 attendance/$docId 조회 실패")
     }
 
+    /**
+     * 체크인 취소 — Cloud Function `cancelAttendance` 호출.
+     * 본인 doc 만 admin SDK 로 삭제 (rules `allow delete: if false`).
+     */
     override suspend fun cancelCheckIn(memberId: String, classDate: LocalDate) {
-        memberAttendance(memberId).document(classDate.toString()).delete().await()
+        functions
+            .getHttpsCallable("cancelAttendance")
+            .call(emptyMap<String, Any>())
+            .await()
     }
 
     override suspend fun setVerified(memberId: String, classDate: LocalDate, verified: Boolean) {

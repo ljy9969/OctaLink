@@ -143,6 +143,9 @@ service cloud.firestore {
         // 본인 / 운영진은 자신 / 모든 회원의 출결 검토 가능 (read 권한 동일)
         allow read: if isApproved();
 
+        // TODO(attendance-lockdown): 베타 APK 전원 업데이트 후 락다운 rules 로 교체
+        //   (Cloud Function recordAttendance/cancelAttendance 만 통과). 임시로 기존 규칙 유지.
+
         // create: 본인만 자기 체크인 (memberId 위조 방지).
         // 관장(MASTER) 은 영업일 상시 운영 — 출석 체크인 불가 (UI 도 비활성).
         allow create: if isSelf(uid)
@@ -205,6 +208,26 @@ service cloud.firestore {
               .hasOnly(['status', 'reviewedByMasterId', 'reviewedAt']);
 
         allow delete: if isMaster();
+      }
+
+      // ─────────────────────────────────────
+      // weeklyRoutines 서브컬렉션 (AI 가 생성한 주간 보강 루틴)
+      // doc id = ISO week key ("2026-W22"). 생성/덮어쓰기는 Cloud Function
+      // (`generateWeeklyRoutine`) admin SDK 가 담당 → 클라이언트 write 차단.
+      //
+      // **Phase 1 베타 단계** — Vertex AI 비용 통제 위해 read/update 모두 CREATOR 단독.
+      // 사용량 모니터링 + 추천 품질 검증 끝나면 isSelf/isStaff 로 완화 예정.
+      // ─────────────────────────────────────
+      match /weeklyRoutines/{weekId} {
+        allow read: if isCreator();
+
+        // create/delete 는 클라이언트 차단 (Cloud Function admin 만).
+        allow create, delete: if false;
+
+        // 드릴 단위 done/skipped 토글도 CREATOR 본인만.
+        allow update: if isCreator()
+          && isSelf(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['days']);
       }
     }
 

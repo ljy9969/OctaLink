@@ -5,7 +5,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 
 private val KST: ZoneId = ZoneId.of("Asia/Seoul")
 
@@ -134,15 +133,20 @@ fun currentOrNextClassLabel(now: LocalDateTime = LocalDateTime.now(KST)): String
 /** 체크인 게이팅 상태. UI 가 분기 메시지/버튼 라벨에 사용. */
 enum class CheckInWindow { OPEN, CLOSED_DAY, NO_CLASS_TODAY, BEFORE_WINDOW, AFTER_LAST_CLASS }
 
+/** 출석 체크인 윈도우 — 수업 시작 [전 30분, 후 10분]. UI / 서버 (Cloud Function) 공통 규칙. */
+const val CHECK_IN_OPEN_MINUTES_BEFORE: Long = 30
+const val CHECK_IN_CLOSE_MINUTES_AFTER: Long = 10
+
 /**
  * 출석 체크인 허용 여부.
- * 규칙:
+ * 규칙 (각 수업 슬롯별 window = `[slot.start - 30분, slot.start + 10분]`):
  * - 휴무일 (일/공휴일) → CLOSED_DAY
- * - 진행 중인 수업이 있으면 → OPEN
- * - 다음 수업까지 30분 이내 → OPEN
- * - 다음 수업까지 30분 초과 남음 → BEFORE_WINDOW
- * - 오늘 수업이 끝났으면 → AFTER_LAST_CLASS
  * - 오늘 수업 자체가 없으면 → NO_CLASS_TODAY
+ * - 현재 시각이 어느 슬롯의 윈도우 안 → OPEN
+ * - 다음 슬롯이 있는데 아직 30분 전에 못 도달 → BEFORE_WINDOW
+ * - 모든 슬롯 윈도우가 닫힘 (마지막 수업 시작 +10분 경과) → AFTER_LAST_CLASS
+ *
+ * 진행 중인 수업이라도 시작 후 10분이 지나면 OPEN 이 아님 (지각 차단).
  */
 fun checkInWindow(now: LocalDateTime = LocalDateTime.now(KST)): CheckInWindow {
     val today = now.toLocalDate()
@@ -152,11 +156,18 @@ fun checkInWindow(now: LocalDateTime = LocalDateTime.now(KST)): CheckInWindow {
     if (slots.isEmpty()) return CheckInWindow.NO_CLASS_TODAY
 
     val time = now.toLocalTime()
-    if (slots.any { it.contains(time) }) return CheckInWindow.OPEN
 
-    val next = slots.firstOrNull { time < it.start }
-    if (next == null) return CheckInWindow.AFTER_LAST_CLASS
+    // 현재 어느 슬롯의 [start-30, start+10] 윈도우 안에 있는지 검사.
+    val inWindow = slots.any { slot ->
+        val opensAt = slot.start.minusMinutes(CHECK_IN_OPEN_MINUTES_BEFORE)
+        val closesAt = slot.start.plusMinutes(CHECK_IN_CLOSE_MINUTES_AFTER)
+        time >= opensAt && time <= closesAt
+    }
+    if (inWindow) return CheckInWindow.OPEN
 
-    val minutesUntil = ChronoUnit.MINUTES.between(time, next.start)
-    return if (minutesUntil <= 30) CheckInWindow.OPEN else CheckInWindow.BEFORE_WINDOW
+    // 아직 윈도우가 열리지 않은 슬롯이 남아있으면 BEFORE_WINDOW (대기 안내).
+    val pending = slots.any { slot ->
+        time < slot.start.minusMinutes(CHECK_IN_OPEN_MINUTES_BEFORE)
+    }
+    return if (pending) CheckInWindow.BEFORE_WINDOW else CheckInWindow.AFTER_LAST_CLASS
 }
