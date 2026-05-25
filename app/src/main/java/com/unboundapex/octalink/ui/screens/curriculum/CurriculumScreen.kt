@@ -49,6 +49,7 @@ fun CurriculumScreen() {
                     isToday = day.dayOfWeek == today.dayOfWeek,
                 )
             }
+            item { com.unboundapex.octalink.ui.components.AdBanner() }
         }
     }
 }

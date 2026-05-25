@@ -182,6 +182,7 @@ fun InfoScreen(onBack: () -> Unit) {
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
+            item { com.unboundapex.octalink.ui.components.AdBanner() }
         }
     }
 }

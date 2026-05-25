@@ -2,6 +2,7 @@ package com.unboundapex.octalink
 
 import android.app.Application
 import android.util.Log
+import com.google.android.gms.ads.MobileAds
 import com.kakao.sdk.common.KakaoSdk
 import com.kakao.sdk.common.util.Utility
 import com.unboundapex.octalink.data.HolidayRepository
@@ -33,5 +34,12 @@ class OctaLinkApplication : Application() {
         NotificationChannels.ensureRegistered(applicationContext)
         // 매일 04:00 KST 에 그날 CLASS_REMINDER 재스케줄 — KEEP 정책이라 멱등.
         ClassReminderScheduler.scheduleDailyRollover(applicationContext)
+        // AdMob SDK 초기화 — BuildConfig.SHOW_ADS=true 일 때만. 초기화 안 해도 AdView load 가
+        // 안 될 뿐 크래시는 아니지만, 명시적으로 토글 분기해서 처음 화면 진입 latency 줄임.
+        if (BuildConfig.SHOW_ADS) {
+            MobileAds.initialize(this) { status ->
+                Log.d("OctaLink.AdMob", "MobileAds initialized: ${status.adapterStatusMap}")
+            }
+        }
     }
 }

@@ -400,10 +400,17 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **비용**: Gemini 베타 1명 주1회 ≈ $0.0004/주, YouTube Data API search.list 100 quota/call × ~9 drills = 900 quota/generate (무료 한도 10,000/일 → 약 11회/일 가능). 베타 화이트리스트라 quota 여유 충분, 회원 개방 시 캐시 도입 (`{ query → videoId }` Firestore 컬렉션).
 
 **[중요도 ★]**
-- [ ] `수익화 / 광고` **AdMob 배너 + 네이티브 광고 통합** *(난이도 3, 베타 MVP 3~4일 / 풀 6.5~7.5일)* — 정식 운영 100+명 도달 시 의미있는 수익(~$30~50/월). 베타 12명 규모에선 인프라 미리 깔아두는 가치.
+- [~] `수익화 / 광고` **AdMob 배너 + 네이티브 광고 통합** *(난이도 3, 베타 MVP 3~4일 / 풀 6.5~7.5일)* — 정식 운영 100+명 도달 시 의미있는 수익(~$30~50/월). 베타 12명 규모에선 인프라 미리 깔아두는 가치.
   - **적용 위치 (UX 저해 적은 곳만)**: Home 하단 / Curriculum 하단 / Info 하단 = 배너 (320×50). 커뮤니티 피드 N=7글마다 1개 네이티브 인-피드 + "광고" 라벨 명시.
   - **회피 위치**: 출석 체크인 / 프로필 / 설정 / 글 작성 다이얼로그 / 알림 다이얼로그 / 미디어 전체화면 / 토너먼트 대진표 / 로그인·가입 진입 (집중 또는 신뢰 영역). Interstitial 전체 비추 — high-frequency 사용자라 churn 위험.
-  - **Phase 1 배너 MVP (2~3일)**: AdMob 가입 + 앱 등록 + ad unit ID + `play-services-ads` 의존성 + `MobileAds.initialize` (`OctaLinkApplication.onCreate`) + Compose `AndroidView` 래퍼 `AdBanner` + 3 화면 적용. **AndroidManifest 의 `com.google.android.gms.permission.AD_ID` `tools:node="remove"` 되돌리기 필수** (AdMob SDK 가 권한 요구). Play Console "광고 ID 사용" 선언 "아니오" → "예" 변경.
+  - **Phase 1 배너 MVP (코드 완료, 실제 ID swap 대기)** —
+    - ✅ `play-services-ads:23.6.0` 의존성, `BuildConfig.SHOW_ADS` 토글 + `BANNER_AD_UNIT_ID`.
+    - ✅ `MobileAds.initialize` (`OctaLinkApplication.onCreate`, SHOW_ADS=true 분기).
+    - ✅ Compose `AdBanner` 래퍼 (`AndroidView` + `AdView`, 320×50 BANNER).
+    - ✅ Home / Curriculum / Info 하단 LazyColumn 마지막 item 으로 적용.
+    - ✅ AndroidManifest `AD_ID` 권한 복원 (`tools:node="remove"` 제거) + `APPLICATION_ID` meta-data.
+    - 🕒 현재 Google 공식 **테스트 ID** 사용 — 실제 광고 비노출, 정책 위반 없음. admob.google.com 가입 + 앱/광고 단위 ID 발급 후 `BuildConfig.BANNER_AD_UNIT_ID` + Manifest `APPLICATION_ID` 두 곳 swap.
+    - 🕒 Play Console "광고 ID 사용" 선언 "아니오" → "예" 변경 (정식 출시 단계).
   - **Phase 2 네이티브 (2일)**: 피드 index % 7 == 0 위치에 NativeAd 삽입 + "광고" 라벨 + 로딩 실패 시 자리 무시. 베타 후 100명 규모에서 활성.
   - **Phase 3 개인정보처리방침 + 사전 고지 (1일)**: `docs/privacy-policy.html` v1.5 — 광고 ID + AdMob 데이터 수집 항목 추가 + 변경 이력 표 + 시행일. 정책상 30일 전 앱 내 공지(`PostTag.NOTICE`) 발행 후 광고 활성화.
   - **Phase 4 한국/EU 동의 다이얼로그 (1.5일)**: Google UMP SDK + 첫 실행 시 맞춤 광고 동의 dialog + 거부 시 비맞춤 광고만. 베타 종료 후 정식 출시 시점에 검토.

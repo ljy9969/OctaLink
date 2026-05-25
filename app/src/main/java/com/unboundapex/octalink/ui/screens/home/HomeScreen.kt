@@ -345,6 +345,7 @@ fun HomeScreen(
             item { TitleMetaCard(sparringMatchItem) }
             item { TitleMetaCard(oneLineComment) }
             item { GymInfoCard(onClick = onOpenInfo) }
+            item { com.unboundapex.octalink.ui.components.AdBanner() }
         }
     }
 }

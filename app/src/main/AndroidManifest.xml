@@ -6,11 +6,9 @@
     <!-- FCM: Android 13(API 33)+ 알림 표시 권한. 실제 runtime 요청은 푸시 알림 작업 시점에. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Firebase Analytics(play-services-measurement) 가 자동 머지하는 광고 ID 권한 제거. -->
-    <!-- 광고 ID 미사용 → Play Console 의 광고 ID 선언 '아니요' 응답과 일치. -->
-    <uses-permission
-        android:name="com.google.android.gms.permission.AD_ID"
-        tools:node="remove" />
+    <!-- AdMob 사용 → 광고 ID 권한 필요. Play Console 의 광고 ID 선언 "예" 와 일치. -->
+    <!-- (Phase 1 이전 광고 미사용 시점엔 tools:node="remove" 로 제거했으나 복원함) -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 
     <application
         android:name=".OctaLinkApplication"
@@ -20,6 +18,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.OctaLink">
+
+        <!-- AdMob 앱 ID. 실제 배포 시 user 의 admob.google.com 앱 ID 로 교체.
+             현재는 Google 공식 테스트 앱 ID (Android) 사용 — 실제 광고 비노출, 정책 위반 없음. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

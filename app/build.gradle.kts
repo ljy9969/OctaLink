@@ -40,6 +40,12 @@ android {
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")
         // AndroidManifest 의 카카오 AuthCodeHandlerActivity intent-filter scheme 에 주입
         manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = kakaoNativeAppKey
+
+        // AdMob — Phase 1 배너 MVP. 베타 50명 미만일 땐 BuildConfig.SHOW_ADS=false 로 끄고
+        // 50명 도달 시 true 로 토글. 현재 테스트 ad unit ID (Google 공식 샘플) 사용 →
+        // 실제 광고 비노출, 정책 위반 없음. admob.google.com 가입 후 실제 ID 로 swap.
+        buildConfigField("boolean", "SHOW_ADS", "true")
+        buildConfigField("String", "BANNER_AD_UNIT_ID", "\"ca-app-pub-3940256099942544/6300978111\"")
     }
 
     signingConfigs {
@@ -109,6 +115,10 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     // Cloud Functions Callable — Kakao 토큰 ↔ Firebase Custom Token 교환용
     implementation("com.google.firebase:firebase-functions")
+
+    // AdMob — Phase 1 배너 광고. Home / Curriculum / Info 하단에 320×50 배너.
+    // 베타 단계는 BuildConfig.SHOW_ADS 토글로 On/Off.
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
 
     // 이미지 로딩 (HTTPS URL → Compose) — CommunityScreen post 이미지, Firebase Storage download URL.
     implementation("io.coil-kt:coil-compose:2.7.0")
