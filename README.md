@@ -383,15 +383,21 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **카카오 앱 2개 운영 구조**: (a) 비즈 앱 ID `1453976` — 운영용, 검수 대기 중, `local.properties.KAKAO_NATIVE_APP_KEY` 기본값. (b) 테스트 앱 ID `1455062` — 이미 모든 동의 항목 활성, 단 팀 멤버(Owner/Manager)만 로그인 가능. 일반 회원 운영 배포는 반드시 비즈 앱 키 사용. 개발자 본인이 풀 데이터 흐름 즉시 검증하려면 `local.properties` 키만 1455062 로 임시 교체 (운영 빌드 전 1453976 복원 필수)
 
 **[중요도 ★★]**
-- [~] `기능 / AI` **AI 개인 트레이닝 컨텐츠 추천** — 회원의 헥사곤 스킬 차트(스트라이킹/그래플링/체력/기술/멘탈/스피드) 기준 + **관장 한 줄 코멘트** (최근 5건) + belt/체급/입관기간/성별 + **사용자 선택 난이도(초/중/고급)** 컨텍스트로 LLM 이 1주일치 보강 루틴을 큐레이팅. **데일리 운동량 ≤30분 / 최대 3일** 강제. 참고: **RISE 앱** UX.
-  - **시각 자료 = YouTube 검색 폴백 (Phase 1 확정)** — ExerciseDB V1 OSS 매핑 시도했으나 데이터셋이 웨이트/맨몸 위주라 MMA 동작 매칭이 거의 실패해 폐기. 대신 LLM 이 직접 영문 YouTube 검색어 (`youtubeQuery`) 를 생성하고 클라이언트 드릴 카드 탭 시 YouTube 검색 결과 화면으로 진입. Phase 4 자체 GIF 라이브러리로 교체 예정.
-  - **Phase 1 MVP (배포 완료)** — Cloud Function `generateWeeklyRoutine` + Gemini 2.5 Flash (Vertex AI, us-central1, thinkingBudget=0, maxOutputTokens=8192, responseMimeType=application/json) + `WeeklyRoutineDoc` (`members/{uid}/weeklyRoutines/{yyyy-W##}`, weekId idempotent). LLM 출력의 각 드릴: `koName / desc / sets / durationMin / youtubeQuery(영문) / targetAxis(6축)`. Home 화면 "🧠 AI 보강 루틴" 카드 (CREATOR 한정) + 상세 화면 (헥사곤 약축 강조 + 요일별 드릴 카드 + YouTube 검색 진입 ▶ + 오로라 그라데이션 "이번 주 루틴 받기" 버튼 + 난이도 칩).
-  - **Phase 2 자동화 + 피드백 (예정)** — Cloud Scheduler 매주 일요일 23시 KST batch + 드릴별 `했음/건너뜀` 입력 → 다음 주 prompt 가중치.
+- [~] `기능 / AI` **AI 개인 트레이닝 컨텐츠 추천** — 회원의 헥사곤 스킬 차트(스트라이킹/그래플링/체력/기술/멘탈/스피드) + **관장 한 줄 코멘트** (최근 5건) + belt/체급/입관기간/성별 + **사용자 선택 난이도(초/중/고급)** 컨텍스트로 LLM 이 1주일치 보강 루틴을 큐레이팅. **데일리 운동량 ≤30분 / 최대 3일** 강제. 참고: **RISE 앱** UX.
+  - **시각 자료 = YouTube 썸네일 + 영상 진입 (Phase 1 확정)** — ExerciseDB V1 OSS 매핑은 데이터셋이 웨이트/맨몸 위주라 MMA 동작 매칭 거의 실패해 폐기. 대신:
+    1. LLM 이 영문 YouTube 검색어 (`youtubeQuery`) 직접 생성 (예: `"bjj shrimp drill"`, `"muay thai teep technique"`).
+    2. Cloud Function 이 YouTube Data API v3 `search.list` 로 상위 1개 영상의 `videoId` 매핑 → Firestore 저장.
+    3. 클라이언트가 `img.youtube.com/vi/{videoId}/hqdefault.jpg` 썸네일 + ▶ 오버레이 표시, 탭 시 `youtube.com/watch?v={id}` 로 바로 진입.
+    4. 검색 실패 / quota 초과 시 fallback = 빨강 ▶ 박스 + 검색 결과 페이지 진입.
+  - **Phase 1 MVP (배포 완료)** — Cloud Function `generateWeeklyRoutine` + Gemini 2.5 Flash (Vertex AI, us-central1, thinkingBudget=0, maxOutputTokens=8192, responseMimeType=application/json) + `WeeklyRoutineDoc` (`members/{uid}/weeklyRoutines/{yyyy-W##}`, weekId idempotent). LLM 출력의 각 드릴: `koName / desc / sets / durationMin / youtubeQuery(영문) / targetAxis(6축)` → 함수가 `videoId` 추가 매핑. Home 화면 "🧠 AI 보강 루틴" 카드 + 상세 화면 (헥사곤 약축 강조 + 요일별 드릴 카드 + YouTube 썸네일 진입 + 오로라 그라데이션 "이번 주 루틴 받기" + 난이도 그라데이션 칩).
+  - **한 주 1회 생성 정책 (비용 통제)** — doc 만들어진 뒤 그 주 동안 재요청 불가. 난이도 셀렉터 + `force=true` 재생성 경로 모두 제거. 다음 주 weekId 바뀌면 자동으로 EmptyRoutineCard 재노출.
+  - **권한 게이트 (Phase 1 베타 화이트리스트)** — **CREATOR + `AI_ROUTINE_BETA_UIDS`** (현재 `kakao:4892939648` 1명) 만 통과. 3 곳 모두 동일 화이트리스트 유지: 클라이언트 `data/AiRoutineAccess.kt`, 서버 `functions/src/index.ts`, Firestore rules `canUseAiRoutine()`. CREATOR 는 다른 회원 doc 도 트리거/read 가능 (운영자), 베타 uid 는 본인 doc 만. 추천 품질 검증 끝나면 전 회원 개방.
+  - **사용자 부담 최소화** — 했음/건너뜀 토글은 UI 에서 제거 (Phase 2 가중치 루프 깔리기 전에 사용자에게 "다 해야 한다" 부담만 주는 상태 회피). 백엔드 필드/Repository/Rules 는 보존 — Phase 2 별도 UX 로 부활 시 재사용.
+  - **Phase 2 자동화 + 피드백 (예정)** — Cloud Scheduler 매주 일요일 23시 KST batch + 회원 자발적 자기 기록 UX 새로 설계.
   - **Phase 3 안전망 (예정)** — 일별 총 시간 30분 초과 시 LLM 재호출 + 드릴명 부적절 어휘 차단.
-  - **Phase 4 자체 GIF / 일러스트 라이브러리 (정식 운영, 100+명 도달 시)** — 도장에서 관장 시연 영상 직접 촬영 후 GIF 변환 (10~20초 셋, MMA 기본기 60~80개). Firebase Storage 업로드 + Firestore `mmaTechniqueLibrary` 컬렉션 (`{ koName, youtubeQueryFallback, gymGifUrl }`). Gemini prompt 에 동작 화이트리스트로 제공해 LLM 이 그 안에서 고르도록 강제. 1회성 콘텐츠 제작 (관장 협업 2~3일) + Storage ~5GB ($0.13/월).
+  - **Phase 4-A 큐레이션 라이브러리 (정식 운영, 100+명 도달 시)** — 직접 촬영 대신 **YouTube 영상 큐레이션**. `mmaTechniqueLibrary/{techniqueId}` 컬렉션에 카테고리별 80개 사전 검증된 영상 (BJJ / 복싱 / 무에타이 / 레슬링 / 컨디셔닝) + 한국어 메타데이터. Gemini prompt 에 화이트리스트 inject → LLM 이 그 안에서만 techniqueId 선택. 앱 내 `android-youtube-player` (MIT 라이선스) 풀스크린 임베드 재생. 저작권 0원, 큐레이션 1~2일 + 코드 1.5일.
   - **관장 검토 워크플로 제외** — 운영 현실(관장이 베타 설치 안 함) 고려해 자동화 우선.
-  - **권한 게이트 (Phase 1 베타)** — 클라이언트 화면/카드 노출 + 서버 onCall + Firestore rules 모두 **CREATOR 단독**. 비용 관측 + 추천 품질 검증 끝나면 전 회원 개방.
-  - **비용**: Gemini 100명 주1회 ≈ $0.04/주, YouTube 검색 호출은 클라이언트 → youtube.com 직접 (앱 quota 0).
+  - **비용**: Gemini 베타 1명 주1회 ≈ $0.0004/주, YouTube Data API search.list 100 quota/call × ~9 drills = 900 quota/generate (무료 한도 10,000/일 → 약 11회/일 가능). 베타 화이트리스트라 quota 여유 충분, 회원 개방 시 캐시 도입 (`{ query → videoId }` Firestore 컬렉션).
 
 **[중요도 ★]**
 - [ ] `수익화 / 광고` **AdMob 배너 + 네이티브 광고 통합** *(난이도 3, 베타 MVP 3~4일 / 풀 6.5~7.5일)* — 정식 운영 100+명 도달 시 의미있는 수익(~$30~50/월). 베타 12명 규모에선 인프라 미리 깔아두는 가치.
