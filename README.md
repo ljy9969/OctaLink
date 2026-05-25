@@ -383,13 +383,15 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **카카오 앱 2개 운영 구조**: (a) 비즈 앱 ID `1453976` — 운영용, 검수 대기 중, `local.properties.KAKAO_NATIVE_APP_KEY` 기본값. (b) 테스트 앱 ID `1455062` — 이미 모든 동의 항목 활성, 단 팀 멤버(Owner/Manager)만 로그인 가능. 일반 회원 운영 배포는 반드시 비즈 앱 키 사용. 개발자 본인이 풀 데이터 흐름 즉시 검증하려면 `local.properties` 키만 1455062 로 임시 교체 (운영 빌드 전 1453976 복원 필수)
 
 **[중요도 ★★]**
-- [ ] `기능 / AI` **AI 개인 트레이닝 컨텐츠 추천** *(난이도 4~5, 약 10~11일)* — 회원의 헥사곤 스킬 차트(스트라이킹/그래플링/체력/기술/멘탈/스피드) 기준 + **관장 한 줄 코멘트** (최근 5건, 점수만으론 안 잡히는 관찰 신호) + belt/체급/입관기간 컨텍스트로 LLM 이 1주일치 보강 루틴을 큐레이팅. **데일리 운동량 ≤30분** 강제 (도장 수업과 병행 가능한 짧은 보강 단위 — prompt 에 명시 + Phase 3 안전망에서 총 시간 검증). 참고: **RISE 앱** UX.
-  - **시각 자료 = ExerciseDB V1 OSS (Free)** — `https://oss.exercisedb.dev/api/v1/exercises` 베이스 URL, 인증/키 ❌, 1,500개 운동 + 180p GIF (`https://static.exercisedb.dev/media/{exerciseId}.gif`). Response 필드: `exerciseId / name / gifUrl / bodyParts[] / targetMuscles[] / secondaryMuscles[] / equipments[] / instructions[]`. Rate limit 명시 없으나 호출 절약 위해 Firestore 캐시 + Phase 1 베타 기간 동안 시각 만족도 검증.
-  - **Phase 1 MVP (7일)** — Cloud Function `generateWeeklyRoutine` + Gemini 1.5 Flash (Vertex AI, GCP 권역) + `WeeklyRoutineDoc` (`members/{uid}/recommendations/{yyyyW##}`, weekId idempotent). LLM 출력의 각 드릴마다 `koName / desc / sets / durationMin / exerciseDbKeyword(영문 검색어) / targetAxis(6축)` 포함. Cloud Function 이 ExerciseDB 호출 → 가장 가까운 운동의 `exerciseId / gifUrl` 캐시 → Firestore 저장. Home 화면 "AI 추천 이번 주 루틴" 카드 + 상세 화면 (헥사곤 약축 강조 + 요일별 드릴 카드 with ExerciseDB GIF + "AI 가 참고한 정보" 투명성 섹션).
-  - **Phase 2 자동화 + 피드백 (2일)** — Cloud Scheduler 매주 일요일 23시 KST batch + 드릴별 `했음/건너뜀` 입력 → 다음 주 prompt 가중치.
-  - **Phase 3 안전망 (1.5일)** — 일별 총 시간 30분 초과 시 LLM 재호출 (덜 빡빡한 셋트수) + 드릴명 부적절 어휘 차단 + ExerciseDB 매핑 실패 시 **YouTube 폴백** (0.9.0 의 `YouTubeThumbnail` 컴포넌트 재사용).
+- [~] `기능 / AI` **AI 개인 트레이닝 컨텐츠 추천** — 회원의 헥사곤 스킬 차트(스트라이킹/그래플링/체력/기술/멘탈/스피드) 기준 + **관장 한 줄 코멘트** (최근 5건) + belt/체급/입관기간/성별 + **사용자 선택 난이도(초/중/고급)** 컨텍스트로 LLM 이 1주일치 보강 루틴을 큐레이팅. **데일리 운동량 ≤30분 / 최대 3일** 강제. 참고: **RISE 앱** UX.
+  - **시각 자료 = YouTube 검색 폴백 (Phase 1 확정)** — ExerciseDB V1 OSS 매핑 시도했으나 데이터셋이 웨이트/맨몸 위주라 MMA 동작 매칭이 거의 실패해 폐기. 대신 LLM 이 직접 영문 YouTube 검색어 (`youtubeQuery`) 를 생성하고 클라이언트 드릴 카드 탭 시 YouTube 검색 결과 화면으로 진입. Phase 4 자체 GIF 라이브러리로 교체 예정.
+  - **Phase 1 MVP (배포 완료)** — Cloud Function `generateWeeklyRoutine` + Gemini 2.5 Flash (Vertex AI, us-central1, thinkingBudget=0, maxOutputTokens=8192, responseMimeType=application/json) + `WeeklyRoutineDoc` (`members/{uid}/weeklyRoutines/{yyyy-W##}`, weekId idempotent). LLM 출력의 각 드릴: `koName / desc / sets / durationMin / youtubeQuery(영문) / targetAxis(6축)`. Home 화면 "🧠 AI 보강 루틴" 카드 (CREATOR 한정) + 상세 화면 (헥사곤 약축 강조 + 요일별 드릴 카드 + YouTube 검색 진입 ▶ + 오로라 그라데이션 "이번 주 루틴 받기" 버튼 + 난이도 칩).
+  - **Phase 2 자동화 + 피드백 (예정)** — Cloud Scheduler 매주 일요일 23시 KST batch + 드릴별 `했음/건너뜀` 입력 → 다음 주 prompt 가중치.
+  - **Phase 3 안전망 (예정)** — 일별 총 시간 30분 초과 시 LLM 재호출 + 드릴명 부적절 어휘 차단.
+  - **Phase 4 자체 GIF / 일러스트 라이브러리 (정식 운영, 100+명 도달 시)** — 도장에서 관장 시연 영상 직접 촬영 후 GIF 변환 (10~20초 셋, MMA 기본기 60~80개). Firebase Storage 업로드 + Firestore `mmaTechniqueLibrary` 컬렉션 (`{ koName, youtubeQueryFallback, gymGifUrl }`). Gemini prompt 에 동작 화이트리스트로 제공해 LLM 이 그 안에서 고르도록 강제. 1회성 콘텐츠 제작 (관장 협업 2~3일) + Storage ~5GB ($0.13/월).
   - **관장 검토 워크플로 제외** — 운영 현실(관장이 베타 설치 안 함) 고려해 자동화 우선.
-  - **비용**: Gemini 100명 주1회 ≈ $0.04/주, ExerciseDB V1 Free 무료. 베타 종료 후 시각 만족도 부족하면 **ExerciseDB V1 Paid (RapidAPI) 또는 ExerciseDB V2** 도입 추가 검토.
+  - **권한 게이트 (Phase 1 베타)** — 클라이언트 화면/카드 노출 + 서버 onCall + Firestore rules 모두 **CREATOR 단독**. 비용 관측 + 추천 품질 검증 끝나면 전 회원 개방.
+  - **비용**: Gemini 100명 주1회 ≈ $0.04/주, YouTube 검색 호출은 클라이언트 → youtube.com 직접 (앱 quota 0).
 
 **[중요도 ★]**
 - [ ] `수익화 / 광고` **AdMob 배너 + 네이티브 광고 통합** *(난이도 3, 베타 MVP 3~4일 / 풀 6.5~7.5일)* — 정식 운영 100+명 도달 시 의미있는 수익(~$30~50/월). 베타 12명 규모에선 인프라 미리 깔아두는 가치.

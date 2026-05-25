@@ -28,15 +28,18 @@ fun DocumentSnapshot.toWeeklyRoutineDoc(): WeeklyRoutineDoc? {
             day = d["day"] as? String ?: "",
             title = d["title"] as? String ?: "",
             drills = ((d["drills"] as? List<Map<String, Any?>>) ?: emptyList()).map { drill ->
+                // `youtubeQuery` 우선, 없으면 옛 `exerciseDbKeyword` (Phase 1 초기 doc 호환).
+                val query = drill["youtubeQuery"] as? String
+                    ?: drill["exerciseDbKeyword"] as? String
+                    ?: ""
                 RoutineDrill(
                     koName = drill["koName"] as? String ?: "",
-                    exerciseDbKeyword = drill["exerciseDbKeyword"] as? String ?: "",
+                    youtubeQuery = query,
                     desc = drill["desc"] as? String ?: "",
                     sets = drill["sets"] as? String ?: "",
                     durationMin = (drill["durationMin"] as? Number)?.toInt() ?: 0,
                     targetAxis = drill["targetAxis"] as? String ?: "",
-                    exerciseId = drill["exerciseId"] as? String,
-                    gifUrl = drill["gifUrl"] as? String,
+                    videoId = drill["videoId"] as? String,
                     done = drill["done"] as? Boolean ?: false,
                     skipped = drill["skipped"] as? Boolean ?: false,
                 )

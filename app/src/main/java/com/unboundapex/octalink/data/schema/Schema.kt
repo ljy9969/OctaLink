@@ -380,11 +380,11 @@ data class WeeklyMissionDoc(
  * 생성 정책:
  *  - Cloud Function `generateWeeklyRoutine` 가 주1회 (일요일 23시 KST batch) 또는 수동 호출 시 작성.
  *  - 같은 `weekId` 로 재호출 시 덮어쓰기 (idempotent).
- *  - LLM 입력: 6축 점수 + 최근 5건 한 줄 코멘트 + belt / 체급 / 입관기간.
- *  - LLM 출력 → ExerciseDB V1 OSS (`oss.exercisedb.dev/api/v1`) 매핑 → GIF URL 캐시.
+ *  - LLM 입력: 6축 점수 + 최근 5건 한 줄 코멘트 + belt / 체급 / 입관기간 + 성별 + 사용자 선택 난이도.
+ *  - LLM 출력: 드릴별 [RoutineDrill.youtubeQuery] (영문 검색어). 외부 매핑 호출 없음.
  *
- * 시각 요소: 클라이언트는 [RoutineDrill.gifUrl] 을 `AsyncImage` 로 렌더, 폴백은
- * [RoutineDrill.youtubeQuery] 로 YouTube 검색 (0.9.0 `YouTubeThumbnail` 컴포넌트 재사용).
+ * 시각 요소: 클라이언트가 [RoutineDrill.youtubeQuery] 로 YouTube 검색 화면 진입.
+ * Phase 4 에 자체 도장 GIF/일러스트 라이브러리 도입 예정 — 그때 RoutineDrill 에 추가 필드.
  */
 data class WeeklyRoutineDoc(
     /** ISO week key — 예: "2026-W22". 일요일 23시 KST 기준 다음 주의 weekId 사용. */
@@ -411,13 +411,14 @@ data class RoutineDay(
 )
 
 /**
- * 개별 드릴. `exerciseId` / `gifUrl` 가 set 되어 있으면 ExerciseDB 매핑 성공, 아니면 YouTube 폴백.
+ * 개별 드릴. 시각 자료는 [youtubeQuery] 로 YouTube 검색 진입 (Phase 1).
+ * Phase 4 자체 GIF 라이브러리 도입 시 [gymGifUrl] 등 필드 추가 예정.
  */
 data class RoutineDrill(
     /** 한국어 드릴 이름 — LLM 출력. */
     val koName: String,
-    /** 영어 검색어 — ExerciseDB 매핑 + YouTube 폴백 검색 키워드. */
-    val exerciseDbKeyword: String,
+    /** 영문 YouTube 검색어 — 예: "jiu jitsu shrimp drill", "muay thai teep technique". */
+    val youtubeQuery: String,
     /** 짧은 설명 (2~3줄). */
     val desc: String,
     /** 세트 / 반복 표기 — 예: "3R × 5분, 휴식 1분". */
@@ -426,9 +427,12 @@ data class RoutineDrill(
     val durationMin: Int,
     /** 6축 enum 키 ("STRIKING" / "GRAPPLING" / "STAMINA" / "TECHNIQUE" / "MENTAL" / "SPEED"). */
     val targetAxis: String,
-    /** ExerciseDB 매핑 결과. 없으면 null → 클라이언트가 [exerciseDbKeyword] 로 YouTube 폴백. */
-    val exerciseId: String? = null,
-    val gifUrl: String? = null,
+    /**
+     * YouTube `search.list` 상위 결과의 video id (11자) — Cloud Function 에서 채움.
+     * 있으면 클라이언트가 `img.youtube.com/vi/{id}/hqdefault.jpg` 썸네일 + 탭 시 watch URL 진입.
+     * 검색 실패 / API quota 초과 시 null — 폴백으로 검색 페이지 진입.
+     */
+    val videoId: String? = null,
     /** 회원 피드백 (Phase 2 에서 작성됨). 초기엔 null/false. */
     val done: Boolean = false,
     val skipped: Boolean = false,

@@ -106,12 +106,20 @@ fun PosseScreen(
             Spacer(Modifier.height(20.dp))
         } else if (subtitle != null) {
             Spacer(Modifier.height(16.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                if (trailing != null) Box { trailing() }
+            }
             Spacer(Modifier.height(20.dp))
         } else {
             Spacer(Modifier.height(20.dp))

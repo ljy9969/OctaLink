@@ -46,10 +46,10 @@ class FirestoreWeeklyRoutineRepository : WeeklyRoutineRepository {
         awaitClose { sub.remove() }
     }
 
-    override suspend fun generate(memberId: String, force: Boolean) {
+    override suspend fun generate(memberId: String, difficulty: String, force: Boolean) {
         functions
             .getHttpsCallable("generateWeeklyRoutine")
-            .call(mapOf("memberId" to memberId, "force" to force))
+            .call(mapOf("memberId" to memberId, "difficulty" to difficulty, "force" to force))
             .await()
     }
 

@@ -52,13 +52,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.R
 import com.unboundapex.octalink.data.curriculumForToday
+import com.unboundapex.octalink.data.dayLabelKor
 import com.unboundapex.octalink.data.isClosed
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.CageIcon
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.components.TagChip
-import com.unboundapex.octalink.data.schema.isCreator
+import com.unboundapex.octalink.data.canUseAiRoutine
 import com.unboundapex.octalink.ui.screens.attendance.GYM_DAYS_PER_WEEK
 import com.unboundapex.octalink.ui.screens.profile.MyCommentsViewModel
 import com.unboundapex.octalink.ui.screens.routine.WeeklyRoutineViewModel
@@ -328,9 +329,8 @@ fun HomeScreen(
                     }
                 }
             }
-            // AI 보강 루틴 — Phase 1 베타 단계라 Vertex AI 비용 통제 위해 창조자에게만 노출.
-            // 모든 회원에게 열기 전 사용량/품질 검증 필요.
-            if (session.role.isCreator) {
+            // AI 보강 루틴 — Phase 1 베타 화이트리스트 (CREATOR + AI_ROUTINE_BETA_UIDS) 만 노출.
+            if (session.canUseAiRoutine()) {
                 item { AiRoutineCard(doc = aiRoutine, onClick = onOpenAiRoutine) }
             }
             if (todayCurriculum != null && !gymClosedToday) {
@@ -374,7 +374,7 @@ private fun AiRoutineCard(
             )
             if (doc != null) {
                 Text(
-                    doc.weekId,
+                    formatWeekIdAsShortLabel(doc.weekId),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -412,6 +412,25 @@ private fun AiRoutineCard(
             )
         }
     }
+}
+
+/**
+ * ISO week id ("YYYY-Www") → 해당 주 월요일을 "M/D(요일) 주차" 로 표시.
+ * 사용자가 W22 같은 ISO 주 번호를 직관적으로 인식하기 어려우므로 시작일 기준으로 노출.
+ * 파싱 실패 시 원본 weekId 폴백.
+ */
+private fun formatWeekIdAsShortLabel(weekId: String): String = try {
+    val (yearStr, weekStr) = weekId.split("-W")
+    val year = yearStr.toInt()
+    val week = weekStr.toInt()
+    val iso = java.time.temporal.WeekFields.ISO
+    val monday = LocalDate.of(year, 1, 4)
+        .with(iso.weekBasedYear(), year.toLong())
+        .with(iso.weekOfWeekBasedYear(), week.toLong())
+        .with(DayOfWeek.MONDAY)
+    "${monday.monthValue}/${monday.dayOfMonth}(${dayLabelKor(monday.dayOfWeek)}) 주차"
+} catch (_: Exception) {
+    weekId
 }
 
 /** 6축 영문 키 → 한국어 표시명. 알 수 없는 키는 그대로 노출. */

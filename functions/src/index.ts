@@ -3,9 +3,17 @@ import {
   onDocumentCreated,
   onDocumentUpdated,
 } from "firebase-functions/v2/firestore";
+import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { VertexAI } from "@google-cloud/vertexai";
+
+/**
+ * YouTube Data API v3 key — `search.list` 호출용. Secret Manager 에 미리 저장 필요:
+ *   firebase functions:secrets:set YOUTUBE_API_KEY
+ * 키는 GCP 콘솔 > API 및 서비스 > 사용자 인증 정보 > API 키 생성 → YouTube Data API v3 만 허용.
+ */
+const YOUTUBE_API_KEY = defineSecret("YOUTUBE_API_KEY");
 
 admin.initializeApp();
 
@@ -1041,6 +1049,14 @@ export const cancelAttendance = onCall(
 // AI 주간 보강 루틴 — Phase 1 MVP
 // =============================================================================
 
+/**
+ * AI 보강 루틴 베타 화이트리스트 — CREATOR 외 추가 허용된 회원 uid 셋.
+ * 클라이언트 [AiRoutineAccess.kt] 와 Firestore rules `weeklyRoutines` 블록과 동일하게 유지.
+ */
+const AI_ROUTINE_BETA_UIDS = new Set<string>([
+  "kakao:4892939648",
+]);
+
 /** 6축 한국어 ↔ Schema 필드 매핑 (prompt 입력 + LLM 출력의 targetAxis 검증용). */
 const AXIS_FIELDS = [
   "striking",
@@ -1090,67 +1106,50 @@ function monthsSinceJoin(joinDate: string | undefined): number {
   );
 }
 
-/** ExerciseDB V1 Free 검색 — 키워드로 가장 첫 번째 매칭 운동 반환. 캐시 사용. */
-interface ExerciseDbEntry {
-  exerciseId: string;
-  name: string;
-  gifUrl: string;
-}
-async function lookupExerciseDb(
-  keyword: string,
-): Promise<ExerciseDbEntry | null> {
-  const norm = keyword.toLowerCase().trim();
-  if (!norm) return null;
+// ExerciseDB 의존 제거 (2026-05): 데이터셋이 웨이트/맨몸 위주라 MMA 동작 매칭이 거의 실패.
+// 대안으로 LLM 이 영문 YouTube 검색어를 직접 생성하고 Cloud Function 에서
+// YouTube Data API v3 `search.list` 로 상위 1개 videoId 매핑. 클라이언트는 그 videoId 로
+// hqdefault 썸네일 표시 + 탭 시 watch URL 진입.
 
-  const db = admin.firestore();
-  const cacheRef = db.collection("exerciseDbCache").doc(encodeKey(norm));
-  const cached = await cacheRef.get();
-  if (cached.exists) {
-    const c = cached.data();
-    if (c?.miss) return null;
-    return {
-      exerciseId: c?.exerciseId,
-      name: c?.name,
-      gifUrl: c?.gifUrl,
-    };
-  }
-
+/**
+ * YouTube `search.list` 호출 — 검색어 → 상위 1개 영상의 videoId.
+ *
+ * 비용: 1회 호출 = 100 quota units. 무료 한도 10,000/일 → ~100 회 generate 가능.
+ * 실패 (quota 초과 / 키 오류 / 네트워크) 시 null 반환 → 클라이언트가 검색 폴백.
+ */
+async function searchYouTubeTopVideoId(query: string, apiKey: string): Promise<string | null> {
+  const q = query.trim();
+  if (!q || !apiKey) return null;
   try {
-    const url = `https://oss.exercisedb.dev/api/v1/exercises?search=${encodeURIComponent(norm)}&limit=1`;
+    const url = "https://www.googleapis.com/youtube/v3/search?" +
+      new URLSearchParams({
+        part: "snippet",
+        q,
+        type: "video",
+        maxResults: "1",
+        videoEmbeddable: "true",
+        safeSearch: "strict",
+        relevanceLanguage: "en",
+        key: apiKey,
+      }).toString();
     const res = await fetch(url);
     if (!res.ok) {
-      logger.warn("[exerciseDb] HTTP not ok", { keyword: norm, status: res.status });
-      await cacheRef.set({ miss: true, at: admin.firestore.FieldValue.serverTimestamp() });
+      logger.warn("[youtube] search not ok", { q, status: res.status });
       return null;
     }
-    const body = (await res.json()) as { data?: Array<{ exerciseId?: string; name?: string; gifUrl?: string }>; success?: boolean };
-    const first = body.data?.[0];
-    if (!first?.exerciseId || !first?.name) {
-      await cacheRef.set({ miss: true, at: admin.firestore.FieldValue.serverTimestamp() });
-      return null;
-    }
-    const entry: ExerciseDbEntry = {
-      exerciseId: first.exerciseId,
-      name: first.name,
-      gifUrl: first.gifUrl ?? `https://static.exercisedb.dev/media/${first.exerciseId}.gif`,
-    };
-    await cacheRef.set({ ...entry, at: admin.firestore.FieldValue.serverTimestamp() });
-    return entry;
+    const body = (await res.json()) as { items?: Array<{ id?: { videoId?: string } }> };
+    return body.items?.[0]?.id?.videoId ?? null;
   } catch (e) {
-    logger.error("[exerciseDb] fetch failed", { keyword: norm, err: String(e) });
+    logger.error("[youtube] search threw", { q, err: String(e) });
     return null;
   }
-}
-
-/** Firestore 문서 ID 안전 키 (영문/숫자 외 → underscore). */
-function encodeKey(s: string): string {
-  return s.replace(/[^a-z0-9]+/gi, "_").slice(0, 120);
 }
 
 /** Gemini 응답을 안전하게 파싱 — JSON 구조 보장 안 되면 null. */
 interface LlmDrill {
   koName: string;
-  exerciseDbKeyword: string;
+  /** 영문 YouTube 검색어 — LLM 출력. Phase 1 의 시각 자료 단일 소스. */
+  youtubeQuery: string;
   desc: string;
   sets: string;
   durationMin: number;
@@ -1186,7 +1185,7 @@ function parseLlmRoutine(text: string): LlmRoutine | null {
  * - LLM 호출 + ExerciseDB 매핑은 동일 트랜잭션 외부에서 수행 → write 는 1회.
  */
 export const generateWeeklyRoutine = onCall(
-  { region: "asia-northeast3", timeoutSeconds: 120 },
+  { region: "asia-northeast3", timeoutSeconds: 120, secrets: [YOUTUBE_API_KEY] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Login required");
@@ -1194,19 +1193,27 @@ export const generateWeeklyRoutine = onCall(
     const callerUid = request.auth.uid;
     const memberId = (request.data?.memberId as string | undefined) ?? callerUid;
     const force = (request.data?.force as boolean | undefined) ?? false;
+    const difficultyRaw = (request.data?.difficulty as string | undefined) ?? "INTERMEDIATE";
+    const difficulty = ["BEGINNER", "INTERMEDIATE", "ADVANCED"].includes(difficultyRaw)
+      ? difficultyRaw : "INTERMEDIATE";
     const weekId = isoWeekKey();
-    logger.info("[generateWeeklyRoutine] entry", { caller: maskId(callerUid), memberId: maskId(memberId), weekId, force });
+    logger.info("[generateWeeklyRoutine] entry", { caller: maskId(callerUid), memberId: maskId(memberId), weekId, force, difficulty });
 
     const db = admin.firestore();
 
-    // 권한 — Phase 1 베타 비용 통제 위해 **CREATOR 만 호출 가능**.
-    // 모든 회원에게 열기 전 GCP Vertex AI 사용량 모니터링 + 프롬프트 품질 검증 필요.
-    // memberId 가 본인이든 타인이든 상관없이 caller 가 CREATOR 일 때만 통과.
+    // 권한 — Phase 1 베타 화이트리스트.
+    //  - CREATOR : 모든 memberId 에 대해 호출 가능 (운영자 트리거)
+    //  - AI_ROUTINE_BETA_UIDS : 자기 자신 (memberId == callerUid) 에 대해서만 호출 가능
+    //  - 그 외 : 거부
+    // Firestore rules / 클라이언트 카드 노출 화이트리스트와 1:1 매칭 유지 필요.
     const callerSnap = await db.collection("members").doc(callerUid).get();
     const callerRole = callerSnap.data()?.role as string | undefined;
-    if (callerRole !== "CREATOR") {
-      logger.warn("[generateWeeklyRoutine] denied — not creator", { caller: maskId(callerUid), role: callerRole });
-      throw new HttpsError("permission-denied", "현재 베타 단계라 창조자만 사용할 수 있어요.");
+    const isCreator = callerRole === "CREATOR";
+    const isBetaTester = AI_ROUTINE_BETA_UIDS.has(callerUid);
+    const allowed = isCreator || (isBetaTester && memberId === callerUid);
+    if (!allowed) {
+      logger.warn("[generateWeeklyRoutine] denied", { caller: maskId(callerUid), role: callerRole, memberId: maskId(memberId) });
+      throw new HttpsError("permission-denied", "현재 베타 단계라 일부 회원만 사용할 수 있어요.");
     }
 
     const docRef = db.doc(`members/${memberId}/weeklyRoutines/${weekId}`);
@@ -1230,6 +1237,7 @@ export const generateWeeklyRoutine = onCall(
     const weightClass = (member.weightClass as string | undefined) ?? "LIGHT";
     const joinDate = member.joinDate as string | undefined;
     const months = monthsSinceJoin(joinDate);
+    const gender = (member.gender as string | undefined) ?? null; // "MALE"/"FEMALE"
 
     // 약축 2개 도출 (점수 낮은 순). skills 없으면 골고루.
     const ranked: Array<{ axis: string; v: number }> = AXIS_FIELDS.map((axis) => ({
@@ -1255,11 +1263,13 @@ export const generateWeeklyRoutine = onCall(
       belt,
       weightClass,
       months,
+      gender,
+      difficulty,
       skills: ranked,
       focusAxes,
       recentComments,
     });
-    logger.info("[generateWeeklyRoutine] prompt built", { promptLen: prompt.length, focusAxes });
+    logger.info("[generateWeeklyRoutine] prompt built", { promptLen: prompt.length, focusAxes, difficulty });
 
     // 4) Gemini 호출.
     let llmText: string;
@@ -1275,23 +1285,24 @@ export const generateWeeklyRoutine = onCall(
       throw new HttpsError("internal", "AI 응답 파싱 실패");
     }
 
-    // 5) ExerciseDB 매핑 — 각 드릴 키워드로 매핑.
+    // 5) 드릴 가공 — 각 youtubeQuery 로 YouTube `search.list` 호출해 상위 1개 videoId 매핑.
+    // 실패 (키 누락 / quota 초과 / 결과 0건) 면 videoId = null → 클라이언트가 검색 폴백.
+    const apiKey = YOUTUBE_API_KEY.value();
     const enrichedDays = await Promise.all(
       llm.days.map(async (day) => ({
         day: day.day,
         title: day.title,
         drills: await Promise.all(
           (day.drills ?? []).map(async (drill) => {
-            const ex = await lookupExerciseDb(drill.exerciseDbKeyword);
+            const videoId = await searchYouTubeTopVideoId(drill.youtubeQuery, apiKey);
             return {
               koName: drill.koName,
-              exerciseDbKeyword: drill.exerciseDbKeyword,
+              youtubeQuery: drill.youtubeQuery,
               desc: drill.desc,
               sets: drill.sets,
               durationMin: drill.durationMin,
               targetAxis: drill.targetAxis,
-              exerciseId: ex?.exerciseId ?? null,
-              gifUrl: ex?.gifUrl ?? null,
+              videoId,
               done: false,
               skipped: false,
             };
@@ -1319,13 +1330,25 @@ interface PromptArgs {
   belt: string;
   weightClass: string;
   months: number;
+  gender: string | null;
+  difficulty: string;
   skills: Array<{ axis: string; v: number }>;
   focusAxes: string[];
   recentComments: Array<{ id: string; text: string; classDate: string }>;
 }
 
+const DIFFICULTY_LABEL_KO: Record<string, string> = {
+  BEGINNER: "초급 (기초 자세 / 가벼운 부하)",
+  INTERMEDIATE: "중급 (기본 콤비네이션 / 중간 부하)",
+  ADVANCED: "고급 (복합 시퀀스 / 높은 부하 + 카운터 연결)",
+};
+const GENDER_LABEL_KO: Record<string, string> = {
+  MALE: "남성",
+  FEMALE: "여성",
+};
+
 function buildRoutinePrompt(args: PromptArgs): string {
-  const { belt, weightClass, months, skills, focusAxes, recentComments } = args;
+  const { belt, weightClass, months, gender, difficulty, skills, focusAxes, recentComments } = args;
 
   const skillLines = skills
     .map((s) => `- ${AXIS_LABEL_KO[s.axis]} (${s.axis}): ${(s.v * 100).toFixed(0)}점`)
@@ -1345,13 +1368,18 @@ function buildRoutinePrompt(args: PromptArgs): string {
           )
           .join("\n");
 
+  const genderLine = gender ? GENDER_LABEL_KO[gender] ?? gender : "(미입력)";
+  const difficultyLine = DIFFICULTY_LABEL_KO[difficulty] ?? difficulty;
+
   return `당신은 종합격투기(MMA) 도장의 보조 코치입니다. 회원의 6축 스킬 점수와 관장의 한 줄 코멘트를 보고
 이번 주 보강용 개인 루틴(요일별 짧은 드릴 1~3개, 일별 총 30분 이내)을 제안합니다.
 
 # 회원 컨텍스트
+- 성별: ${genderLine}
 - 벨트: ${belt}
 - 체급: ${weightClass}
 - 입관 ${months}개월
+- 사용자 선택 난이도: ${difficultyLine}
 - 6축 점수(낮은 순):
 ${skillLines}
 - 우선 보강 축: ${focusLine}
@@ -1363,11 +1391,16 @@ ${commentBlock}
 1. days 는 **최대 3개**. 보강 효과가 큰 요일만 골라줘 (예: "월", "수", "금"). 나머지 요일은 도장 수업/휴식 가정이라 응답에 넣지 말 것.
 2. 각 day.drills 는 1~3개. day 총 durationMin 합이 30 이하.
 3. 우선 보강 축에 60% 이상 시간 배정.
-4. exerciseDbKeyword 는 영문 소문자 운동 검색어 (예: "push up", "burpee", "shadow boxing", "single leg deadlift").
-   ExerciseDB V1 데이터셋에서 찾을 수 있는 일반 운동명을 사용.
-5. targetAxis 는 정확히 다음 중 하나: ${AXIS_FIELDS.join(", ")}
-6. desc 는 한국어 1~2문장. sets 는 "3세트 × 12회" 또는 "3분 × 2라운드" 등 간결한 한국어.
-7. weeklyFeedback 은 코치 톤의 한국어 2~3문장 — 왜 이런 구성인지 + 관장 코멘트와 연결.
+4. **사용자 선택 난이도 (${difficulty}) 에 맞춰 드릴 강도/세트수/복잡도 조정.** 초급은 단일 동작 반복, 중급은 2~3동작 콤비, 고급은 카운터/체이닝 시퀀스.
+5. 성별이 명시되어 있으면 (남성/여성) 체급 + 성별 평균 신체 조건을 가볍게 반영 — 무리한 부하 금지.
+6. **드릴은 MMA 종목 위주로 선택.** 복싱 / 킥복싱 / 무에타이 / 주짓수 (BJJ) / 레슬링 / 그래플링 기본기 + 격투기 컨디셔닝.
+   체력 보강이 필요한 경우만 보조적으로 일반 컨디셔닝(버피, 점프 로프 등) 사용. 일반 헬스 동작은 지양.
+7. youtubeQuery 는 영문 검색어 — 실제 YouTube 에서 시연 영상이 검색되는 표현을 사용.
+   - 좋은 예: "muay thai teep technique", "bjj shrimp drill", "boxing jab cross slip drill", "wrestling sprawl drill", "kickboxing roundhouse drill"
+   - 피할 표현: 너무 일반적인 "exercise", "training" 단어 또는 한국어 / 한자.
+8. targetAxis 는 정확히 다음 중 하나: ${AXIS_FIELDS.join(", ")}
+9. desc 는 한국어 1~2문장. sets 는 "12회 × 3세트" 또는 "3분 × 2라운드" 등 간결한 한국어.
+10. weeklyFeedback 은 코치 톤의 한국어 2~3문장 — 왜 이런 구성인지 + 관장 코멘트와 연결.
 
 # 출력 형식 (반드시 JSON, 다른 텍스트 금지)
 {
@@ -1379,8 +1412,8 @@ ${commentBlock}
       "title": "예: 스트라이킹 정확도",
       "drills": [
         {
-          "koName": "한국어 운동 이름",
-          "exerciseDbKeyword": "english search keyword",
+          "koName": "한국어 드릴 이름",
+          "youtubeQuery": "english youtube search query (mma technique)",
           "desc": "한국어 설명 1~2문장",
           "sets": "3세트 × 12회",
           "durationMin": 10,

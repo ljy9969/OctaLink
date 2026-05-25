@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,15 +20,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -38,12 +38,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.schema.RoutineDay
 import com.unboundapex.octalink.data.schema.RoutineDrill
-import com.unboundapex.octalink.data.schema.isCreator
+import com.unboundapex.octalink.data.canUseAiRoutine
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.HexagonSkillChart
 import com.unboundapex.octalink.ui.components.PosseCard
@@ -69,8 +66,9 @@ fun WeeklyRoutineScreen(
     val session by sessionVm.state.collectAsState()
     val memberId = session.member?.id
 
-    // Phase 1 베타 비용 통제 — 창조자 외엔 진입 차단 (서버 onCall + Firestore rules 도 동일 게이트).
-    if (!session.role.isCreator) {
+    // Phase 1 베타 비용 통제 — 화이트리스트 (CREATOR + AI_ROUTINE_BETA_UIDS) 외엔 진입 차단.
+    // 서버 onCall + Firestore rules 도 동일 게이트.
+    if (!session.canUseAiRoutine()) {
         PosseScreen(subtitle = "AI 보강 루틴") {
             PosseCard {
                 Text(
@@ -93,18 +91,11 @@ fun WeeklyRoutineScreen(
     val genState by vm.genState.collectAsState()
     val skills = session.member?.skills?.toStats() ?: defaultSkillStats()
 
-    val refComments by rememberReferencedComments(memberId, routine?.referencedCommentIds)
-
+    // 비용 정책: 한 주에 1회만 생성. 일단 doc 이 만들어지면 그 주 동안 재요청 불가
+    // (Vertex AI + YouTube Data API quota 보호). 다음 주가 되면 weekId 가 바뀌어 새 doc 생성 가능.
     PosseScreen(
         subtitle = "AI 보강 루틴",
         subtitleEmphasis = listOf("AI"),
-        trailing = {
-            if (memberId != null) {
-                OutlinedButton(onClick = { vm.generate(force = true) }) {
-                    Text(if (genState is GenerateState.Loading) "생성 중…" else "새로 받기")
-                }
-            }
-        },
     ) {
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -149,40 +140,15 @@ fun WeeklyRoutineScreen(
 
             val doc = routine
             if (doc == null) {
-                item { EmptyRoutineCard(genState = genState, onGenerate = { vm.generate(false) }) }
-            } else {
-                doc.days.forEachIndexed { dayIdx, day ->
-                    item {
-                        DayCard(
-                            day = day,
-                            onDrillToggle = { drillIdx, done, skipped ->
-                                vm.setDrillState(doc.weekId, dayIdx, drillIdx, done, skipped)
-                            },
-                        )
-                    }
-                }
-
                 item {
-                    PosseCard {
-                        Text("AI 가 참고한 정보", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "최근 ${doc.referencedCommentIds.size}건의 관장 한 줄 코멘트 + 6축 스킬 점수 + 벨트 / 체급 / 입관 기간을 함께 보고 작성했어요.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (refComments.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            refComments.forEach { c ->
-                                Text(
-                                    "· $c",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.padding(vertical = 2.dp),
-                                )
-                            }
-                        }
-                    }
+                    EmptyRoutineCard(
+                        genState = genState,
+                        onGenerate = { vm.generate(difficulty = it, force = false) },
+                    )
+                }
+            } else {
+                doc.days.forEach { day ->
+                    item { DayCard(day = day) }
                 }
             }
 
@@ -220,10 +186,7 @@ private fun FocusChip(label: String) {
 }
 
 @Composable
-private fun DayCard(
-    day: RoutineDay,
-    onDrillToggle: (drillIdx: Int, done: Boolean, skipped: Boolean) -> Unit,
-) {
+private fun DayCard(day: RoutineDay) {
     val totalMin = day.drills.sumOf { it.durationMin }
     PosseCard {
         Row(
@@ -243,110 +206,131 @@ private fun DayCard(
         }
         Spacer(Modifier.height(4.dp))
         day.drills.forEachIndexed { i, drill ->
-            DrillRow(
-                drill = drill,
-                onMark = { done, skipped -> onDrillToggle(i, done, skipped) },
-            )
+            DrillRow(drill = drill)
             if (i != day.drills.lastIndex) Spacer(Modifier.height(8.dp))
         }
     }
 }
 
 @Composable
-private fun DrillRow(
-    drill: RoutineDrill,
-    onMark: (done: Boolean, skipped: Boolean) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.Top) {
-            DrillVisual(drill)
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+private fun DrillRow(drill: RoutineDrill) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        DrillVisual(drill)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                drill.koName,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "${drill.sets} · ${drill.durationMin}분 · ${axisLabelKo(drill.targetAxis)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (drill.desc.isNotBlank()) {
                 Text(
-                    drill.koName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    "${drill.sets} · ${drill.durationMin}분 · ${axisLabelKo(drill.targetAxis)}",
-                    style = MaterialTheme.typography.labelMedium,
+                    drill.desc,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (drill.desc.isNotBlank()) {
-                    Text(
-                        drill.desc,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DrillStatePill(
-                label = if (drill.done) "✓ 했음" else "했음",
-                selected = drill.done,
-                tint = Color(0xFF27AE60),
-                onClick = { onMark(!drill.done, false) },
-            )
-            DrillStatePill(
-                label = if (drill.skipped) "✕ 건너뜀" else "건너뜀",
-                selected = drill.skipped,
-                tint = Color(0xFFE57373),
-                onClick = { onMark(false, !drill.skipped) },
-            )
         }
     }
 }
 
+/**
+ * 드릴 시각 자리 — Phase 1.
+ *
+ *  - `videoId` 있으면: `img.youtube.com/vi/{id}/hqdefault.jpg` 썸네일 + ▶ 오버레이.
+ *    탭 시 `youtube.com/watch?v={id}` 로 바로 진입 (해당 영상 재생).
+ *  - `videoId` 없으면 (API quota 초과 / 검색 실패): 빨강 ▶ 박스 + 탭 시 검색 결과 페이지 폴백.
+ *
+ * Phase 4 에서 자체 도장 큐레이션 라이브러리 도입 시 이 컴포저블 교체 예정.
+ */
 @Composable
 private fun DrillVisual(drill: RoutineDrill) {
     val context = LocalContext.current
-    val gifUrl = drill.gifUrl
+    val videoId = drill.videoId
+    val query = drill.youtubeQuery
+    val hasContent = !videoId.isNullOrBlank() || query.isNotBlank()
+
     Box(
         modifier = Modifier
             .size(72.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(
+                if (videoId.isNullOrBlank() && query.isNotBlank()) Color(0xFFCC0000)
+                else MaterialTheme.colorScheme.surfaceVariant,
+            )
+            .clickable(enabled = hasContent) {
+                runCatching {
+                    val url = if (!videoId.isNullOrBlank()) {
+                        "https://www.youtube.com/watch?v=$videoId"
+                    } else {
+                        "https://www.youtube.com/results?search_query=" +
+                            java.net.URLEncoder.encode(query, "UTF-8")
+                    }
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(url),
+                        ),
+                    )
+                }.onFailure {
+                    android.util.Log.e("OctaLink.WeeklyRoutine", "YouTube launch failed", it)
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
-        if (!gifUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(gifUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = drill.koName,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else {
-            // ExerciseDB 매핑 실패 — Phase 3 에서 YouTube 폴백으로 대체 예정.
-            Text(
-                "동작\n준비중",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        when {
+            !videoId.isNullOrBlank() -> {
+                // 썸네일 + 어두운 그라데이션 + 가운데 ▶.
+                coil.compose.AsyncImage(
+                    model = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
+                    contentDescription = drill.koName,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xCCCC0000)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "▶",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            query.isNotBlank() -> {
+                Text(
+                    "▶",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            }
+            else -> {
+                Text(
+                    "준비중",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun DrillStatePill(label: String, selected: Boolean, tint: Color, onClick: () -> Unit) {
-    val bg = if (selected) tint.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(bg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = fg)
-    }
-}
-
-@Composable
-private fun EmptyRoutineCard(genState: GenerateState, onGenerate: () -> Unit) {
+private fun EmptyRoutineCard(
+    genState: GenerateState,
+    onGenerate: (difficulty: String) -> Unit,
+) {
+    // 난이도 선택은 이 카드 안에서만 살아있음 (생성 후엔 사라짐 → 재생성 불가 → 비용 보호).
+    var difficulty by remember { mutableStateOf(DIFFICULTY_INTERMEDIATE) }
     PosseCard {
         Text(
             "이번 주 AI 보강 루틴이 아직 없어요.",
@@ -354,22 +338,39 @@ private fun EmptyRoutineCard(genState: GenerateState, onGenerate: () -> Unit) {
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
-            "부족한 스킬 + 한 줄 코멘트를 보고 일별 30분 이내의 짧은 드릴을 만들어드립니다!",
+            // 폰 화면 폭에 맞춰 자연스럽게 wrap 되도록 강제 줄바꿈(\n) 제거.
+            "난이도를 고른 뒤 버튼을 눌러주세요.\n\n부족한 스킬과 한 줄 코멘트를 보고 30분 이내의\n짧은 드릴을 만들어드립니다.\n\n(일주일에 1회만 생성 가능)",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "난이도",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(6.dp))
+        DifficultySelector(
+            current = difficulty,
+            onSelect = { difficulty = it },
+            enabled = genState !is GenerateState.Loading,
+        )
+        Spacer(Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AuroraGradientButton(
-                label = if (genState is GenerateState.Loading) "받는 중…" else "이번 주 루틴 받기",
+                label = if (genState is GenerateState.Loading) "요청 중…" else "이번 주 루틴 받기",
                 enabled = genState !is GenerateState.Loading,
-                onClick = onGenerate,
+                onClick = { onGenerate(difficulty) },
             )
             if (genState is GenerateState.Loading) {
                 Spacer(Modifier.width(12.dp))
@@ -378,6 +379,73 @@ private fun EmptyRoutineCard(genState: GenerateState, onGenerate: () -> Unit) {
         }
     }
 }
+
+/** 난이도 칩 3개 — 사용자가 가벼움 / 보통 / 빡셈 선택. Cloud Function 으로 그대로 전달. */
+@Composable
+private fun DifficultySelector(current: String, onSelect: (String) -> Unit, enabled: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+    ) {
+        DifficultyChip("초급", DIFFICULTY_BEGINNER, BeginnerBrush, current, enabled, onSelect)
+        DifficultyChip("중급", DIFFICULTY_INTERMEDIATE, IntermediateBrush, current, enabled, onSelect)
+        DifficultyChip("고급", DIFFICULTY_ADVANCED, AdvancedBrush, current, enabled, onSelect)
+    }
+}
+
+/**
+ * 난이도별 그라데이션 — 강도 직관 (시원함 → 따뜻함 → 격렬함).
+ *
+ *  - 초급: emerald → cyan — 가볍고 시원한 톤
+ *  - 중급: amber → red — 본격 워밍업 톤
+ *  - 고급: deep red → violet — 격렬 + 한계 도전 톤 (오로라 CTA 와도 톤 연속)
+ */
+private val BeginnerBrush = Brush.linearGradient(
+    colors = listOf(Color(0xFF10B981), Color(0xFF06B6D4)),
+)
+private val IntermediateBrush = Brush.linearGradient(
+    colors = listOf(Color(0xFFF59E0B), Color(0xFFEF4444)),
+)
+private val AdvancedBrush = Brush.linearGradient(
+    colors = listOf(Color(0xFFDC2626), Color(0xFF7C3AED)),
+)
+
+@Composable
+private fun DifficultyChip(
+    label: String,
+    value: String,
+    selectedBrush: Brush,
+    current: String,
+    enabled: Boolean,
+    onSelect: (String) -> Unit,
+) {
+    val selected = current == value
+    val labelColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = Modifier
+            .alpha(if (enabled) 1f else 0.4f)
+            .clip(RoundedCornerShape(20.dp))
+            .then(
+                if (selected) Modifier.background(selectedBrush)
+                else Modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            )
+            .clickable(enabled = enabled) { onSelect(value) }
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = labelColor,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
+    }
+}
+
+// 난이도 상수 — Cloud Function 의 difficulty 인자와 1:1 매핑.
+internal const val DIFFICULTY_BEGINNER = "BEGINNER"
+internal const val DIFFICULTY_INTERMEDIATE = "INTERMEDIATE"
+internal const val DIFFICULTY_ADVANCED = "ADVANCED"
 
 /**
  * 오로라 그라데이션 CTA — AI / 우주 무드를 위한 4색 linear gradient.
@@ -427,28 +495,3 @@ private fun defaultSkillStats(): List<SkillStat> = listOf(
     SkillStat("스피드", 0.5f),
 )
 
-/**
- * 참고 코멘트 텍스트 묶음 — `members/{uid}/comments/{commentId}` 를 observeByMember 로 받아
- * referencedCommentIds 만 필터링. 화면이 사라지면 자동 cancel.
- */
-@Composable
-private fun rememberReferencedComments(
-    memberId: String?,
-    ids: List<String>?,
-): State<List<String>> {
-    val state = remember(memberId, ids) { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(memberId, ids) {
-        if (memberId.isNullOrBlank() || ids.isNullOrEmpty()) {
-            state.value = emptyList()
-            return@LaunchedEffect
-        }
-        runCatching {
-            RepositoryProvider.comments.observeByMember(memberId).collect { list ->
-                state.value = list
-                    .filter { it.id in ids }
-                    .map { c -> "${c.classDate} · ${c.byMasterName}: ${c.text}" }
-            }
-        }
-    }
-    return state
-}

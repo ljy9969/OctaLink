@@ -69,6 +69,14 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == uid;
     }
 
+    /**
+     * AI 보강 루틴 (Phase 1 베타) 접근 화이트리스트 — CREATOR + 명시된 uid.
+     * 클라이언트 [AiRoutineAccess.kt] / Cloud Function [AI_ROUTINE_BETA_UIDS] 와 동일하게 유지.
+     */
+    function canUseAiRoutine() {
+      return isCreator() || request.auth.uid == 'kakao:4892939648';
+    }
+
     /** 본인 프로필 수정 시 변경 허용 필드만 (role/status/id/createdAt/joinDate 보호) */
     function memberSelfEditableOnly() {
       return request.resource.data.diff(resource.data).affectedKeys()
@@ -219,13 +227,15 @@ service cloud.firestore {
       // 사용량 모니터링 + 추천 품질 검증 끝나면 isSelf/isStaff 로 완화 예정.
       // ─────────────────────────────────────
       match /weeklyRoutines/{weekId} {
-        allow read: if isCreator();
+        // 베타 화이트리스트 (CREATOR + 명시 uid) 중 본인 doc 만 read.
+        // CREATOR 는 운영자라 다른 회원 doc 도 read 허용.
+        allow read: if isCreator() || (canUseAiRoutine() && isSelf(uid));
 
         // create/delete 는 클라이언트 차단 (Cloud Function admin 만).
         allow create, delete: if false;
 
-        // 드릴 단위 done/skipped 토글도 CREATOR 본인만.
-        allow update: if isCreator()
+        // 드릴 단위 done/skipped 토글 — 베타 화이트리스트 본인만.
+        allow update: if canUseAiRoutine()
           && isSelf(uid)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['days']);
       }

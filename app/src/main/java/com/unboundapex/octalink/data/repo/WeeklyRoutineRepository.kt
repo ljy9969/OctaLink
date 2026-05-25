@@ -17,8 +17,11 @@ interface WeeklyRoutineRepository {
     /**
      * Cloud Function `generateWeeklyRoutine` 호출 — 캐시가 있으면 그대로,
      * `force = true` 면 재생성. Firestore 에 결과 저장 → observe 가 후속 갱신.
+     *
+     * [difficulty] : "BEGINNER" / "INTERMEDIATE" / "ADVANCED" — Gemini 가 드릴 강도/복잡도를
+     * 사용자 선택에 맞춰 조정. UI 에서 매번 선택받음.
      */
-    suspend fun generate(memberId: String, force: Boolean = false)
+    suspend fun generate(memberId: String, difficulty: String, force: Boolean = false)
 
     /** 드릴 done/skipped 상태 토글 — Phase 2 피드백 루프용. */
     suspend fun setDrillState(
