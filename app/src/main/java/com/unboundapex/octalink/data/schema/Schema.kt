@@ -397,6 +397,8 @@ data class WeeklyRoutineDoc(
     val days: List<RoutineDay>,
     /** 회원이 한 주 끝나고 입력하는 텍스트 (선택). */
     val weeklyFeedback: String = "",
+    /** 생성 시점 사용자 선택 난이도 — "BEGINNER" / "INTERMEDIATE" / "ADVANCED". 옛 doc 호환 위해 nullable. */
+    val difficulty: String? = null,
 )
 
 /**

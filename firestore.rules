@@ -70,7 +70,7 @@ service cloud.firestore {
     }
 
     /**
-     * AI 보강 루틴 (Phase 1 베타) 접근 화이트리스트 — CREATOR + 명시된 uid.
+     * AI 코치의 맞춤 루틴 (Phase 1 베타) 접근 화이트리스트 — CREATOR + 명시된 uid.
      * 클라이언트 [AiRoutineAccess.kt] / Cloud Function [AI_ROUTINE_BETA_UIDS] 와 동일하게 유지.
      */
     function canUseAiRoutine() {
@@ -151,22 +151,22 @@ service cloud.firestore {
         // 본인 / 운영진은 자신 / 모든 회원의 출결 검토 가능 (read 권한 동일)
         allow read: if isApproved();
 
-        // TODO(attendance-lockdown): 베타 APK 전원 업데이트 후 락다운 rules 로 교체
-        //   (Cloud Function recordAttendance/cancelAttendance 만 통과). 임시로 기존 규칙 유지.
+        // **백도어 차단 락다운 (2026-05-26 적용)** — 본인 체크인/취소는 Cloud Function
+        // (`recordAttendance` / `cancelAttendance`) 만 가능. 클라이언트 직접 write 모두 거부.
+        //
+        // Function 이 서버 시각으로 **체크인 윈도우 [수업 시작 -30분, 수업 시작 +10분]** 검증 +
+        // role MASTER 차단 + APPROVED 상태 확인 후 admin SDK 로 doc 처리.
+        //
+        // 운영진(verified 토글, 다른 회원 정정/삭제) 만 클라이언트 write 잔존.
+        allow create: if false;
 
-        // create: 본인만 자기 체크인 (memberId 위조 방지).
-        // 관장(MASTER) 은 영업일 상시 운영 — 출석 체크인 불가 (UI 도 비활성).
-        allow create: if isSelf(uid)
-          && request.resource.data.memberId == uid
-          && memberDoc().role != 'MASTER';
+        // update: 운영진 verified 토글 only (본인 재체크인은 Function 으로).
+        // memberId 변경 차단 (운영진도 다른 회원 doc 의 memberId 위조 불가).
+        allow update: if isStaff()
+          && request.resource.data.memberId == resource.data.memberId;
 
-        // update: 본인 재체크인(checkInAt 갱신) + 운영진의 verified 토글.
-        // 운영진이 memberId 변경하지 못하도록 resource.data.memberId 일치 강제.
-        allow update: if (isSelf(uid) && request.resource.data.memberId == uid)
-          || (isStaff() && request.resource.data.memberId == resource.data.memberId);
-
-        // delete: 본인이 자기 체크인 취소 + 운영진은 다른 회원 출결 정정/삭제
-        allow delete: if isSelf(uid) || isStaff();
+        // delete: 운영진만 (본인 취소는 cancelAttendance Function 으로).
+        allow delete: if isStaff();
       }
 
       // ─────────────────────────────────────

@@ -329,7 +329,7 @@ fun HomeScreen(
                     }
                 }
             }
-            // AI 보강 루틴 — Phase 1 베타 화이트리스트 (CREATOR + AI_ROUTINE_BETA_UIDS) 만 노출.
+            // AI 코치의 맞춤 루틴 — Phase 1 베타 화이트리스트 (CREATOR + AI_ROUTINE_BETA_UIDS) 만 노출.
             if (session.canUseAiRoutine()) {
                 item { AiRoutineCard(doc = aiRoutine, onClick = onOpenAiRoutine) }
             }
@@ -369,7 +369,7 @@ private fun AiRoutineCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "🧠 AI 보강 루틴",
+                "🧠 AI 코치의 맞춤 루틴",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
@@ -389,7 +389,7 @@ private fun AiRoutineCard(
         }
         if (doc == null) {
             Text(
-                "이번 주 부족한 부분을 채워줄 AI 루틴을 받아보세요.\n수업과 병행 가능한 30분 이내의 짧은 드릴",
+                "부족한 부분을 채워줄 AI 코치의 이번 주 맞춤형 루틴을 추천 받아보세요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -407,7 +407,7 @@ private fun AiRoutineCard(
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                "총 ${totalDrills}개 드릴 · 일별 평균 ${avgPerDay}분",
+                "총 ${totalDrills}개 드릴 · 일일 평균 ${avgPerDay}분",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

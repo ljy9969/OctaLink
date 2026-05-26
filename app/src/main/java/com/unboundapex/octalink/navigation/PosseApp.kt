@@ -88,7 +88,7 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object CoachComment : Route("coach_comment", "코멘트", Icons.Outlined.ManageAccounts)
     data object SkillScorePropose : Route("skill_score_propose", "스킬 제안", Icons.Outlined.ManageAccounts)
     data object MyAttendance : Route("my_attendance", "내 출석", Icons.Outlined.CheckCircle)
-    data object AiRoutine : Route("ai_routine", "AI 보강 루틴", Icons.Outlined.CheckCircle)
+    data object AiRoutine : Route("ai_routine", "AI 코치의 맞춤 루틴", Icons.Outlined.CheckCircle)
     data object TournamentHistory : Route("tournament_history", "토너먼트 히스토리", Icons.Outlined.CheckCircle)
     /** 히스토리에서 특정 토너먼트 read-only 진입 — path arg 로 tournamentId 전달. */
     data object BracketView : Route("bracket_view/{tournamentId}", "대진표 보기", Icons.Outlined.CheckCircle) {

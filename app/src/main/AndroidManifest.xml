@@ -19,11 +19,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.OctaLink">
 
-        <!-- AdMob 앱 ID. 실제 배포 시 user 의 admob.google.com 앱 ID 로 교체.
-             현재는 Google 공식 테스트 앱 ID (Android) 사용 — 실제 광고 비노출, 정책 위반 없음. -->
+        <!-- AdMob 앱 ID (OctaLink 운영 계정, admob.google.com 발급).
+             베타 단계엔 BuildConfig.BANNER_AD_UNIT_ID 는 여전히 테스트 ID 사용 —
+             자기 광고 클릭 정책 위반 회피 + Play Store 미공개 상태에서 fill 제한 우회. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-6425033183875029~9928178677" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

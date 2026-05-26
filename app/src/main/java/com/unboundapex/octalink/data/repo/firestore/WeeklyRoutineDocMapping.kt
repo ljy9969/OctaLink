@@ -55,5 +55,6 @@ fun DocumentSnapshot.toWeeklyRoutineDoc(): WeeklyRoutineDoc? {
         referencedCommentIds = refIds,
         days = days,
         weeklyFeedback = feedback,
+        difficulty = getString("difficulty"),
     )
 }

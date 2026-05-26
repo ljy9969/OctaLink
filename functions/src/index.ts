@@ -1050,7 +1050,7 @@ export const cancelAttendance = onCall(
 // =============================================================================
 
 /**
- * AI 보강 루틴 베타 화이트리스트 — CREATOR 외 추가 허용된 회원 uid 셋.
+ * AI 코치의 맞춤 루틴 베타 화이트리스트 — CREATOR 외 추가 허용된 회원 uid 셋.
  * 클라이언트 [AiRoutineAccess.kt] 와 Firestore rules `weeklyRoutines` 블록과 동일하게 유지.
  */
 const AI_ROUTINE_BETA_UIDS = new Set<string>([
@@ -1121,14 +1121,15 @@ async function searchYouTubeTopVideoId(query: string, apiKey: string): Promise<s
   const q = query.trim();
   if (!q || !apiKey) return null;
   try {
+    // videoEmbeddable=true / safeSearch=strict 은 MMA / 격투기 영상 다수 거름.
+    // Phase 1 은 watch URL 외부 진입(앱 임베드 X)이라 embeddable 필터 불필요. safeSearch=moderate 로 완화.
     const url = "https://www.googleapis.com/youtube/v3/search?" +
       new URLSearchParams({
         part: "snippet",
         q,
         type: "video",
         maxResults: "1",
-        videoEmbeddable: "true",
-        safeSearch: "strict",
+        safeSearch: "moderate",
         relevanceLanguage: "en",
         key: apiKey,
       }).toString();
@@ -1138,7 +1139,9 @@ async function searchYouTubeTopVideoId(query: string, apiKey: string): Promise<s
       return null;
     }
     const body = (await res.json()) as { items?: Array<{ id?: { videoId?: string } }> };
-    return body.items?.[0]?.id?.videoId ?? null;
+    const id = body.items?.[0]?.id?.videoId ?? null;
+    if (!id) logger.warn("[youtube] no results", { q });
+    return id;
   } catch (e) {
     logger.error("[youtube] search threw", { q, err: String(e) });
     return null;
@@ -1178,7 +1181,7 @@ function parseLlmRoutine(text: string): LlmRoutine | null {
 }
 
 /**
- * 회원의 이번 주 AI 보강 루틴 생성/조회.
+ * 회원의 이번 주 AI 코치의 맞춤 루틴 생성/조회.
  *
  * - 요청 본인 또는 회원 본인 uid 매칭. 운영진(MASTER/CREATOR/COACH)도 호출 가능 — 다른 회원 trigger.
  * - 같은 weekId 의 문서가 이미 있으면 force 가 true 가 아닌 한 캐시 반환.
@@ -1318,6 +1321,7 @@ export const generateWeeklyRoutine = onCall(
       referencedCommentIds: recentComments.map((c) => c.id),
       days: enrichedDays,
       weeklyFeedback: llm.weeklyFeedback ?? "",
+      difficulty, // 사용자 선택 난이도 — UI 에 칩으로 표시 ("BEGINNER" / "INTERMEDIATE" / "ADVANCED")
     };
     await docRef.set(doc);
     logger.info("[generateWeeklyRoutine] saved", { weekId, days: enrichedDays.length });
@@ -1372,7 +1376,8 @@ function buildRoutinePrompt(args: PromptArgs): string {
   const difficultyLine = DIFFICULTY_LABEL_KO[difficulty] ?? difficulty;
 
   return `당신은 종합격투기(MMA) 도장의 보조 코치입니다. 회원의 6축 스킬 점수와 관장의 한 줄 코멘트를 보고
-이번 주 보강용 개인 루틴(요일별 짧은 드릴 1~3개, 일별 총 30분 이내)을 제안합니다.
+**회원이 도장에서 혼자 연습할 수 있는** 보강용 개인 루틴(요일별 정확히 2개 드릴, 일별 총 20분 이내)을 제안합니다.
+파트너 / 코치가 필요한 드릴은 절대 금지. 단, 도장 비치 기구는 활용 가능.
 
 # 회원 컨텍스트
 - 성별: ${genderLine}
@@ -1389,18 +1394,22 @@ ${commentBlock}
 
 # 작성 규칙
 1. days 는 **최대 3개**. 보강 효과가 큰 요일만 골라줘 (예: "월", "수", "금"). 나머지 요일은 도장 수업/휴식 가정이라 응답에 넣지 말 것.
-2. 각 day.drills 는 1~3개. day 총 durationMin 합이 30 이하.
+2. 각 day.drills 는 **정확히 2개**. day 총 durationMin 합이 **20 이하** (한 드릴당 평균 10분).
 3. 우선 보강 축에 60% 이상 시간 배정.
 4. **사용자 선택 난이도 (${difficulty}) 에 맞춰 드릴 강도/세트수/복잡도 조정.** 초급은 단일 동작 반복, 중급은 2~3동작 콤비, 고급은 카운터/체이닝 시퀀스.
 5. 성별이 명시되어 있으면 (남성/여성) 체급 + 성별 평균 신체 조건을 가볍게 반영 — 무리한 부하 금지.
 6. **드릴은 MMA 종목 위주로 선택.** 복싱 / 킥복싱 / 무에타이 / 주짓수 (BJJ) / 레슬링 / 그래플링 기본기 + 격투기 컨디셔닝.
    체력 보강이 필요한 경우만 보조적으로 일반 컨디셔닝(버피, 점프 로프 등) 사용. 일반 헬스 동작은 지양.
-7. youtubeQuery 는 영문 검색어 — 실제 YouTube 에서 시연 영상이 검색되는 표현을 사용.
-   - 좋은 예: "muay thai teep technique", "bjj shrimp drill", "boxing jab cross slip drill", "wrestling sprawl drill", "kickboxing roundhouse drill"
-   - 피할 표현: 너무 일반적인 "exercise", "training" 단어 또는 한국어 / 한자.
-8. targetAxis 는 정확히 다음 중 하나: ${AXIS_FIELDS.join(", ")}
-9. desc 는 한국어 1~2문장. sets 는 "12회 × 3세트" 또는 "3분 × 2라운드" 등 간결한 한국어.
-10. weeklyFeedback 은 코치 톤의 한국어 2~3문장 — 왜 이런 구성인지 + 관장 코멘트와 연결.
+7. **회원이 도장에서 혼자 연습 가능한 솔로 드릴만 추천.**
+   - ✅ OK 동작 유형: 셰도우 복싱·킥복싱 / 솔로 BJJ 무브 (새우 빼기·브릿지·그랜비 롤·테크니컬 스탠드업) / 스프롤 / 풋워크 / 셰도우 콤비네이션 / 맨몸 컨디셔닝 (버피·점프 스쿼트·플랭크·푸시업·런지).
+   - ✅ OK 도장 비치 기구 (이 5종만): **덤벨 / 케틀벨 / 바벨 / TRX / 로잉 머신**. + 미러·매트는 기본.
+   - ❌ NO: 파트너 필요 (스파링·미트 홀딩·테이크다운·서브미션 응용) / **헤비백 / 점프로프 / 케이블 머신·스미스 머신·레그 프레스·메디신볼·배틀로프 등 도장에 없는 장비** / 코치 큐잉 필요한 고급 기술.
+8. youtubeQuery 는 영문 검색어 — 실제 YouTube 에서 시연 영상이 검색되는 표현을 사용.
+   - 좋은 예: "muay thai teep technique solo", "bjj shrimp drill solo", "boxing shadow boxing jab cross slip drill", "wrestling sprawl drill solo", "kettlebell swing tutorial", "trx row form".
+   - 피할 표현: 너무 일반적인 "exercise", "training" 단어 / 한국어 / 한자 / 도장에 없는 장비명 (heavy bag, jump rope, cable, smith machine 등).
+9. targetAxis 는 정확히 다음 중 하나: ${AXIS_FIELDS.join(", ")}
+10. desc 는 한국어 1~2문장. sets 는 "12회 × 3세트" 또는 "3분 × 2라운드" 등 간결한 한국어.
+11. weeklyFeedback 은 코치 톤의 한국어 2~3문장 — 왜 이런 구성인지 + 관장 코멘트와 연결.
 
 # 출력 형식 (반드시 JSON, 다른 텍스트 금지)
 {

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,6 +45,7 @@ import com.unboundapex.octalink.ui.components.HexagonSkillChart
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.components.SkillStat
+import com.unboundapex.octalink.ui.components.TagChip
 import com.unboundapex.octalink.ui.screens.home.axisLabelKo
 
 /**
@@ -69,7 +69,7 @@ fun WeeklyRoutineScreen(
     // Phase 1 베타 비용 통제 — 화이트리스트 (CREATOR + AI_ROUTINE_BETA_UIDS) 외엔 진입 차단.
     // 서버 onCall + Firestore rules 도 동일 게이트.
     if (!session.canUseAiRoutine()) {
-        PosseScreen(subtitle = "AI 보강 루틴") {
+        PosseScreen(subtitle = "AI 코치의 맞춤 루틴") {
             PosseCard {
                 Text(
                     "이 기능은 베타 검증 중이라 아직 일반 공개 전이에요.",
@@ -94,7 +94,7 @@ fun WeeklyRoutineScreen(
     // 비용 정책: 한 주에 1회만 생성. 일단 doc 이 만들어지면 그 주 동안 재요청 불가
     // (Vertex AI + YouTube Data API quota 보호). 다음 주가 되면 weekId 가 바뀌어 새 doc 생성 가능.
     PosseScreen(
-        subtitle = "AI 보강 루틴",
+        subtitle = "AI 코치의 맞춤 루틴",
         subtitleEmphasis = listOf("AI"),
     ) {
         LazyColumn(
@@ -103,11 +103,13 @@ fun WeeklyRoutineScreen(
         ) {
             item {
                 PosseCard {
+                    // 1:1 aspect ratio 면 폰 폭만큼 세로가 잡혀 EmptyRoutineCard 가 화면 밖으로 밀림.
+                    // 240dp 고정으로 줄여 → 빈 루틴 상태가 한 화면에 다 들어옴. 생성 후 화면에서도 동일.
                     HexagonSkillChart(
                         skills = skills,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
+                            .height(240.dp),
                     )
                     val focus = routine?.focusSkills.orEmpty()
                     if (focus.isNotEmpty()) {
@@ -115,6 +117,7 @@ fun WeeklyRoutineScreen(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
                                 "이번 주 부족한 부분:",
@@ -122,8 +125,24 @@ fun WeeklyRoutineScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             focus.forEach { axis ->
-                                FocusChip(axisLabelKo(axis))
+                                TagChip(axisLabelKo(axis))
                             }
+                        }
+                    }
+                    val difficultyKo = routine?.difficulty?.let { difficultyLabelKo(it) }
+                    if (difficultyKo != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "내 난이도:",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TagChip(difficultyKo)
                         }
                     }
                     val feedback = routine?.weeklyFeedback.orEmpty()
@@ -168,39 +187,44 @@ fun WeeklyRoutineScreen(
     }
 }
 
-@Composable
-private fun FocusChip(label: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
+/** 난이도 enum → 한국어 표시명 (UI 칩 + tagColor 키). */
+internal fun difficultyLabelKo(value: String): String = when (value) {
+    DIFFICULTY_BEGINNER -> "초급"
+    DIFFICULTY_INTERMEDIATE -> "중급"
+    DIFFICULTY_ADVANCED -> "고급"
+    else -> value
 }
 
 @Composable
 private fun DayCard(day: RoutineDay) {
     val totalMin = day.drills.sumOf { it.durationMin }
+    // 그날 드릴들의 target axis 중복 제거 → 카테고리 칩 (예: 그래플링 / 기술).
+    val uniqueAxes = day.drills.map { it.targetAxis }.distinct()
     PosseCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                "${day.day} · ${day.title}",
+                day.day,
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
             )
+            uniqueAxes.forEach { axis ->
+                TagChip(axisLabelKo(axis))
+            }
+            Spacer(Modifier.weight(1f))
             Text(
                 "총 ${totalMin}분",
                 style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (day.title.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                day.title,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -333,7 +357,7 @@ private fun EmptyRoutineCard(
     var difficulty by remember { mutableStateOf(DIFFICULTY_INTERMEDIATE) }
     PosseCard {
         Text(
-            "이번 주 AI 보강 루틴이 아직 없어요.",
+            "이번 주 AI 코치의 맞춤 루틴이 아직 없어요.",
             style = MaterialTheme.typography.titleMedium,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
@@ -341,7 +365,7 @@ private fun EmptyRoutineCard(
         Spacer(Modifier.height(8.dp))
         Text(
             // 폰 화면 폭에 맞춰 자연스럽게 wrap 되도록 강제 줄바꿈(\n) 제거.
-            "난이도를 고른 뒤 버튼을 눌러주세요.\n\n부족한 스킬과 한 줄 코멘트를 보고 30분 이내의\n짧은 드릴을 만들어드립니다.\n\n(일주일에 1회만 생성 가능)",
+            "난이도를 고른 뒤 버튼을 눌러주세요.\n\n부족한 스킬과 한 줄 코멘트를 보고 20분 이내의\n짧은 드릴을 만들어드립니다.\n\n(일주일에 1회만 생성 가능)",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
