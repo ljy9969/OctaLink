@@ -1,0 +1,128 @@
+# OctaLink 비공개 베타 홍보 영상 시나리오 (~60초)
+#
+# Target device: RFCW41APZ1X (실 폰, 운영진 6 탭 레이아웃)
+#
+# 흐름: 홈 → 대진표 → 홈 → AI 루틴 → 커리큘럼 → 출석 → 커뮤니티 → 프로필 (엔딩)
+#
+# 전제:
+#   - 카카오 로그인 + AI 화이트리스트 (kakao:4892939648)
+#   - 출석 윈도우 임시 bypass (서버 + 클라이언트)
+#   - AI 루틴 doc 사전 삭제 / 출석 today doc 삭제
+#   - 토너먼트 추첨 + 챔피언 선택 사전 완료 (BracketScreen 에 완성 트리 노출)
+#
+# 폰 6 탭 좌표: Home 8% / Curriculum 25% / Attendance 42% / Community 58% / Profile 75% / Admin 92%, y=95%.
+#
+appId: com.unboundapex.octalink
+---
+# [0] 앱 진입 + 홈 강제
+- launchApp:
+    clearState: false
+- waitForAnimationToEnd:
+    timeout: 1500
+- tapOn:
+    point: 8%, 95%
+- waitForAnimationToEnd:
+    timeout: 3500
+
+# [1] 홈 한눈에 (2s)
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# [2] 살짝 스크롤 — 오늘 커리큘럼/스파링/코멘트 노출 (2s)
+- swipe:
+    direction: UP
+    duration: 700
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# [3] 위로 복원 (1.5s)
+- swipe:
+    direction: DOWN
+    duration: 600
+- waitForAnimationToEnd:
+    timeout: 1500
+
+# [4] "이번 주 대진표" 카드 탭 → BracketScreen (이미 추첨된 트리 + 챔피언)
+- tapOn:
+    point: 81%, 41%
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# [5] 대진표 트리 (3s)
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# [6] 챔피언 카드 스크롤 (3s)
+- swipe:
+    direction: UP
+    duration: 800
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# [7] 뒤로 → 홈
+- pressKey: Back
+- waitForAnimationToEnd:
+    timeout: 1500
+
+# [8] AI 코치의 맞춤 루틴 카드 탭 → EmptyRoutineCard
+- tapOn: ".*AI 코치의 맞춤 루틴.*"
+- waitForAnimationToEnd:
+    timeout: 2500
+
+# [9] "이번 주 루틴 받기" → 생성 ~10s (Gemini + YouTube 검색)
+- tapOn: "이번 주 루틴 받기"
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# [10] 결과 — 헥사곤 + 칩 + 코치 피드백 (3s)
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# [11] 요일별 드릴 + 썸네일 스크롤 (3s)
+- swipe:
+    direction: UP
+    duration: 900
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# [12] 커리큘럼 탭 — 평일 5일 그룹 수업 표시 (4s)
+- tapOn:
+    point: 25%, 95%
+- waitForAnimationToEnd:
+    timeout: 2500
+- swipe:
+    direction: UP
+    duration: 700
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# [13] 출석 탭 → 체크인 (3.5s)
+- tapOn:
+    point: 42%, 95%
+- waitForAnimationToEnd:
+    timeout: 2000
+- tapOn: "체크인( 취소)?"
+- waitForAnimationToEnd:
+    timeout: 2500
+
+# [14] 커뮤니티 탭 → 스크롤 (3.5s)
+- tapOn:
+    point: 58%, 95%
+- waitForAnimationToEnd:
+    timeout: 2000
+- swipe:
+    direction: UP
+    duration: 800
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# [15] 프로필 탭 → 헥사곤 + 코멘트 + 전적 스크롤 (엔딩, 4s)
+- tapOn:
+    point: 75%, 95%
+- waitForAnimationToEnd:
+    timeout: 2500
+- swipe:
+    direction: UP
+    duration: 800
+- waitForAnimationToEnd:
+    timeout: 3000

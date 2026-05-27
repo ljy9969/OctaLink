@@ -78,9 +78,18 @@ class TournamentViewModel : ViewModel() {
         }
     }
 
-    /** 자동 active 선택 규칙 — finishedAt == null 인 가장 최신 토너먼트. 없으면 null. */
-    private fun pickActive(tournaments: List<TournamentDoc>): String? =
-        tournaments.firstOrNull { it.finishedAt == null }?.id
+    /**
+     * 자동 active 선택 규칙.
+     *  1) 진행중(finishedAt == null) 토너먼트가 있으면 그게 active.
+     *  2) 없으면 가장 최근 완료된 토너먼트 (히스토리에 남아있어도 챔피언 카드 / 트리 노출 — 다음 추첨 전까지).
+     *  3) 토너먼트 자체가 없으면 null → EmptyState.
+     *
+     * observeAll 정렬은 drawAt DESC 가정 — firstOrNull 이 곧 최신.
+     */
+    private fun pickActive(tournaments: List<TournamentDoc>): String? {
+        tournaments.firstOrNull { it.finishedAt == null }?.let { return it.id }
+        return tournaments.firstOrNull()?.id
+    }
 
     /**
      * 매치 결과 기록 시 `resolvedByMasterId` 로 들어갈 작성자 uid. UI 가 세션에서 받아 주입.

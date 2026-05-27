@@ -110,8 +110,8 @@ gradlew :app:bundleRelease      :: AAB (Play Console 업로드용)
 PC 한 화면에서 USB 디버깅 폰과 에뮬레이터를 나란히 띄워 비교 검증할 때. PowerShell 한 창에서 두 device 를 백그라운드 프로세스로 띄움:
 
 ```powershell
-Start-Process scrcpy -ArgumentList '-s','emulator-5554','--window-title=Emulator','-m','1080','-K'
-Start-Process scrcpy -ArgumentList '-s','RFCW41APZ1X','--window-title=Phone','--no-audio','--turn-screen-off','-m','1080','-K'
+Start-Process scrcpy -ArgumentList '-s','emulator-5554','--window-title=Emulator','-m','1080','-K' -WindowStyle Hidden
+Start-Process scrcpy -ArgumentList '-s','RFCW41APZ1X','--window-title=Phone','--no-audio','--turn-screen-off','-m','1080','-K' -WindowStyle Hidden
 ```
 
 - `-s <serial>` : `adb devices` 출력의 serial. 에뮬은 보통 `emulator-5554`, 실 단말은 디바이스별 (예: Samsung `RFCW41APZ1X`).
@@ -119,6 +119,7 @@ Start-Process scrcpy -ArgumentList '-s','RFCW41APZ1X','--window-title=Phone','--
 - `-K` : 키보드 입력 전달 (한글 IME / 비밀번호 입력)
 - `--turn-screen-off` : 폰 화면 끄고 PC 미러링만 (배터리/발열↓)
 - `--no-audio` : 오디오 포워딩 끔 (지연 줄임)
+- `-WindowStyle Hidden` (PowerShell) : 호스트 콘솔 창 숨김. scrcpy 의 GUI 미러 창은 그대로 뜸. 오류 로그 보고 싶으면 `-RedirectStandardError "$env:TEMP\scrcpy.err"` 추가.
 - local.properties에 keystore 4개 키가 다 차 있으면 release 빌드가 자동 서명, 비어 있으면 unsigned debug-only 동작
 
 ## 폴더 구조
@@ -396,6 +397,9 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **한 주 1회 생성 정책 (비용 통제)**: doc 생성 후 그 주 동안 재요청 불가. 난이도 셀렉터 + `force=true` 재생성 경로 모두 제거. 다음 주 weekId 바뀌면 자동으로 EmptyRoutineCard 재노출.
   - **권한 게이트 (베타 화이트리스트)**: CREATOR + `AI_ROUTINE_BETA_UIDS` (현재 `kakao:4892939648` 1명) 만 통과. 3 곳 동일하게 유지 — 클라이언트 `data/AiRoutineAccess.kt` / 서버 `AI_ROUTINE_BETA_UIDS` / Firestore rules `canUseAiRoutine()`.
   - **사용자 부담 최소화**: 했음/건너뜀 토글 UI 에서 제거 (Phase 2 가중치 루프 깔리기 전에 사용자에게 "다 해야 한다" 부담만 주는 상태 회피). 백엔드 필드/Repository/Rules 는 보존.
+- [x] (05-27) `bugfix` **토너먼트 — 완료된 대진표 자동 사라지던 이슈 fix** — `TournamentViewModel.pickActive()` 가 `finishedAt == null` (미완료) 만 active 로 선택해서, 챔피언 선정 완료 직후 BracketScreen 재진입 시 자동으로 EmptyState 로 떨어지던 문제. 미완료 우선 → 없으면 가장 최근 완료된 토너먼트 fallback 으로 변경 → 다음 추첨 전까지 트리 + 챔피언 카드 유지.
+- [x] (05-27) `bugfix` **출석 동료 카드 아바타 — 가입 당시 stored avatarId 대신 현재 gender+weightClass 동적 도출** — `AttendanceScreen` 만 `peer.member.avatarId` 직접 사용해서 가입 후 성별/체급 변경한 회원도 옛 캐릭터로 노출되던 이슈. `avatarFor(gender, weightClass)` 로 홈/프로필 화면과 동일하게 통일.
+- [x] (05-27) `dev tools` **scrcpy `-WindowStyle Hidden` 옵션 + Maestro promo 시나리오 (`scripts/promo.yaml` + `scripts/record-promo.sh`)** — scrcpy 백그라운드 실행 시 호스트 콘솔 창 숨김. 베타 홍보 영상 자동화용 Maestro 시나리오는 8 화면 (홈 / 대진표 / AI 루틴 생성 / 커리큘럼 / 출석 / 커뮤니티 / 프로필) 순회 + `adb screenrecord` 동시 녹화 스크립트. 폰 6 탭 좌표 / 한국어 selector wildcard / UTF-8 JVM options 다 검증 끝.
 
 ### 남은 일
 

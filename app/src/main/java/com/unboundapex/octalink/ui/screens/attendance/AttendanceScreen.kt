@@ -26,7 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.data.CheckInWindow
-import com.unboundapex.octalink.data.avatarById
+import com.unboundapex.octalink.data.avatarFor
 import com.unboundapex.octalink.data.checkInWindow
 import com.unboundapex.octalink.data.schema.Role
 import com.unboundapex.octalink.data.schema.isStaff
@@ -210,8 +210,10 @@ fun AttendanceScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // stored avatarId 가 옛 값(가입 당시) 일 수 있어 매번 gender+weightClass 로
+                                // 동적 도출. 홈/프로필 화면과 동일한 패턴.
                                 AvatarTile(
-                                    avatar = avatarById(peer.member.avatarId),
+                                    avatar = avatarFor(peer.member.gender, peer.member.weightClass),
                                     size = 40.dp,
                                 )
                                 Spacer(Modifier.width(10.dp))
