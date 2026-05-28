@@ -437,3 +437,71 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **베타 권장**: Phase 1 + 3 만 (3~4일) + `BuildConfig.SHOW_ADS` flag — 회원 50명 미만일 땐 광고 비활성. 50명 넘으면 토글 ON.
   - **수익 추정**: 베타 12명 ~$3~5/월 / 정식 100명 ~$30~50/월 / 500명 ~$150~250/월 (배너 + 네이티브 풀 시 1.5~2배).
 - [ ] `UX` **체크인 위치 검증** *(난이도 3, ~반나절, 옵션)* — GPS 체육관 반경 검증. `AttendanceDoc` 에 `checkInLat/Lng` 필드는 이미 정의됨. `ACCESS_FINE_LOCATION` 권한 + FusedLocationProvider + 거리 계산. 시간 30분 윈도우(05-08)는 이미 적용. 운영자가 ON/OFF 토글 가능하게 설계 권장
+
+## iOS 버전 전환 WBS
+
+> ⚠️ **먼저 짚을 점 — 이 WBS 는 "iOS 실사용자 확보" 용이지, 지금 Play Console 비공개 테스트 12명 게이트를 푸는 수단이 아님.**
+> Google Play 의 "비공개 테스터 12명 × 14일" 요건은 **Android 트랙 전용** 기준이라 iOS(TestFlight) 테스터는 카운트에 안 잡힌다. 5/12 를 채우려면 **안드로이드 테스터를 더 모집**하는 게 정답이고, iOS 는 별도 App Store 트랙으로 병행하는 중장기 과제다. (아래 견적은 그 중장기 과제 기준이며, 백엔드 — Cloud Functions / Firestore / rules / 데이터 모델 — 는 100% 재사용하고 **클라이언트만** 다시 만든다.)
+
+### 전략 — Native SwiftUI 권장
+
+| 접근 | 재사용 | 리스크 | Claude 작업 견적 |
+|---|---|---|---|
+| **A. Native SwiftUI (권장)** | 백엔드 100%. 클라이언트 UI·데이터레이어는 재작성 | **낮음** — Firebase / Kakao / AdMob / 영상 / 푸시 / 차트 6개 핵심 의존성이 전부 1급 native iOS SDK 존재 | **활성 작업 ~25~40h → TestFlight 까지 월클럭 2~4주** (빌드 루프 + 사람 게이트 포함) |
+| B. KMP + Compose Multiplatform | 백엔드 100% + 도메인 / Repository / 일부 UI 로직 (~40~50%) | **높음** — Firebase / Kakao / AdMob / Media3 가 KMP 미지원 → expect/actual native 브리지 필요 + 기존 앱을 멀티플랫폼 구조로 리팩터 | 활성 작업은 A 와 비슷하나 브리지 디버깅 변동성 큼 (월클럭 예측 어려움) |
+
+→ **A 권장.** iOS 사용자 대상 정식 품질이 목표이고, 가장 리스크 큰 의존성(카카오 로그인 · AdMob · 영상 720p 재인코딩)이 native 에서 검증된 경로라 변동성이 작다. KMP 는 Compose 자산 재사용 매력이 크지만, 정작 핵심 6개 SDK 가 전부 브리지 대상이라 절감분이 리스크에 잠식될 수 있다.
+
+> 🖥️ **전제 — iOS 빌드는 macOS + Xcode 가 필수.** 지금 작업 머신은 Windows 라 Claude 는 iOS 앱을 **컴파일·실행·화면 검증할 수 없다.** "완료"에 도달하려면 둘 중 하나가 있어야 한다: (a) **Mac + Xcode** — 운영자가 빌드/시뮬레이터 실행, Claude 는 코드 ↔ 빌드오류 핑퐁, 또는 (b) **macOS CI** (GitHub Actions macOS runner / Xcode Cloud) — Claude 가 push → CI 빌드 로그로 이터레이트. 이게 없으면 산출물은 **미검증 Swift 스캐폴딩**까지이고 빌드·UI 검증은 불가.
+
+> 📐 **"Claude 기준" 견적의 의미.** 사람 견적(man-day)은 타이핑+설계 시간이 병목이지만, Claude 기준 병목은 **(1) 빌드-수정 루프 지연, (2) Claude 가 못 하는 사람 전용 게이트, (3) 시뮬레이터/실기기 UI 검증을 운영자가 돌려주는 턴어라운드** 다. 코드 생산 자체는 기존 Compose/Kotlin 소스를 1:1 레퍼런스로 두고 기계적으로 옮기는 작업이라 사람 대비 크게 단축된다 — 그래서 아래는 사람·일이 아니라 **Claude 활성 작업 시간(h)** + **월클럭을 지배하는 비코딩 요인**으로 표기.
+
+### Phase 0 — 사전 셋업 *(Claude 활성 ~1h / 월클럭은 거의 전부 사람 게이트)*
+> Apple enrollment · 인증서 · 카카오 콘솔 · APNs 키 업로드는 전부 운영자 클릭. Claude 는 `Info.plist` / URL scheme / plist 배치 + 절차 가이드만. 월클럭은 Apple 가입 처리(수 시간~1일)가 좌우.
+- [ ] Apple Developer Program 가입 ($99/년) + 인증서 / App ID / 프로비저닝 프로파일
+- [ ] Firebase Console 에 iOS 앱 등록 → `GoogleService-Info.plist` + **APNs 인증 키(.p8)** 발급·업로드 (FCM↔APNs 연결)
+- [ ] 카카오 개발자 콘솔 iOS 플랫폼 추가 (번들 ID + URL Scheme `kakao{NATIVE_APP_KEY}`)
+- [ ] 번들 ID 확정(`com.unboundapex.octalink`) + App Store Connect 앱 레코드 생성
+
+### Phase 1 — 기반 인프라 *(Claude 활성 ~3~6h)*
+- [ ] Xcode 프로젝트 + SPM 의존성 (Firebase iOS / KakaoSDK / Google-Mobile-Ads-SDK)
+- [ ] 카카오 로그인 → 기존 `kakaoSignIn` Cloud Function 호출 → `Auth.signIn(withCustomToken:)` (백엔드 그대로 재사용)
+- [ ] 세션 / Auth 상태 (`SessionState` 포팅) + 역할 게이트 (`RoleAllowlist` 동기)
+- [ ] Firestore 데이터 모델 (`Schema.kt` → Swift `Codable`) + Repository 레이어 (Member / Attendance / Tournament / Post / Routine / Skill)
+- [ ] 디자인 시스템 — 컬러 / 타이포 / TagChip 팔레트 + 다크·라이트 테마
+
+### Phase 2 — 화면 포팅 (13 기능 영역 / 39 화면) *(Claude 활성 ~12~20h; 빌드·시각검증 루프가 월클럭 지배)*
+- [ ] Splash / Onboarding / 가입 (SignupScreen — 카카오 동의 prefill + 벨트 / 체급 / 입관일)
+- [ ] Home — 대시보드 + 주간 미션 + 배너 슬롯
+- [ ] Attendance — 체크인 (`recordAttendance`/`cancelAttendance` 호출) + 동료 카드 + 내 캘린더
+- [ ] Curriculum — 정기 클래스 정의
+- [ ] Community — 글 / 댓글 / 좋아요 / 멘션 + 이미지·영상 첨부 + 전체화면 뷰어 *(heavy)*
+- [ ] Bracket — 토너먼트 대진표 + 추첨 + 챔피언 카드
+- [ ] Profile — 스킬 헥사곤 차트 + 설정 분리 + 알림 슬롯
+- [ ] Routine — AI 주간 보강 루틴 (`generateWeeklyRoutine`) + 난이도 칩 + YouTube 썸네일 + 신규 회원 자가 스킬 입력
+- [ ] Info — 정책 / 앱정보
+- [ ] Admin — 가입 승인 큐 + 스킬 검토 (PROPOSED→APPROVED) *(운영자 1인용 → 후순위 가능)*
+- [ ] Creator — 역할 부여(코치 승격) *(운영자 1인용 → 후순위 가능)*
+
+### Phase 3 — 플랫폼 통합 기능 *(Claude 활성 ~6~10h)*
+- [ ] FCM ↔ APNs 푸시 알림 + 알림 종류별 ON/OFF
+- [ ] 로컬 알림 — 수업 30분 전 리마인더 (`UNUserNotificationCenter` + `BGTaskScheduler`; WorkManager 대체)
+- [ ] 영상 — `AVPlayer` 재생 + 업로드 전 720p 재인코딩 (`AVAssetExportSession`; Media3 Transformer 대체) + Firebase Storage 업로드
+- [ ] 이미지 — `AsyncImage`/Kingfisher 로딩 + EXIF 회전 + 갤러리 저장·공유
+- [ ] AdMob 배너 (GoogleMobileAds; `SHOW_ADS` 토글 + AD_ID / ATT 대응)
+- [ ] 헥사곤 스킬 차트 커스텀 드로잉 (Swift Charts 또는 `Path`)
+
+### Phase 4 — QA / 출시 *(Claude 활성 ~2~4h; 월클럭은 실기기 QA + Apple 심사 1~3영업일 지배)*
+- [ ] 다기기·다버전 테스트 (iPhone SE ~ Pro Max, iOS 16~18)
+- [ ] App Store 개인정보 — App Privacy(영양성분표) + 개인정보처리방침 + **ATT(추적 투명성) 동의** 대응
+- [ ] 심사 노트 — 카카오 로그인 데모 계정 제공 (Apple 리뷰어 한국 로그인 막힘 대비)
+- [ ] TestFlight 베타 배포 (iOS 테스터)
+- [ ] App Store 심사 제출 + 리젝 대응 (1~2 라운드 여유)
+
+### 합계 & 일정 (Claude 기준)
+- **Claude 활성 엔지니어링: ~25~40h** (Phase 1~4 집중 세션 합; Phase 0 은 거의 사람 게이트).
+- **TestFlight 도달 월클럭: ≈ 2~4주.** 이건 Claude 손 시간이 아니라 **빌드-수정 루프 + 운영자 시각 검증 턴어라운드 + Apple 게이트**가 지배한다. 코드는 빠르게 나와도 "맞게 보이는지"는 시뮬레이터/실기기에서 운영자가 확인해 줘야 한 사이클이 닫힘.
+- **아무리 빨라도 안 줄어드는 부분**: Apple 심사(1~3영업일), 실기기 QA, Apple/카카오 콘솔·인증서 — 사람·외부 의존이라 Claude 속도와 무관.
+- **전제 미충족(맥/CI 없음) 시**: Claude 산출물은 **미검증 Swift 스캐폴딩** 까지. 빌드·실행·UI 검증 불가라 "완료" 도달 불가 — 이 경우 견적 자체가 성립 안 함.
+- **단축 레버**: (1) 백엔드 0 변경 → 인증/데이터 재사용 확실, (2) Admin/Creator(운영자 1인용) MVP 제외, (3) AdMob·영상 재인코딩 정식 출시 후로 이연. 다 쓰면 활성 **~18~28h** / 월클럭 ~1.5~3주.
+- **착수 판단**: "Play 12명 게이트 해소"가 목적이면 ❌ (Android 테스터 모집이 정답). "iOS 회원이 실제로 앱을 쓰게 한다"가 목적이면 ✅.

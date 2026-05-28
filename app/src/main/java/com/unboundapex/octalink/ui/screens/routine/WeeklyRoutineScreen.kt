@@ -445,7 +445,7 @@ private fun EmptyRoutineCard(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "아직 스킬 평가 전이라 AI 가 참고할 점수가 없어요.\n" +
+                "아직 스킬 평가 전이라 AI가 참고할 점수가 없어요.\n" +
                     "본인이 생각하는 수준을 고르면 이번 루틴에만 사용해요.\n" +
                     "(프로필 점수에는 저장되지 않아요)",
                 style = MaterialTheme.typography.bodySmall,
