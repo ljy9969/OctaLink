@@ -133,4 +133,10 @@ class InMemoryMemberRepository(
             )
         }
     }
+
+    override suspend fun clearSkills(memberId: String) {
+        _members.value = _members.value.map { m ->
+            if (m.id != memberId) m else m.copy(skills = null, updatedAt = Instant.now())
+        }
+    }
 }

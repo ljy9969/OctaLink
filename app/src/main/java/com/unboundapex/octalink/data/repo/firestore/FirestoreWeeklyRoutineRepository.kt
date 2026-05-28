@@ -46,10 +46,25 @@ class FirestoreWeeklyRoutineRepository : WeeklyRoutineRepository {
         awaitClose { sub.remove() }
     }
 
-    override suspend fun generate(memberId: String, difficulty: String, force: Boolean) {
+    override suspend fun generate(
+        memberId: String,
+        difficulty: String,
+        force: Boolean,
+        selfRatedSkills: Map<String, Float>?,
+    ) {
+        val payload = buildMap<String, Any> {
+            put("memberId", memberId)
+            put("difficulty", difficulty)
+            put("force", force)
+            // selfRatedSkills 는 회원 프로필에 저장되지 않고 이 회차 프롬프트에만 사용된다.
+            // Cloud Function 이 member.skills 미존재 시에만 채택, 존재 시 무시.
+            if (!selfRatedSkills.isNullOrEmpty()) {
+                put("selfRatedSkills", selfRatedSkills)
+            }
+        }
         functions
             .getHttpsCallable("generateWeeklyRoutine")
-            .call(mapOf("memberId" to memberId, "difficulty" to difficulty, "force" to force))
+            .call(payload)
             .await()
     }
 

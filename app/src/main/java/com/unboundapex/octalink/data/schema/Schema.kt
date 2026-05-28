@@ -93,6 +93,18 @@ data class MemberDoc(
      * 비어있으면 CLASS_REMINDER 알림 안 받음 — 기본값 (옵트인).
      */
     val classReminderSlots: List<String> = emptyList(),
+    /**
+     * AI 코치의 맞춤 루틴 베타 액세스 — Phase 1 비공개 테스트 선착순 12명만 true.
+     *
+     * `completeSignup` Cloud Function 이 신규 가입(앱 회원 doc 최초 생성) 시점에 카운트해서
+     * 자동 부여 — 현재 grants 수 < 12 일 때만 새 회원에게 true. 12 도달 후 신규 회원은 false.
+     *
+     * **선착순 기준은 [createdAt] (서버 타임스탬프) 이지 [joinDate] (도장 입관일) 가 아님.**
+     * joinDate 는 사용자 입력이라 백데이트 가능 → 분기 기준으로 부적합.
+     *
+     * CREATOR 는 이 필드와 무관하게 항상 접근 (역할 기반).
+     */
+    val aiRoutineBeta: Boolean = false,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

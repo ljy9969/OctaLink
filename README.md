@@ -104,6 +104,22 @@ gradlew :app:bundleRelease      :: AAB (Play Console 업로드용)
 
 - `*.jks`, `*.keystore`, `local.properties` 모두 gitignored — 절대 커밋 ❌
 - `.jks` 파일을 잃으면 **이 앱을 Play Store에서 업데이트 영구 불가**. 안전한 곳(비밀번호 매니저 + 외장/암호화 드라이브)에 백업 필수
+
+### scrcpy — 실 단말 + 에뮬레이터 동시 미러링
+
+PC 한 화면에서 USB 디버깅 폰과 에뮬레이터를 나란히 띄워 비교 검증할 때. PowerShell 한 창에서 두 device 를 백그라운드 프로세스로 띄움:
+
+```powershell
+Start-Process scrcpy -ArgumentList '-s','emulator-5554','--window-title=Emulator','-m','1080','-K' -WindowStyle Hidden
+Start-Process scrcpy -ArgumentList '-s','RFCW41APZ1X','--window-title=Phone','--no-audio','--turn-screen-off','-m','1080','-K' -WindowStyle Hidden
+```
+
+- `-s <serial>` : `adb devices` 출력의 serial. 에뮬은 보통 `emulator-5554`, 실 단말은 디바이스별 (예: Samsung `RFCW41APZ1X`).
+- `-m 1080` : 최대 1080px (성능 부담↓)
+- `-K` : 키보드 입력 전달 (한글 IME / 비밀번호 입력)
+- `--turn-screen-off` : 폰 화면 끄고 PC 미러링만 (배터리/발열↓)
+- `--no-audio` : 오디오 포워딩 끔 (지연 줄임)
+- `-WindowStyle Hidden` (PowerShell) : 호스트 콘솔 창 숨김. scrcpy 의 GUI 미러 창은 그대로 뜸. 오류 로그 보고 싶으면 `-RedirectStandardError "$env:TEMP\scrcpy.err"` 추가.
 - local.properties에 keystore 4개 키가 다 차 있으면 release 빌드가 자동 서명, 비어 있으면 unsigned debug-only 동작
 
 ## 폴더 구조
@@ -404,7 +420,7 @@ tools/                                        # 빌드/디자인 보조 스크�
 
 **[중요도 ★]**
 - [~] `수익화 / 광고` **AdMob 배너 + 네이티브 광고 통합** *(난이도 3, 베타 MVP 3~4일 / 풀 6.5~7.5일)* — 정식 운영 100+명 도달 시 의미있는 수익(~$30~50/월). 베타 12명 규모에선 인프라 미리 깔아두는 가치.
-  - **적용 위치 (UX 저해 적은 곳만)**: Home 하단 / Curriculum 하단 / Info 하단 = 배너 (320×50). 커뮤니티 피드 N=7글마다 1개 네이티브 인-피드 + "광고" 라벨 명시.
+  - **적용 위치 (UX 저해 적은 곳만)**: Home 하단 / Curriculum 하단 / Info 하단 = 배너 (320×50). 커뮤니티 피드 N=5글마다 1개 네이티브 인-피드 + "광고" 라벨 명시.
   - **회피 위치**: 출석 체크인 / 프로필 / 설정 / 글 작성 다이얼로그 / 알림 다이얼로그 / 미디어 전체화면 / 토너먼트 대진표 / 로그인·가입 진입 (집중 또는 신뢰 영역). Interstitial 전체 비추 — high-frequency 사용자라 churn 위험.
   - **Phase 1 배너 MVP (코드 완료, 실제 광고 단위 ID swap = Play Store 정식 출시 후)** —
     - ✅ `play-services-ads:23.6.0` 의존성, `BuildConfig.SHOW_ADS` 토글 + `BANNER_AD_UNIT_ID`.
@@ -415,7 +431,7 @@ tools/                                        # 빌드/디자인 보조 스크�
     - 🕒 **`BANNER_AD_UNIT_ID` 는 여전히 Google 공식 테스트 ID** (`ca-app-pub-3940256099942544/6300978111`). 베타 단계 자기 광고 클릭 정책 위반 회피 + Play Store 미공개 상태에서 fill 제한 우회.
     - 🕒 **Play Store 정식 출시 의존**: AdMob 광고 단위 ID 발급 자체가 "광고 게재가 제한됨, 스토어를 추가하여 한도 해제" 상태. Play Console 비공개 테스트 트랙은 검색 결과 미노출이라 AdMob "스토어 추가" 통과 불가. 프로덕션 출시 (또는 공개 테스트 트랙) → AdMob 검토 통과 → 실제 광고 단위 ID 발급 → `BuildConfig.BANNER_AD_UNIT_ID` swap.
     - 🕒 Play Console "광고 ID 사용" 선언 "아니오" → "예" 변경 (정식 출시 단계).
-  - **Phase 2 네이티브 (2일)**: 피드 index % 7 == 0 위치에 NativeAd 삽입 + "광고" 라벨 + 로딩 실패 시 자리 무시. 베타 후 100명 규모에서 활성.
+  - **Phase 2 네이티브 (2일)**: 피드 index % 5 == 0 위치에 NativeAd 삽입 + "광고" 라벨 + 로딩 실패 시 자리 무시. 베타 후 100명 규모에서 활성.
   - **Phase 3 개인정보처리방침 + 사전 고지 (1일)**: `docs/privacy-policy.html` v1.5 — 광고 ID + AdMob 데이터 수집 항목 추가 + 변경 이력 표 + 시행일. 정책상 30일 전 앱 내 공지(`PostTag.NOTICE`) 발행 후 광고 활성화.
   - **Phase 4 한국/EU 동의 다이얼로그 (1.5일)**: Google UMP SDK + 첫 실행 시 맞춤 광고 동의 dialog + 거부 시 비맞춤 광고만. 베타 종료 후 정식 출시 시점에 검토.
   - **베타 권장**: Phase 1 + 3 만 (3~4일) + `BuildConfig.SHOW_ADS` flag — 회원 50명 미만일 땐 광고 비활성. 50명 넘으면 토글 ON.

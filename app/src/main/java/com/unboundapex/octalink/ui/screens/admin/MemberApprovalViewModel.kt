@@ -78,7 +78,13 @@ class MemberApprovalViewModel : ViewModel() {
             runCatching {
                 scoresRepo.directApprove(memberId, byUserId, skills)
                 scoresRepo.rejectAllPending(memberId, byMasterId = byUserId)
-                val canonical = scoresRepo.getCanonicalApproved(memberId) ?: return@launch
+                val canonical = scoresRepo.getCanonicalApproved(memberId)
+                if (canonical == null) {
+                    // APPROVED 가 하나도 없으면 (운영자가 점수 이력 전부 제거한 상태) member.skills 도 비워서
+                    // 차트(헥사곤)/AI 자가입력 UI 가 미평가 상태로 일치하게 복원.
+                    members.clearSkills(memberId)
+                    return@launch
+                }
                 members.updateProfile(
                     memberId = memberId,
                     skills = SkillSet(

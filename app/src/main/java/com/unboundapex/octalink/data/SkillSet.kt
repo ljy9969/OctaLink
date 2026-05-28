@@ -33,3 +33,11 @@ data class SkillSet(
         val EMPTY = SkillSet()
     }
 }
+
+/**
+ * 운영자가 아직 스킬 점수를 부여하지 않은 상태.
+ * null (Firestore 에 skills map 없음) 이거나 모든 축 0 이면 미평가로 간주.
+ *
+ * 신규 회원이 AI 코치 루틴을 사용할 때 자가 입력 UI 노출 조건.
+ */
+fun SkillSet?.isUnset(): Boolean = this == null || this == SkillSet.EMPTY

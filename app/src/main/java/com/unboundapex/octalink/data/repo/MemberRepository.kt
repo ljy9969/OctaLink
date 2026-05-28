@@ -55,6 +55,15 @@ interface MemberRepository {
     )
 
     /**
+     * 회원 스킬 스냅샷(`member.skills`) 명시적 제거 — 모든 APPROVED skillScores 가 사라져
+     * canonical 이 없는 상태에서 [assignSkills] 가 차트/AI 입력의 일관성을 위해 호출.
+     *
+     * `updateProfile(skills=null)` 은 의미상 "변경 없음" 이라 클리어용으로 쓸 수 없어 분리.
+     * Firestore 구현은 `FieldValue.delete()` 로 필드 자체를 제거 → 클라이언트 매핑에서 null 로 읽힘.
+     */
+    suspend fun clearSkills(memberId: String)
+
+    /**
      * 본인 FCM 디바이스 토큰 갱신 — [com.unboundapex.octalink.messaging.OctaLinkMessagingService.onNewToken]
      * 콜백에서 호출. self-only write 라 Firestore rules 의 `memberSelfEditableOnly` 화이트리스트 포함 필요.
      */

@@ -33,18 +33,17 @@ android {
         applicationId = "com.unboundapex.octalink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "0.9.1"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")
         // AndroidManifest 의 카카오 AuthCodeHandlerActivity intent-filter scheme 에 주입
         manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = kakaoNativeAppKey
 
-        // AdMob — Phase 1 배너 MVP. 베타 50명 미만일 땐 BuildConfig.SHOW_ADS=false 로 끄고
-        // 50명 도달 시 true 로 토글. 현재 테스트 ad unit ID (Google 공식 샘플) 사용 →
-        // 실제 광고 비노출, 정책 위반 없음. admob.google.com 가입 후 실제 ID 로 swap.
-        buildConfigField("boolean", "SHOW_ADS", "true")
+        // AdMob — Phase 1 배너 MVP. **정식 출시 전까지 false** — 테스트 광고(Google 공식 샘플 ID)도
+        // 회원에게 노출하지 않음. 정식 출시 시점에 실제 ad unit ID 로 swap 후 true 로 토글.
+        buildConfigField("boolean", "SHOW_ADS", "false")
         buildConfigField("String", "BANNER_AD_UNIT_ID", "\"ca-app-pub-3940256099942544/6300978111\"")
     }
 

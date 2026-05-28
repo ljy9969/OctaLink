@@ -24,9 +24,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -36,16 +38,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.data.schema.RoutineDay
 import com.unboundapex.octalink.data.schema.RoutineDrill
 import com.unboundapex.octalink.data.canUseAiRoutine
+import com.unboundapex.octalink.data.isUnset
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.HexagonSkillChart
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.components.SkillStat
 import com.unboundapex.octalink.ui.components.TagChip
+import com.unboundapex.octalink.ui.components.tagColor
 import com.unboundapex.octalink.ui.screens.home.axisLabelKo
 
 /**
@@ -89,7 +94,21 @@ fun WeeklyRoutineScreen(
     LaunchedEffect(memberId) { vm.bind(memberId) }
     val routine by vm.routine.collectAsState()
     val genState by vm.genState.collectAsState()
-    val skills = session.member?.skills?.toStats() ?: defaultSkillStats()
+    // 운영자가 아직 스킬 점수를 부여하지 않은 신규 회원은 EmptyRoutineCard 에서 자가 점수 입력 가능.
+    // 입력값은 이번 회차 generate 호출에만 전달되고 회원 프로필에는 저장되지 않음.
+    val needsSelfRating = session.member?.skills.isUnset()
+    // 자가입력 상태 — 화면 레벨로 끌어올려 EmptyRoutineCard 의 칩 선택이 헥사곤 차트와 즉시 연동.
+    // 키는 SkillSet 필드명. 미선택 축은 맵에 없음 (헥사곤은 0, 서버는 0.5 fallback).
+    val selfRatedState: SnapshotStateMap<String, Float>? = remember(needsSelfRating) {
+        if (needsSelfRating) mutableStateMapOf() else null
+    }
+    val skills = when {
+        // 자가입력 모드: 선택한 축만 값 반영, 미선택 축은 0 → 헥사곤이 시각적으로 "비어있게" 시작.
+        needsSelfRating && selfRatedState != null -> SkillAxes.map {
+            SkillStat(it.koLabel, selfRatedState[it.fieldKey] ?: 0f)
+        }
+        else -> session.member?.skills?.toStats() ?: defaultSkillStats()
+    }
 
     // 비용 정책: 한 주에 1회만 생성. 일단 doc 이 만들어지면 그 주 동안 재요청 불가
     // (Vertex AI + YouTube Data API quota 보호). 다음 주가 되면 weekId 가 바뀌어 새 doc 생성 가능.
@@ -147,10 +166,14 @@ fun WeeklyRoutineScreen(
                     }
                     val feedback = routine?.weeklyFeedback.orEmpty()
                     if (feedback.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            feedback,
-                            style = MaterialTheme.typography.bodyMedium,
+                            formatWeeklyFeedback(feedback),
+                            // 빼곡함 완화 — 줄 간격(lineHeight) + 글자 간격 살짝 늘려 가독성 확보.
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                lineHeight = 24.sp,
+                                letterSpacing = 0.2.sp,
+                            ),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
@@ -162,7 +185,15 @@ fun WeeklyRoutineScreen(
                 item {
                     EmptyRoutineCard(
                         genState = genState,
-                        onGenerate = { vm.generate(difficulty = it, force = false) },
+                        needsSelfRating = needsSelfRating,
+                        selfRated = selfRatedState,
+                        onGenerate = { difficulty, selfRated ->
+                            vm.generate(
+                                difficulty = difficulty,
+                                force = false,
+                                selfRatedSkills = selfRated,
+                            )
+                        },
                     )
                 }
             } else {
@@ -185,6 +216,33 @@ fun WeeklyRoutineScreen(
             }
         }
     }
+}
+
+/**
+ * 코멘트/피드백을 출처로 언급하는 군더더기 제거 — 드릴 [desc] + [weeklyFeedback] 공통.
+ * 회원은 이 화면에서 한 줄 코멘트를 볼 수 없으므로 출처 인용은 의미 없음. "무엇을 어떻게 하라"
+ * 는 지시만 남긴다. 서버 재생성 전까지 기존 캐시 doc 의 잔재를 클라이언트에서 즉시 정리.
+ */
+internal fun stripCommentReferences(text: String): String =
+    text.trim()
+        // "관장님 피드백처럼" / "코멘트처럼" / "피드백처럼" 등 출처 인용 어구 (뒤 공백 포함) 제거.
+        .replace(Regex("관장님?의?\\s*(?:코멘트|피드백)처럼\\s*"), "")
+        // "([1], [2])" / "[1]" 등 숫자 대괄호 인용. 주변 공백은 건드리지 않아 단어 병합 방지.
+        .replace(Regex("\\(?\\[\\d+\\](?:\\s*,\\s*\\[\\d+\\])*\\)?"), "")
+        // "관장님/관장의" 작성자 수식 — 코멘트는 운영진만 작성하므로 자명 ("코멘트를 반영" 이면 충분).
+        .replace(Regex("관장님?의?\\s*(?=코멘트|피드백)"), "")
+        .replace(Regex("\\s+([,.!?])"), "$1") // 제거 후 생긴 " ," / " ." 등 공백 정리
+        .replace(Regex("[ \\t]{2,}"), " ")    // 이중 공백 1칸으로
+        .trim()
+
+/**
+ * weeklyFeedback 표시용 — 출처 인용 제거([stripCommentReferences]) 후 2문장씩 묶어 문단 분리.
+ * 매 문장마다 끊으면 코치 톤 흐름이 흩어지므로 2문장 단위 문단화로 가독성 + 흐름을 모두 확보.
+ */
+internal fun formatWeeklyFeedback(raw: String): String {
+    val cleaned = stripCommentReferences(raw)
+    val sentences = Regex("(?<=[.!?])\\s+").split(cleaned).filter { it.isNotBlank() }
+    return sentences.chunked(2).joinToString("\n\n") { it.joinToString(" ") }
 }
 
 /** 난이도 enum → 한국어 표시명 (UI 칩 + tagColor 키). */
@@ -252,9 +310,10 @@ private fun DrillRow(drill: RoutineDrill) {
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (drill.desc.isNotBlank()) {
+            val desc = stripCommentReferences(drill.desc)
+            if (desc.isNotBlank()) {
                 Text(
-                    drill.desc,
+                    desc,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -351,7 +410,10 @@ private fun DrillVisual(drill: RoutineDrill) {
 @Composable
 private fun EmptyRoutineCard(
     genState: GenerateState,
-    onGenerate: (difficulty: String) -> Unit,
+    needsSelfRating: Boolean,
+    /** 화면 레벨에서 호이스팅된 자가입력 상태 — null 이면 자가입력 모드 아님. */
+    selfRated: SnapshotStateMap<String, Float>?,
+    onGenerate: (difficulty: String, selfRatedSkills: Map<String, Float>?) -> Unit,
 ) {
     // 난이도 선택은 이 카드 안에서만 살아있음 (생성 후엔 사라짐 → 재생성 불가 → 비용 보호).
     var difficulty by remember { mutableStateOf(DIFFICULTY_INTERMEDIATE) }
@@ -371,11 +433,43 @@ private fun EmptyRoutineCard(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (needsSelfRating && selfRated != null) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "내가 생각하는 스킬",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "아직 스킬 평가 전이라 AI 가 참고할 점수가 없어요.\n" +
+                    "본인이 생각하는 수준을 고르면 이번 루틴에만 사용해요.\n" +
+                    "(프로필 점수에는 저장되지 않아요)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            SkillAxes.forEach { axis ->
+                SelfSkillRow(
+                    label = axis.koLabel,
+                    current = selfRated[axis.fieldKey],
+                    onSelect = { selfRated[axis.fieldKey] = it },
+                    enabled = genState !is GenerateState.Loading,
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+        }
         Spacer(Modifier.height(16.dp))
         Text(
             "난이도",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -394,7 +488,15 @@ private fun EmptyRoutineCard(
             AuroraGradientButton(
                 label = if (genState is GenerateState.Loading) "요청 중…" else "이번 주 루틴 받기",
                 enabled = genState !is GenerateState.Loading,
-                onClick = { onGenerate(difficulty) },
+                onClick = {
+                    // 사용자가 실제로 고른 축만 payload 에 포함. 미선택 축은 서버에서 0.5 fallback.
+                    val payload = if (needsSelfRating && selfRated != null) {
+                        selfRated.toMap().takeIf { it.isNotEmpty() }
+                    } else {
+                        null
+                    }
+                    onGenerate(difficulty, payload)
+                },
             )
             if (genState is GenerateState.Loading) {
                 Spacer(Modifier.width(12.dp))
@@ -403,6 +505,118 @@ private fun EmptyRoutineCard(
         }
     }
 }
+
+/** 6축 자가평가 한 행 — 좌측 축 색 라벨 칩 + 우측 낮음/보통/높음 3단 등급 칩.
+ *  [current] null 이면 아직 등급 미선택 — 칩 3개 모두 비선택 톤. */
+@Composable
+private fun SelfSkillRow(
+    label: String,
+    current: Float?,
+    onSelect: (Float) -> Unit,
+    enabled: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 라벨 영역 폭 고정 — 6행 모두 우측 등급 칩 시작점이 정렬되도록.
+        // "스트라이킹"(5자) 기준 + 칩 좌우 padding 수용.
+        Box(
+            modifier = Modifier.width(84.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            SkillAxisChip(label = label)
+        }
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+        ) {
+            SelfRatingChip("낮음", SELF_RATE_LOW, current, SELF_RATE_LOW_COLOR, enabled, onSelect)
+            SelfRatingChip("보통", SELF_RATE_NORMAL, current, SELF_RATE_NORMAL_COLOR, enabled, onSelect)
+            SelfRatingChip("높음", SELF_RATE_HIGH, current, SELF_RATE_HIGH_COLOR, enabled, onSelect)
+        }
+    }
+}
+
+/**
+ * 6축 라벨 칩 — 축별 [tagColor] 텍스트 + 같은 색 alpha 14% 배경 (tonal).
+ * 본문 톤을 흩지 않으면서도 축 구분이 즉시 인지되도록 차분한 채도로 처리.
+ */
+@Composable
+private fun SkillAxisChip(label: String) {
+    val accent = tagColor(label)
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = accent,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(accent.copy(alpha = 0.14f))
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+    )
+}
+
+/**
+ * 등급 칩 — 비선택은 [accent] alpha 14% tonal, 선택은 solid [accent] + 흰 글씨.
+ * 등급마다 accent 가 다르므로 비선택 상태에서도 낮음/보통/높음 색이 즉시 구분된다.
+ */
+@Composable
+private fun SelfRatingChip(
+    label: String,
+    value: Float,
+    current: Float?,
+    accent: Color,
+    enabled: Boolean,
+    onSelect: (Float) -> Unit,
+) {
+    val selected = current == value
+    val bg = if (selected) Modifier.background(accent)
+             else Modifier.background(accent.copy(alpha = 0.14f))
+    val labelColor = if (selected) Color.White else accent
+    Box(
+        modifier = Modifier
+            .alpha(if (enabled) 1f else 0.4f)
+            .clip(RoundedCornerShape(14.dp))
+            .then(bg)
+            .clickable(enabled = enabled) { onSelect(value) }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = labelColor,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+        )
+    }
+}
+
+/**
+ * 6축 메타데이터 — 자가평가 UI 라벨 + Cloud Function payload key.
+ * fieldKey 는 SkillSet 필드명과 동일해 서버 AXIS_FIELDS 와 1:1 매핑된다.
+ */
+private data class SkillAxisMeta(val koLabel: String, val fieldKey: String)
+private val SkillAxes = listOf(
+    SkillAxisMeta("스트라이킹", "striking"),
+    SkillAxisMeta("그래플링", "grappling"),
+    SkillAxisMeta("체력", "stamina"),
+    SkillAxisMeta("기술", "technique"),
+    SkillAxisMeta("멘탈", "mental"),
+    SkillAxisMeta("스피드", "speed"),
+)
+
+/** 자가평가 3단 — 서버 fallback (0.5) 와 보통이 정렬되도록 0.25/0.5/0.75 사용. */
+private const val SELF_RATE_LOW = 0.25f
+private const val SELF_RATE_NORMAL = 0.5f
+private const val SELF_RATE_HIGH = 0.75f
+
+// 등급별 색 — 난이도(초급/중급/고급) 팔레트와 통일된 강도 스케일.
+// tagColor("초급"/"중급"/"고급") 와 동일 값이지만, 라벨이 "낮음/보통/높음" 이라
+// tagColor 매핑이 안 닿아서 상수로 직접 분리.
+private val SELF_RATE_LOW_COLOR = Color(0xFF10B981)    // 에메랄드 (낮음)
+private val SELF_RATE_NORMAL_COLOR = Color(0xFFF59E0B) // 앰버 (보통)
+private val SELF_RATE_HIGH_COLOR = Color(0xFFDC2626)   // 레드 (높음)
 
 /** 난이도 칩 3개 — 사용자가 가벼움 / 보통 / 빡셈 선택. Cloud Function 으로 그대로 전달. */
 @Composable

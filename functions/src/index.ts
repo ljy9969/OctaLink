@@ -202,6 +202,24 @@ export const completeSignup = onCall(
     // 클라이언트가 안 보내면 오늘 날짜로 폴백 — 옛 클라이언트 호환.
     const joinDate = rawJoinDate ?? new Date().toISOString().slice(0, 10);
 
+    // AI 코치의 맞춤 루틴 베타 자동 부여 (선착순 12명).
+    //
+    // **"선착순" 기준은 createdAt(앱 가입 = 본 함수 실행 시점) 이지 joinDate(도장 입관일) 가 아님.**
+    // joinDate 는 사용자가 폼에서 직접 입력하므로 과거로 백데이트 가능. 반면 createdAt 은
+    // 본 함수가 서버 타임스탬프로 기록 → 위조 불가. 카운트 자체는 grants 수만 보지만
+    // grants 는 본 함수 실행 순서대로(즉 createdAt 순서대로) 쌓이므로 정렬이 일관.
+    //
+    // CREATOR 는 역할 기반으로 항상 통과하므로 count 에 안 셈. 12 도달 후 신규 회원 = false.
+    const grantsSnap = await admin
+      .firestore()
+      .collection("members")
+      .where("aiRoutineBeta", "==", true)
+      .count()
+      .get();
+    const currentGrants = grantsSnap.data().count;
+    const aiRoutineBeta = currentGrants < 12;
+    logger.info("[completeSignup] aiRoutineBeta grant", { currentGrants, granted: aiRoutineBeta });
+
     await docRef.set({
       id: uid,
       name,
@@ -219,11 +237,12 @@ export const completeSignup = onCall(
       birthday: data.birthday ?? null,
       birthyear: data.birthyear ?? null,
       authProviderId: uid,
+      aiRoutineBeta,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    return { ok: true, role, status };
+    return { ok: true, role, status, aiRoutineBeta };
   },
 );
 
@@ -1049,14 +1068,6 @@ export const cancelAttendance = onCall(
 // AI 주간 보강 루틴 — Phase 1 MVP
 // =============================================================================
 
-/**
- * AI 코치의 맞춤 루틴 베타 화이트리스트 — CREATOR 외 추가 허용된 회원 uid 셋.
- * 클라이언트 [AiRoutineAccess.kt] 와 Firestore rules `weeklyRoutines` 블록과 동일하게 유지.
- */
-const AI_ROUTINE_BETA_UIDS = new Set<string>([
-  "kakao:4892939648",
-]);
-
 /** 6축 한국어 ↔ Schema 필드 매핑 (prompt 입력 + LLM 출력의 targetAxis 검증용). */
 const AXIS_FIELDS = [
   "striking",
@@ -1074,6 +1085,28 @@ const AXIS_LABEL_KO: Record<string, string> = {
   mental: "멘탈",
   speed: "스피드",
 };
+
+/**
+ * 신규 회원이 EmptyRoutineCard 에서 입력한 6축 자가 점수의 sanitizer.
+ *
+ *  - 객체가 아니거나 비어있으면 null.
+ *  - AXIS_FIELDS 화이트리스트만 통과 (알 수 없는 키 무시).
+ *  - 숫자 + 유한값만 허용, [0, 1] 클램프.
+ *  - 결과가 빈 객체면 null 반환 → 호출부에서 "없음" 으로 처리.
+ *
+ * 이 값은 *프롬프트와 focusAxes 계산* 에만 사용되며 members/{id}.skills 에는 절대 쓰지 않는다.
+ */
+function sanitizeSelfRatedSkills(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw as Record<string, unknown>;
+  const out: Record<string, number> = {};
+  for (const axis of AXIS_FIELDS) {
+    const v = src[axis];
+    if (typeof v !== "number" || !isFinite(v)) continue;
+    out[axis] = Math.max(0, Math.min(1, v));
+  }
+  return Object.keys(out).length === 0 ? null : out;
+}
 
 /**
  * ISO 8601 주키 — "2026-W22" 형식.
@@ -1112,14 +1145,10 @@ function monthsSinceJoin(joinDate: string | undefined): number {
 // hqdefault 썸네일 표시 + 탭 시 watch URL 진입.
 
 /**
- * YouTube `search.list` 호출 — 검색어 → 상위 1개 영상의 videoId.
- *
- * 비용: 1회 호출 = 100 quota units. 무료 한도 10,000/일 → ~100 회 generate 가능.
- * 실패 (quota 초과 / 키 오류 / 네트워크) 시 null 반환 → 클라이언트가 검색 폴백.
+ * YouTube `search.list` 단건 호출 — 검색어 → 상위 1개 영상의 videoId (없으면 null).
+ * 비용: 1회 = 100 quota units.
  */
-async function searchYouTubeTopVideoId(query: string, apiKey: string): Promise<string | null> {
-  const q = query.trim();
-  if (!q || !apiKey) return null;
+async function youtubeSearchOnce(q: string, apiKey: string): Promise<string | null> {
   try {
     // videoEmbeddable=true / safeSearch=strict 은 MMA / 격투기 영상 다수 거름.
     // Phase 1 은 watch URL 외부 진입(앱 임베드 X)이라 embeddable 필터 불필요. safeSearch=moderate 로 완화.
@@ -1139,13 +1168,47 @@ async function searchYouTubeTopVideoId(query: string, apiKey: string): Promise<s
       return null;
     }
     const body = (await res.json()) as { items?: Array<{ id?: { videoId?: string } }> };
-    const id = body.items?.[0]?.id?.videoId ?? null;
-    if (!id) logger.warn("[youtube] no results", { q });
-    return id;
+    return body.items?.[0]?.id?.videoId ?? null;
   } catch (e) {
     logger.error("[youtube] search threw", { q, err: String(e) });
     return null;
   }
+}
+
+/**
+ * 검색어를 넓혀 결과 0건 회피용 fallback 쿼리 생성.
+ *  - "solo" 는 과도하게 좁히는 주범이라 제거.
+ *  - 너무 긴 쿼리(>4단어)는 핵심 앞 4단어만 — 동작 유형 + 기본 키워드 위주.
+ * 원본과 동일하면 빈 문자열 (재시도 불필요 신호).
+ */
+function broadenYoutubeQuery(query: string): string {
+  const noSolo = query.replace(/\bsolo\b/gi, " ").replace(/\s+/g, " ").trim();
+  const words = noSolo.split(" ").filter(Boolean);
+  const broad = words.length > 4 ? words.slice(0, 4).join(" ") : noSolo;
+  return broad === query.trim() ? "" : broad;
+}
+
+/**
+ * 검색어 → videoId. 1차 검색이 0건이면 broaden 쿼리로 1회 재시도해 썸네일 누락(빨강 ▶ 박스) 최소화.
+ * 실패 (quota 초과 / 키 오류 / 네트워크) 시 null 반환 → 클라이언트가 검색 폴백.
+ */
+async function searchYouTubeTopVideoId(query: string, apiKey: string): Promise<string | null> {
+  const q = query.trim();
+  if (!q || !apiKey) return null;
+
+  const primary = await youtubeSearchOnce(q, apiKey);
+  if (primary) return primary;
+
+  const broad = broadenYoutubeQuery(q);
+  if (broad) {
+    const retry = await youtubeSearchOnce(broad, apiKey);
+    if (retry) {
+      logger.info("[youtube] broadened hit", { q, broad });
+      return retry;
+    }
+  }
+  logger.warn("[youtube] no results", { q, broad });
+  return null;
 }
 
 /** Gemini 응답을 안전하게 파싱 — JSON 구조 보장 안 되면 null. */
@@ -1199,24 +1262,28 @@ export const generateWeeklyRoutine = onCall(
     const difficultyRaw = (request.data?.difficulty as string | undefined) ?? "INTERMEDIATE";
     const difficulty = ["BEGINNER", "INTERMEDIATE", "ADVANCED"].includes(difficultyRaw)
       ? difficultyRaw : "INTERMEDIATE";
+    // 신규 회원이 EmptyRoutineCard 에서 직접 입력한 6축 임시 점수 (운영자 평가 전 fallback).
+    // **회원 프로필 members/{id}.skills 에는 절대 쓰지 않음** — 이번 회차 프롬프트/focusAxes 에만 사용.
+    const selfRatedSkills = sanitizeSelfRatedSkills(request.data?.selfRatedSkills);
     const weekId = isoWeekKey();
-    logger.info("[generateWeeklyRoutine] entry", { caller: maskId(callerUid), memberId: maskId(memberId), weekId, force, difficulty });
+    logger.info("[generateWeeklyRoutine] entry", { caller: maskId(callerUid), memberId: maskId(memberId), weekId, force, difficulty, selfRated: selfRatedSkills != null });
 
     const db = admin.firestore();
 
-    // 권한 — Phase 1 베타 화이트리스트.
+    // 권한 — Phase 1 비공개 베타 (선착순 12명 + CREATOR).
     //  - CREATOR : 모든 memberId 에 대해 호출 가능 (운영자 트리거)
-    //  - AI_ROUTINE_BETA_UIDS : 자기 자신 (memberId == callerUid) 에 대해서만 호출 가능
+    //  - aiRoutineBeta == true 회원 : 자기 자신 (memberId == callerUid) 에 대해서만 호출 가능
     //  - 그 외 : 거부
-    // Firestore rules / 클라이언트 카드 노출 화이트리스트와 1:1 매칭 유지 필요.
+    // 클라이언트 [AiRoutineAccess.kt] / Firestore rules `canUseAiRoutine()` 과 동일 게이트.
     const callerSnap = await db.collection("members").doc(callerUid).get();
-    const callerRole = callerSnap.data()?.role as string | undefined;
+    const callerData = callerSnap.data();
+    const callerRole = callerData?.role as string | undefined;
+    const callerAiBeta = callerData?.aiRoutineBeta === true;
     const isCreator = callerRole === "CREATOR";
-    const isBetaTester = AI_ROUTINE_BETA_UIDS.has(callerUid);
-    const allowed = isCreator || (isBetaTester && memberId === callerUid);
+    const allowed = isCreator || (callerAiBeta && memberId === callerUid);
     if (!allowed) {
-      logger.warn("[generateWeeklyRoutine] denied", { caller: maskId(callerUid), role: callerRole, memberId: maskId(memberId) });
-      throw new HttpsError("permission-denied", "현재 베타 단계라 일부 회원만 사용할 수 있어요.");
+      logger.warn("[generateWeeklyRoutine] denied", { caller: maskId(callerUid), role: callerRole, aiBeta: callerAiBeta, memberId: maskId(memberId) });
+      throw new HttpsError("permission-denied", "현재 비공개 베타라 선착순 12명만 사용할 수 있어요.");
     }
 
     const docRef = db.doc(`members/${memberId}/weeklyRoutines/${weekId}`);
@@ -1242,10 +1309,15 @@ export const generateWeeklyRoutine = onCall(
     const months = monthsSinceJoin(joinDate);
     const gender = (member.gender as string | undefined) ?? null; // "MALE"/"FEMALE"
 
-    // 약축 2개 도출 (점수 낮은 순). skills 없으면 골고루.
+    // 약축 2개 도출 (점수 낮은 순).
+    //  - member.skills 가 있으면 (운영자 평가 완료) 그 값을 사용.
+    //  - 없고 selfRatedSkills 가 함께 왔으면 (신규 회원 자가입력) 그 값을 사용.
+    //    이 값은 회원 프로필에 절대 영속화되지 않으며 이번 회차 프롬프트에만 살아있다.
+    //  - 둘 다 없으면 0.5 평탄화 fallback.
+    const skillSource: Record<string, number> | undefined = skills ?? selfRatedSkills ?? undefined;
     const ranked: Array<{ axis: string; v: number }> = AXIS_FIELDS.map((axis) => ({
       axis,
-      v: typeof skills?.[axis] === "number" ? (skills?.[axis] as number) : 0.5,
+      v: typeof skillSource?.[axis] === "number" ? (skillSource?.[axis] as number) : 0.5,
     })).sort((a, b) => a.v - b.v);
     const focusAxes = ranked.slice(0, 2).map((r) => r.axis);
 
@@ -1314,7 +1386,7 @@ export const generateWeeklyRoutine = onCall(
       })),
     );
 
-    const doc = {
+    const doc: Record<string, unknown> = {
       weekId,
       generatedAt: admin.firestore.FieldValue.serverTimestamp(),
       focusSkills: llm.focusSkills?.length ? llm.focusSkills : focusAxes,
@@ -1323,6 +1395,11 @@ export const generateWeeklyRoutine = onCall(
       weeklyFeedback: llm.weeklyFeedback ?? "",
       difficulty, // 사용자 선택 난이도 — UI 에 칩으로 표시 ("BEGINNER" / "INTERMEDIATE" / "ADVANCED")
     };
+    // 운영자 평가 전 신규 회원이 자가입력한 점수가 실제로 채택됐을 때만 흔적을 남김.
+    // member.skills 가 이미 있으면 self 값은 무시됐으므로 보존하지 않음.
+    if (!skills && selfRatedSkills) {
+      doc.selfRatedSkills = selfRatedSkills;
+    }
     await docRef.set(doc);
     logger.info("[generateWeeklyRoutine] saved", { weekId, days: enrichedDays.length });
 
@@ -1389,11 +1466,11 @@ function buildRoutinePrompt(args: PromptArgs): string {
 ${skillLines}
 - 우선 보강 축: ${focusLine}
 
-# 관장의 한 줄 코멘트 (최근 5건)
+# 관장의 한 줄 코멘트 (최근 5건) — 내부 참고용. 번호([1],[2])는 식별자일 뿐 출력에 쓰지 말 것.
 ${commentBlock}
 
 # 작성 규칙
-1. days 는 **최대 3개**. 보강 효과가 큰 요일만 골라줘 (예: "월", "수", "금"). 나머지 요일은 도장 수업/휴식 가정이라 응답에 넣지 말 것.
+1. days 는 **정확히 3개 — 반드시 "월", "수", "금" 셋 다 채울 것** (도장 수업/휴식 요일 가정). 2개 이하로 줄이지 말 것.
 2. 각 day.drills 는 **정확히 2개**. day 총 durationMin 합이 **20 이하** (한 드릴당 평균 10분).
 3. 우선 보강 축에 60% 이상 시간 배정.
 4. **사용자 선택 난이도 (${difficulty}) 에 맞춰 드릴 강도/세트수/복잡도 조정.** 초급은 단일 동작 반복, 중급은 2~3동작 콤비, 고급은 카운터/체이닝 시퀀스.
@@ -1408,13 +1485,20 @@ ${commentBlock}
    - 좋은 예: "muay thai teep technique solo", "bjj shrimp drill solo", "boxing shadow boxing jab cross slip drill", "wrestling sprawl drill solo", "kettlebell swing tutorial", "trx row form".
    - 피할 표현: 너무 일반적인 "exercise", "training" 단어 / 한국어 / 한자 / 도장에 없는 장비명 (heavy bag, jump rope, cable, smith machine 등).
 9. targetAxis 는 정확히 다음 중 하나: ${AXIS_FIELDS.join(", ")}
-10. desc 는 한국어 1~2문장. sets 는 "12회 × 3세트" 또는 "3분 × 2라운드" 등 간결한 한국어.
-11. weeklyFeedback 은 코치 톤의 한국어 2~3문장 — 왜 이런 구성인지 + 관장 코멘트와 연결.
+10. desc 는 한국어 1~2문장 — **무엇을 어떻게 하라**는 동작 지시만.
+    **"관장님 피드백처럼", "코멘트처럼", "코멘트에서 언급된" 같은 출처 언급 금지.**
+    코멘트 내용을 반영하되, 인용하지 말고 지시문으로 직접 녹일 것 (회원은 이 화면에서 코멘트를 볼 수 없음).
+11. weeklyFeedback 은 **진짜 MMA 체육관 코치가 회원의 성장을 진심으로 응원하는 따뜻한 톤**의 한국어
+    **3~4문장 (140~180자)**. 구성: (a) 이번 주 어떤 축을 왜 보강하는지 → (b) 그게 실전/성장에 왜 중요한지
+    → (c) 구체적이고 따뜻한 격려·동기부여 한마디. 진심 어린 코치 말투 (예: "~해봐요", "분명 늘어요").
+    단, **코멘트/피드백을 출처로 언급 금지** — 번호([1],[2]), "관장님 코멘트/피드백", "코멘트에서 언급된 …을 반영하여"
+    같은 표현 금지. 드릴 이름 일일이 나열 금지. 회원은 이 화면에서 코멘트를 볼 수 없으니 결과·방향만 코치 톤으로 서술.
 
 # 출력 형식 (반드시 JSON, 다른 텍스트 금지)
+# days 배열은 "월", "수", "금" 3개 요소를 모두 포함해야 한다 (각 drills 2개).
 {
   "focusSkills": ["${focusAxes[0]}", "${focusAxes[1] ?? focusAxes[0]}"],
-  "weeklyFeedback": "한국어 코치 톤 2~3문장",
+  "weeklyFeedback": "회원 성장을 응원하는 따뜻한 코치 톤 3~4문장 (140~180자)",
   "days": [
     {
       "day": "월",
@@ -1429,7 +1513,9 @@ ${commentBlock}
           "targetAxis": "striking"
         }
       ]
-    }
+    },
+    { "day": "수", "title": "...", "drills": [ /* 2개 */ ] },
+    { "day": "금", "title": "...", "drills": [ /* 2개 */ ] }
   ]
 }`;
 }

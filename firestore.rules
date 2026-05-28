@@ -70,11 +70,16 @@ service cloud.firestore {
     }
 
     /**
-     * AI 코치의 맞춤 루틴 (Phase 1 베타) 접근 화이트리스트 — CREATOR + 명시된 uid.
-     * 클라이언트 [AiRoutineAccess.kt] / Cloud Function [AI_ROUTINE_BETA_UIDS] 와 동일하게 유지.
+     * AI 코치의 맞춤 루틴 (Phase 1 비공개 베타) 접근 게이트.
+     *  - CREATOR : 역할 기반 항상 통과.
+     *  - 회원: `members/{uid}.aiRoutineBeta == true` 인 경우만 통과.
+     *
+     * 필드는 `completeSignup` Cloud Function 이 신규 가입 시점에 자동 부여 —
+     * 현재 grants 수 < 12 인 동안 새 회원에게 true (선착순 12명).
+     * 클라이언트 [AiRoutineAccess.kt] 와 동일 게이트.
      */
     function canUseAiRoutine() {
-      return isCreator() || request.auth.uid == 'kakao:4892939648';
+      return isCreator() || (isApproved() && memberDoc().aiRoutineBeta == true);
     }
 
     /** 본인 프로필 수정 시 변경 허용 필드만 (role/status/id/createdAt/joinDate 보호) */

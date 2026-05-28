@@ -160,6 +160,16 @@ class FirestoreMemberRepository : MemberRepository {
         col.document(memberId).update(updates).await()
     }
 
+    override suspend fun clearSkills(memberId: String) {
+        // member.skills 필드 자체 제거 → MemberDocMapping 에서 null 로 읽힘 → SkillSet.isUnset() = true.
+        // 차트는 defaultSkillStats() 평탄화 + AI 루틴은 자가입력 UI 노출 흐름으로 복귀.
+        val updates = mapOf(
+            "skills" to FieldValue.delete(),
+            "updatedAt" to FieldValue.serverTimestamp(),
+        )
+        col.document(memberId).update(updates).await()
+    }
+
     override suspend fun updateFcmToken(memberId: String, token: String?) {
         val updates = mapOf(
             "fcmToken" to token, // null 도 그대로 — 알림 OFF 전체 해제 의도 반영.

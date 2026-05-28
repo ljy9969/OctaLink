@@ -50,17 +50,25 @@ class WeeklyRoutineViewModel : ViewModel() {
 
     fun resetGenState() { _genState.value = GenerateState.Idle }
 
-    fun generate(difficulty: String, force: Boolean = false) {
+    fun generate(
+        difficulty: String,
+        force: Boolean = false,
+        selfRatedSkills: Map<String, Float>? = null,
+    ) {
         val id = _memberId.value ?: run {
             _genState.value = GenerateState.Error("로그인 정보가 없어요.")
             return
         }
         _genState.value = GenerateState.Loading
         viewModelScope.launch {
-            runCatching { repo.generate(id, difficulty, force) }
+            runCatching { repo.generate(id, difficulty, force, selfRatedSkills) }
                 .onSuccess {
                     _genState.value = GenerateState.Done
-                    android.util.Log.i(TAG, "generate success difficulty=$difficulty force=$force")
+                    android.util.Log.i(
+                        TAG,
+                        "generate success difficulty=$difficulty force=$force " +
+                            "selfRated=${selfRatedSkills != null}",
+                    )
                 }
                 .onFailure { e ->
                     _genState.value = GenerateState.Error(e.message ?: "AI 루틴 생성 실패")
