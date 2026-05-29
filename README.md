@@ -4,9 +4,9 @@ MMA 체육관 **Team Posse Striking 강남점** 회원 전용 앱 **OctaLink**.
 개발사: **Unbound Apex Systems** · 개발자: **BlackCat Strike** (이지연).
 Strava, Smashr를 참고. 궁극 목표는 **개인의 성장**.
 
-## 진행 현황 (2026-05-26 기준)
+## 진행 현황 (2026-05-29 기준)
 
-**Phase 2 카카오 OAuth + Firestore 활성화 완료.** Firebase Blaze 전환 + Cloud Functions(`kakaoSignIn` / `completeSignup` / `leaveMembership` / `rejoinMembership` + FCM 트리거 5종 `notifyOn*`) 배포 + Firestore/Storage Rules 배포 + RepositoryProvider Phase 2 토글 모두 끝. **카카오 로그인 → 가입 폼(Kakao nickname 자동 prefill, 사용자 수정 가능) → Cloud Function 으로 `members/{uid}` 생성 → role 자동 부여 → 메인 앱 진입** end-to-end 검증 완료. **Phase 2 후속 Repository(Attendance / SkillScore / Comment / Post / Tournament) 모두 Firestore 구현체 활성 + ViewModel 영속화 연결 완료**. Post(좋아요·이미지 첨부 Phase A·영상 첨부 Phase B) + Comment(한 줄 코멘트 송수신) + Attendance(체크인 영속화 + 운영진 출결 검토 + 월간 캘린더 좌우 페이징) + SkillScore 풀스택 워크플로우(관장 직접 평가 `directApprove` + 코치 제안→관장 검토 `propose` + canonical = 시간 최신 / ProfileScreen 차트가 `skillScores` 직접 구독) + Tournament 풀스택(추첨/매치/챔피언 영속화 + 토너먼트 히스토리 화면 + 회원 프로필 전적 카드 + 관장 per-card 삭제) + 푸시 알림 (FCM) 풀스택(6종 NotificationType + 채널/권한/토큰/prefs 토글 + Cloud Functions 트리거 5종 + 클라이언트 WorkManager 기반 CLASS_REMINDER 평일×4시간대 그리드 + legacy 키 1회성 마이그레이션) + **UI 테마 선택 (다크 / 라이트)**(`AppThemeStore` 싱글톤 + SharedPreferences 영속 + 신규 설치 기본 LIGHT) + **프로필 설정 화면 분리**(톱니바퀴 trailing → ProfileSettings 라우트, 알림/테마/정책·링크/앱 정보/로그아웃/탈퇴 모음). 홈 화면도 정적 mock 청소(오늘의 커리큘럼 → `curriculumForToday` 실데이터, 휴무일 자동 숨김 / 스파링 매치 카드 실데이터 등) + 태그는 `TagChip` 공통 컴포넌트로 색깔 pill(킥복싱 블루 / 스트라이킹 오렌지 / 그래플링 브라운 / MMA 블러드 / 스파링 그린). **Play Store 비공개 베타 진행 중.** UI 완성 + 자체 OctaLink 브랜딩 완료 + Play 콘솔 기본 스토어 등록정보 완료(아이콘 / 피처 그래픽 / 폰·7"·10" 스크린샷 24장 / 앱 설명 / IARC 12+) + 타겟 API 35 + 비공개 테스트 트랙 0.2.0 → 0.3.0 → 0.6.0 (versionCode 5) → 0.7.0 (versionCode 8) → **0.9.0 (versionCode 9)** 게시 — 0.7.0 에 활성도·출석률 단계별 색 / 댓글 아이콘 채움·외곽선 / 정책·앱 정보 → 설정 화면 통합 / 토너먼트 "내 참가만" 필터, 0.9.0 에 사진/영상 전체화면 뷰어 + 갤러리 저장·카카오톡·인스타 공유 / 커뮤니티 본문 YouTube 링크 썸네일 카드 + 탭 시 YouTube 앱 연결 / 글 작성 사진 회전(EXIF+다운샘플) / 멘션 알림 본문에 글 제목 포함 / FCM 토큰 자동 등록(누락 케이스 보강) / 글 작성 폼 chip·버튼 디자인 정비 / 사진/영상 첨부 시 정중앙 멘션 안내 토스트 포함. 다음은 카카오 비즈 사업자 등록 후 동의 항목 재신청 + 베타 테스터 12명 모집(오픈채팅 + 체육관 포스터 부착).
+**Phase 2 카카오 OAuth + Firestore 활성화 완료.** Firebase Blaze 전환 + Cloud Functions(`kakaoSignIn` / `completeSignup` / `leaveMembership` / `rejoinMembership` + FCM 트리거 5종 `notifyOn*`) 배포 + Firestore/Storage Rules 배포 + RepositoryProvider Phase 2 토글 모두 끝. **카카오 로그인 → 가입 폼(Kakao nickname 자동 prefill, 사용자 수정 가능) → Cloud Function 으로 `members/{uid}` 생성 → role 자동 부여 → 메인 앱 진입** end-to-end 검증 완료. **Phase 2 후속 Repository(Attendance / SkillScore / Comment / Post / Tournament) 모두 Firestore 구현체 활성 + ViewModel 영속화 연결 완료**. Post(좋아요·이미지 첨부 Phase A·영상 첨부 Phase B) + Comment(한 줄 코멘트 송수신) + Attendance(체크인 영속화 + 운영진 출결 검토 + 월간 캘린더 좌우 페이징) + SkillScore 풀스택 워크플로우(관장 직접 평가 `directApprove` + 코치 제안→관장 검토 `propose` + canonical = 시간 최신 / ProfileScreen 차트가 `skillScores` 직접 구독) + Tournament 풀스택(추첨/매치/챔피언 영속화 + 토너먼트 히스토리 화면 + 회원 프로필 전적 카드 + 관장 per-card 삭제) + 푸시 알림 (FCM) 풀스택(6종 NotificationType + 채널/권한/토큰/prefs 토글 + Cloud Functions 트리거 5종 + 클라이언트 WorkManager 기반 CLASS_REMINDER 평일×4시간대 그리드 + legacy 키 1회성 마이그레이션) + **UI 테마 선택 (다크 / 라이트)**(`AppThemeStore` 싱글톤 + SharedPreferences 영속 + 신규 설치 기본 LIGHT) + **프로필 설정 화면 분리**(톱니바퀴 trailing → ProfileSettings 라우트, 알림/테마/정책·링크/앱 정보/로그아웃/탈퇴 모음). 홈 화면도 정적 mock 청소(오늘의 커리큘럼 → `curriculumForToday` 실데이터, 휴무일 자동 숨김 / 스파링 매치 카드 실데이터 등) + 태그는 `TagChip` 공통 컴포넌트로 색깔 pill(킥복싱 블루 / 스트라이킹 오렌지 / 그래플링 브라운 / MMA 블러드 / 스파링 그린). **Play Store 비공개 베타 진행 중.** UI 완성 + 자체 OctaLink 브랜딩 완료 + Play 콘솔 기본 스토어 등록정보 완료(아이콘 / 피처 그래픽 / 폰·7"·10" 스크린샷 24장 / 앱 설명 / IARC 12+) + 타겟 API 35 + 비공개 테스트 트랙 0.2.0 → 0.3.0 → 0.6.0 (versionCode 5) → 0.7.0 (versionCode 8) → **0.9.0 (versionCode 9)** 게시 — 0.7.0 에 활성도·출석률 단계별 색 / 댓글 아이콘 채움·외곽선 / 정책·앱 정보 → 설정 화면 통합 / 토너먼트 "내 참가만" 필터, 0.9.0 에 사진/영상 전체화면 뷰어 + 갤러리 저장·카카오톡·인스타 공유 / 커뮤니티 본문 YouTube 링크 썸네일 카드 + 탭 시 YouTube 앱 연결 / 글 작성 사진 회전(EXIF+다운샘플) / 멘션 알림 본문에 글 제목 포함 / FCM 토큰 자동 등록(누락 케이스 보강) / 글 작성 폼 chip·버튼 디자인 정비 / 사진/영상 첨부 시 정중앙 멘션 안내 토스트 포함. 다음은 카카오 비즈 사업자 등록 후 동의 항목 재신청 + 베타 테스터 12명 모집(오픈채팅 + 체육관 포스터 부착). **(05-28~29 추가)** AI 코치 루틴 베타를 uid 화이트리스트 → `aiRoutineBeta` 선착순 12명 자동 부여로 전환 + 운영자 평가 전 신규 회원 6축 자가 스킬 입력(프로필 비영속) + AdMob `SHOW_ADS=false`(정식 출시 전 광고 미노출) → **0.9.1 (versionCode 10)** 서명 AAB 빌드(내부/비공개 트랙 업로드 대기). 현재 비공개 테스터 5/12.
 
 저장소: https://github.com/ljy9969/OctaLink (브랜치: `main`, `teamposse` — USF4 자산 백업)
 패키지: `com.unboundapex.octalink` (applicationId 동일, Play Store 등록 후 변경 불가)
@@ -395,10 +395,13 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **Cloud Function 스택**: `generateWeeklyRoutine` + Gemini 2.5 Flash (Vertex AI us-central1, thinkingBudget=0, maxOutputTokens=8192, responseMimeType=application/json). `WeeklyRoutineDoc` 경로 `members/{uid}/weeklyRoutines/{yyyy-W##}`, weekId idempotent. 드릴 필드: `koName / youtubeQuery / videoId / desc / sets / durationMin / targetAxis`. doc 에 `difficulty` 도 저장 → UI 칩 노출. 호출 시간 ~7초 (Gemini 응답 ~6초가 병목).
   - **UI**: 헥사곤 카드 240dp 고정 (빈 루틴 상태도 한 화면) + 이번 주 부족한 부분 칩 + 내 난이도 칩 + 코치 피드백. DayCard 에 요일 + 카테고리 칩 (TagChip 팔레트 6축 + 난이도 = 9 색) + 총 분. 드릴 카드 좌측 72dp YouTube 썸네일. EmptyRoutineCard 에 초/중/고급 그라데이션 칩 + 오로라 그라데이션 "이번 주 루틴 받기" 버튼.
   - **한 주 1회 생성 정책 (비용 통제)**: doc 생성 후 그 주 동안 재요청 불가. 난이도 셀렉터 + `force=true` 재생성 경로 모두 제거. 다음 주 weekId 바뀌면 자동으로 EmptyRoutineCard 재노출.
-  - **권한 게이트 (베타 화이트리스트)**: CREATOR + `AI_ROUTINE_BETA_UIDS` (현재 `kakao:4892939648` 1명) 만 통과. 3 곳 동일하게 유지 — 클라이언트 `data/AiRoutineAccess.kt` / 서버 `AI_ROUTINE_BETA_UIDS` / Firestore rules `canUseAiRoutine()`.
+  - **권한 게이트 (선착순 12명, 05-28 전환)**: 기존 uid 화이트리스트(`AI_ROUTINE_BETA_UIDS`) 폐지 → `MemberDoc.aiRoutineBeta` 불리언 필드 기반. CREATOR 는 역할로 항상 통과, 회원은 `aiRoutineBeta == true` 만 통과. `completeSignup` 이 신규 가입 시 `aiRoutineBeta==true` grants 수 < 12 면 자동 부여 (**선착순 기준 = createdAt 서버 타임스탬프, joinDate 아님**). 3 곳 동일 게이트 — 클라이언트 `data/AiRoutineAccess.kt` / 서버 `generateWeeklyRoutine` / Firestore rules `canUseAiRoutine()`. 기존 실사용자 2명(`kakao:4892939648`·`4908533282`)은 백필로 grant → 현재 2/12.
+  - **신규 회원 자가 스킬 입력 (05-28)**: 운영자 스킬 평가 전(=`member.skills` 미설정) 신규 회원은 EmptyRoutineCard 에서 본인이 생각하는 6축 점수를 직접 입력해 루틴 생성 가능. **프로필(`member.skills`)에는 영속화 안 됨** — 해당 회차 프롬프트/focusAxes 에만 사용. 운영자가 APPROVED 점수를 전부 제거하면 `clearSkills` 로 `member.skills` 도 비워 헥사곤 차트/자가입력 UI 가 미평가 상태로 일치 복원.
   - **사용자 부담 최소화**: 했음/건너뜀 토글 UI 에서 제거 (Phase 2 가중치 루프 깔리기 전에 사용자에게 "다 해야 한다" 부담만 주는 상태 회피). 백엔드 필드/Repository/Rules 는 보존.
 - [x] (05-27) `bugfix` **토너먼트 — 완료된 대진표 자동 사라지던 이슈 fix** — `TournamentViewModel.pickActive()` 가 `finishedAt == null` (미완료) 만 active 로 선택해서, 챔피언 선정 완료 직후 BracketScreen 재진입 시 자동으로 EmptyState 로 떨어지던 문제. 미완료 우선 → 없으면 가장 최근 완료된 토너먼트 fallback 으로 변경 → 다음 추첨 전까지 트리 + 챔피언 카드 유지.
 - [x] (05-27) `bugfix` **출석 동료 카드 아바타 — 가입 당시 stored avatarId 대신 현재 gender+weightClass 동적 도출** — `AttendanceScreen` 만 `peer.member.avatarId` 직접 사용해서 가입 후 성별/체급 변경한 회원도 옛 캐릭터로 노출되던 이슈. `avatarFor(gender, weightClass)` 로 홈/프로필 화면과 동일하게 통일.
+- [x] (05-28~29) `기능 / AI` **AI 루틴 베타 — 선착순 12명 자동 부여 + 신규 회원 자가 스킬 입력 (0.9.1 / versionCode 10)** — uid 화이트리스트 → `MemberDoc.aiRoutineBeta` 필드 전환, `completeSignup` 이 가입 순서(createdAt)대로 grants < 12 면 자동 부여. 운영자 평가 전 신규 회원의 6축 자가입력(프로필 비영속) + `clearSkills` 미평가 복원. 상세는 위 Phase 1 MVP 항목의 "권한 게이트" / "신규 회원 자가 스킬 입력" 참고. Functions(`completeSignup`·`generateWeeklyRoutine`)+rules 배포 + 폰/에뮬 APK 설치 완료. 내부/비공개 테스트 트랙용 서명 AAB 빌드.
+- [x] (05-29) `운영` **Vertex AI 모델 접근 정책 점검** — Google Cloud 메일(06-15 부터 inactive 프로젝트 모델 접근 차단) 대응. `octalink-28088` 은 `gemini-2.5-flash` 를 05-28 호출(weeklyRoutines 기록) → 90일 활성 조건 충족, 접근 유지. 조치 불필요. 모델 튜닝은 미사용이라 무관.
 
 ### 남은 일
 
@@ -411,12 +414,12 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **카카오 앱 2개 운영 구조**: (a) 비즈 앱 ID `1453976` — 운영용, 검수 대기 중, `local.properties.KAKAO_NATIVE_APP_KEY` 기본값. (b) 테스트 앱 ID `1455062` — 이미 모든 동의 항목 활성, 단 팀 멤버(Owner/Manager)만 로그인 가능. 일반 회원 운영 배포는 반드시 비즈 앱 키 사용. 개발자 본인이 풀 데이터 흐름 즉시 검증하려면 `local.properties` 키만 1455062 로 임시 교체 (운영 빌드 전 1453976 복원 필수)
 
 **[중요도 ★★]**
-- [~] `기능 / AI` **AI 코치의 맞춤 루틴 — Phase 2/3/4-A 진행 예정** (Phase 1 MVP 는 완료 섹션 참고). 베타 화이트리스트(`kakao:4892939648`) 단독 운영 중.
+- [~] `기능 / AI` **AI 코치의 맞춤 루틴 — Phase 2/3/4-A 진행 예정** (Phase 1 MVP 는 완료 섹션 참고). **선착순 12명 비공개 베타** 운영 중 (`aiRoutineBeta` 필드, 현재 2/12 — 신규 가입 순서대로 자동 충원).
   - **Phase 2 자동화 + 피드백 (예정)** — Cloud Scheduler 매주 일요일 23시 KST batch + 회원 자발적 자기 기록 UX 새로 설계 (현재 했음/건너뜀 토글은 부담 회피 위해 UI 제거 / 백엔드 필드는 보존).
   - **Phase 3 안전망 (예정)** — 일별 총 시간 20분 초과 시 LLM 재호출 + 드릴명 부적절 어휘 차단 + Gemini 응답 streaming (체감 -3~5초).
   - **Phase 4-A 큐레이션 라이브러리 (정식 운영 100+명 도달 시)** — 직접 촬영 대신 YouTube 영상 큐레이션. `mmaTechniqueLibrary/{techniqueId}` 컬렉션에 카테고리별 80개 사전 검증된 영상 (BJJ / 복싱 / 무에타이 / 레슬링 / 컨디셔닝) + 한국어 메타데이터. Gemini prompt 에 화이트리스트 inject → LLM 이 그 안에서만 techniqueId 선택. 앱 내 `android-youtube-player` (MIT) 풀스크린 임베드 재생. 저작권 0원, 큐레이션 1~2일 + 코드 1.5일.
-  - **전 회원 개방 조건**: 베타 화이트리스트 1~2명 운영 4~6주 + 추천 품질 검증 + Vertex AI 사용량 모니터링 + 캐시 (`{youtubeQuery → videoId}` Firestore 컬렉션) 도입 후 화이트리스트 비우기.
-  - **비용**: Gemini 베타 1명 주1회 ≈ $0.0004/주, YouTube Data API 600 quota/generate (무료 10,000/일 → 16회/일). 베타 quota 여유 충분.
+  - **전 회원 개방 조건**: 선착순 12명 운영 4~6주 + 추천 품질 검증 + Vertex AI 사용량 모니터링 + 캐시 (`{youtubeQuery → videoId}` Firestore 컬렉션) 도입 후 12명 상한 제거(전 회원 개방).
+  - **비용**: Gemini 12명 주1회 ≈ $0.005/주, YouTube Data API 600 quota/generate (무료 10,000/일 → 16회/일). 베타 quota 여유 충분.
 
 **[중요도 ★]**
 - [~] `수익화 / 광고` **AdMob 배너 + 네이티브 광고 통합** *(난이도 3, 베타 MVP 3~4일 / 풀 6.5~7.5일)* — 정식 운영 100+명 도달 시 의미있는 수익(~$30~50/월). 베타 12명 규모에선 인프라 미리 깔아두는 가치.
@@ -424,17 +427,18 @@ tools/                                        # 빌드/디자인 보조 스크�
   - **회피 위치**: 출석 체크인 / 프로필 / 설정 / 글 작성 다이얼로그 / 알림 다이얼로그 / 미디어 전체화면 / 토너먼트 대진표 / 로그인·가입 진입 (집중 또는 신뢰 영역). Interstitial 전체 비추 — high-frequency 사용자라 churn 위험.
   - **Phase 1 배너 MVP (코드 완료, 실제 광고 단위 ID swap = Play Store 정식 출시 후)** —
     - ✅ `play-services-ads:23.6.0` 의존성, `BuildConfig.SHOW_ADS` 토글 + `BANNER_AD_UNIT_ID`.
-    - ✅ `MobileAds.initialize` (`OctaLinkApplication.onCreate`, SHOW_ADS=true 분기).
+    - ✅ `MobileAds.initialize` (`OctaLinkApplication.onCreate`, `SHOW_ADS` 토글 분기).
+    - 🛑 **현재 빌드(0.9.1)는 `SHOW_ADS=false`** — 정식 출시 전까지 테스트 광고(Google 공식 샘플 ID)조차 회원에게 노출하지 않음. 정식 출시 시점에 실제 ad unit ID 로 swap 후 `true` 토글.
     - ✅ Compose `AdBanner` 래퍼 (`AndroidView` + `AdView`, 320×50 BANNER).
     - ✅ Home / Curriculum / Info 하단 LazyColumn 마지막 item 으로 적용.
     - ✅ AndroidManifest `AD_ID` 권한 복원 (`tools:node="remove"` 제거) + `APPLICATION_ID` 운영 ID (`ca-app-pub-6425033183875029~9928178677`) 설정.
     - 🕒 **`BANNER_AD_UNIT_ID` 는 여전히 Google 공식 테스트 ID** (`ca-app-pub-3940256099942544/6300978111`). 베타 단계 자기 광고 클릭 정책 위반 회피 + Play Store 미공개 상태에서 fill 제한 우회.
     - 🕒 **Play Store 정식 출시 의존**: AdMob 광고 단위 ID 발급 자체가 "광고 게재가 제한됨, 스토어를 추가하여 한도 해제" 상태. Play Console 비공개 테스트 트랙은 검색 결과 미노출이라 AdMob "스토어 추가" 통과 불가. 프로덕션 출시 (또는 공개 테스트 트랙) → AdMob 검토 통과 → 실제 광고 단위 ID 발급 → `BuildConfig.BANNER_AD_UNIT_ID` swap.
-    - 🕒 Play Console "광고 ID 사용" 선언 "아니오" → "예" 변경 (정식 출시 단계).
+    - 🕒 Play Console "광고 ID 사용" 선언 "예" 로 설정 (운영자 진행 예정 — 매니페스트에 `AD_ID` 권한 선언돼 있어 데이터 보안 양식과 일치시킴. `SHOW_ADS=false` 라도 권한은 유지).
   - **Phase 2 네이티브 (2일)**: 피드 index % 5 == 0 위치에 NativeAd 삽입 + "광고" 라벨 + 로딩 실패 시 자리 무시. 베타 후 100명 규모에서 활성.
   - **Phase 3 개인정보처리방침 + 사전 고지 (1일)**: `docs/privacy-policy.html` v1.5 — 광고 ID + AdMob 데이터 수집 항목 추가 + 변경 이력 표 + 시행일. 정책상 30일 전 앱 내 공지(`PostTag.NOTICE`) 발행 후 광고 활성화.
   - **Phase 4 한국/EU 동의 다이얼로그 (1.5일)**: Google UMP SDK + 첫 실행 시 맞춤 광고 동의 dialog + 거부 시 비맞춤 광고만. 베타 종료 후 정식 출시 시점에 검토.
-  - **베타 권장**: Phase 1 + 3 만 (3~4일) + `BuildConfig.SHOW_ADS` flag — 회원 50명 미만일 땐 광고 비활성. 50명 넘으면 토글 ON.
+  - **베타 권장**: Phase 1 + 3 만 (3~4일) + `BuildConfig.SHOW_ADS` flag — **베타 동안은 `false`(테스트 광고도 미노출)**, 정식 출시 + 실제 ad unit ID 발급 후 `true` 토글.
   - **수익 추정**: 베타 12명 ~$3~5/월 / 정식 100명 ~$30~50/월 / 500명 ~$150~250/월 (배너 + 네이티브 풀 시 1.5~2배).
 - [ ] `UX` **체크인 위치 검증** *(난이도 3, ~반나절, 옵션)* — GPS 체육관 반경 검증. `AttendanceDoc` 에 `checkInLat/Lng` 필드는 이미 정의됨. `ACCESS_FINE_LOCATION` 권한 + FusedLocationProvider + 거리 계산. 시간 30분 윈도우(05-08)는 이미 적용. 운영자가 ON/OFF 토글 가능하게 설계 권장
 
