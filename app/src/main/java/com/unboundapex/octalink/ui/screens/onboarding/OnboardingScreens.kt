@@ -571,7 +571,9 @@ private fun WeightChip(
             .alpha(if (selected) 1f else UNSELECTED_ALPHA)
             .clip(chipShape)
             .background(gradient)
-            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor), chipShape)
+            // border 두께는 선택/미선택 동일하게 유지 — 선택 시 두꺼워지면 안쪽 컬러 영역을
+            // 양옆에서 잠식해 칩이 시각적으로 좁아 보이는 이슈 회피. 선택 강조는 alpha + 색 + fontWeight 로 담당.
+            .border(BorderStroke(1.5.dp, borderColor), chipShape)
             .clickable { onClick() }
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
@@ -613,7 +615,9 @@ private fun GenderChip(
             .alpha(if (locked && !selected) UNSELECTED_ALPHA else 1f)
             .clip(chipShape)
             .background(if (selected) activeBg else MaterialTheme.colorScheme.surfaceVariant)
-            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor), chipShape)
+            // border 두께는 선택/미선택 동일하게 유지 — 선택 시 두꺼워지면 안쪽 컬러 영역을
+            // 양옆에서 잠식해 칩이 시각적으로 좁아 보이는 이슈 회피. 선택 강조는 alpha + 색 + fontWeight 로 담당.
+            .border(BorderStroke(1.5.dp, borderColor), chipShape)
             .clickable(enabled = !locked) { onClick() }
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
@@ -643,7 +647,9 @@ private fun BeltChip(
             .alpha(if (selected) 1f else UNSELECTED_ALPHA)
             .clip(chipShape)
             .background(belt.ringColor)
-            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor), chipShape)
+            // border 두께는 선택/미선택 동일하게 유지 — 선택 시 두꺼워지면 안쪽 컬러 영역을
+            // 양옆에서 잠식해 칩이 시각적으로 좁아 보이는 이슈 회피. 선택 강조는 alpha + 색 + fontWeight 로 담당.
+            .border(BorderStroke(1.5.dp, borderColor), chipShape)
             .clickable { onClick() }
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,

@@ -181,6 +181,23 @@ enum class NotificationType(
         channelName = "@멘션 / 공개 승인",
         channelDescription = "글 멘션 및 사진/영상 공개 승인 요청",
     ),
+    // 운영진(MASTER/CREATOR) 전용 — 검토 큐 신규 항목 알림. COACH 는 대상 아님(rules 가 isMaster() 강제).
+    // 클라이언트는 모든 회원에게 채널을 등록하지만 서버가 MASTER/CREATOR 에게만 발송 → 일반 회원은 못 받음.
+    // ProfileSettingsScreen 의 토글은 session.role.isMaster 일 때만 노출 (회원에게 무의미).
+    NEW_SIGNUP_PENDING(
+        displayName = "새 가입 신청 (운영진)",
+        description = "신규 회원이 가입 신청을 했을 때 — 관장/창조자에게",
+        channelId = "octalink_admin_signup_pending",
+        channelName = "가입 신청 (운영진)",
+        channelDescription = "신규 회원 가입 신청 — 승인 대기 알림",
+    ),
+    NEW_SKILL_PROPOSAL(
+        displayName = "새 스킬 점수 검토 요청 (운영진)",
+        description = "코치가 회원 스킬 점수를 제안했을 때 — 관장/창조자에게",
+        channelId = "octalink_admin_skill_proposal",
+        channelName = "스킬 검토 (운영진)",
+        channelDescription = "코치 제안 스킬 점수 — 승인 대기 알림",
+    ),
 }
 
 /** 정기 클래스 정의 (요일별 운영 슬롯 — 변경 빈도 낮음) */

@@ -10,6 +10,9 @@ captures/
 .cxx/
 *.apk
 *.aab
+# Android Studio release variant 빌드 산출물 — baselineProfiles / output-metadata.json 등.
+# *.apk 는 위에서 이미 제외되지만 디렉토리 자체와 메타 파일들이 untracked 로 노출되는 걸 방지.
+app/release/
 *.keystore
 *.jks
 google-services.json

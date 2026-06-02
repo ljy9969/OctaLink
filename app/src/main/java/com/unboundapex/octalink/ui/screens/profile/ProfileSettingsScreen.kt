@@ -54,6 +54,7 @@ import com.unboundapex.octalink.data.GymInfo
 import com.unboundapex.octalink.data.allWeeklyClassSlots
 import com.unboundapex.octalink.data.classSlotKey
 import com.unboundapex.octalink.data.schema.NotificationType
+import com.unboundapex.octalink.data.schema.isMaster
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
@@ -263,8 +264,8 @@ fun ProfileSettingsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     // 표시 순서 — 사용 빈도/중요도 기준. SIGNUP_RESULT 는 PENDING 단계 전용이라 제외.
-                    // 설정 카드 카운트(visiblePrefs.size) 와 1:1 일치하도록 enum 의 다른 6종은 모두 노출.
-                    listOf(
+                    // 운영진(MASTER/CREATOR) 전용 알림 2종은 isMaster 일 때만 노출 — 회원에게 무의미.
+                    val baseTypes = listOf(
                         NotificationType.COMMENT,
                         NotificationType.SKILL_UPDATED,
                         NotificationType.TOURNAMENT_DRAWN,
@@ -272,7 +273,12 @@ fun ProfileSettingsScreen(
                         NotificationType.NEW_POST_COMMENT,
                         NotificationType.MENTION,
                         NotificationType.CLASS_REMINDER,
-                    ).forEach { type ->
+                    )
+                    val adminTypes = if (session.role.isMaster) listOf(
+                        NotificationType.NEW_SIGNUP_PENDING,
+                        NotificationType.NEW_SKILL_PROPOSAL,
+                    ) else emptyList()
+                    (baseTypes + adminTypes).forEach { type ->
                         if (type == NotificationType.CLASS_REMINDER) {
                             ClassReminderConfigRow(
                                 selectedCount = classReminderSlots.size,

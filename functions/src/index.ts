@@ -600,7 +600,10 @@ type NotificationTypeKey =
   | "SIGNUP_RESULT"
   | "SKILL_UPDATED"
   | "NEW_POST_COMMENT"
-  | "MENTION";
+  | "MENTION"
+  // 운영진(MASTER/CREATOR) 전용 — 검토 큐 신규 항목 알림.
+  | "NEW_SIGNUP_PENDING"
+  | "NEW_SKILL_PROPOSAL";
 
 /** [NotificationType.defaultEnabled] 과 일치 — 클라이언트에서 prefs 키 누락 시 기본값. */
 const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
@@ -611,6 +614,8 @@ const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
   SKILL_UPDATED: true,
   NEW_POST_COMMENT: true,
   MENTION: true,
+  NEW_SIGNUP_PENDING: true,
+  NEW_SKILL_PROPOSAL: true,
 };
 
 /**
@@ -626,7 +631,22 @@ const CHANNEL_ID: Record<NotificationTypeKey, string> = {
   SKILL_UPDATED: "octalink_skill",
   NEW_POST_COMMENT: "octalink_post_comment",
   MENTION: "octalink_mention",
+  NEW_SIGNUP_PENDING: "octalink_admin_signup_pending",
+  NEW_SKILL_PROPOSAL: "octalink_admin_skill_proposal",
 };
+
+/**
+ * APPROVED 상태인 MASTER + CREATOR 들의 회원 id 셋 조회 — 운영진 검토 큐 알림 발송용.
+ * COACH 는 제외 (가입 승인 / 스킬 검토 권한은 isMaster() 만 — rules 가 강제).
+ */
+async function fetchMasterIds(): Promise<string[]> {
+  const snap = await admin.firestore()
+    .collection("members")
+    .where("status", "==", "APPROVED")
+    .where("role", "in", ["MASTER", "CREATOR"])
+    .get();
+  return snap.docs.map((d) => d.id);
+}
 
 /**
  * 주어진 memberId 들 중 (a) fcmToken 보유 + (b) 해당 type prefs 가 ON 인 사람만 추려서
@@ -930,6 +950,89 @@ export const notifyOnPostMention = onDocumentCreated(
       : titleLine;
 
     await sendNotificationTo(targets, "MENTION", title, body);
+  },
+);
+
+/**
+ * 가입 신청 — `members/{memberId}` create 시 status=PENDING 이면 모든 관장(MASTER/CREATOR)에게.
+ *
+ * 즉시 APPROVED 로 시작하는 운영진 가입(`RoleAllowlist` 매칭)은 PENDING 이 아니므로 skip.
+ * `completeSignup` Cloud Function 이 doc 을 작성할 때 status 가 같이 결정되므로 create 트리거가
+ * 의도된 상태를 본다.
+ */
+export const notifyOnSignupRequest = onDocumentCreated(
+  {
+    document: "members/{memberId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    if (data.status !== "PENDING") return;
+
+    const applicantName = (data.name as string | undefined) ?? "신규 회원";
+    const masters = await fetchMasterIds();
+    if (masters.length === 0) {
+      logger.warn("[notifyOnSignupRequest] no masters to notify");
+      return;
+    }
+
+    logger.info(`[notifyOnSignupRequest] applicant=${maskName(applicantName)} → masters=${masters.length}`);
+    await sendNotificationTo(
+      masters,
+      "NEW_SIGNUP_PENDING",
+      "새 가입 신청",
+      `${applicantName} 님이 가입을 신청했어요. 승인 대기 중.`,
+    );
+  },
+);
+
+/**
+ * 스킬 점수 검토 요청 — `members/{memberId}/skillScores/{scoreId}` create 시
+ * status=PROPOSED 면 모든 관장(MASTER/CREATOR)에게.
+ *
+ * 관장이 `directApprove` 로 직접 APPROVED 생성한 경우는 PROPOSED 가 아니라 skip.
+ * 작성자(코치) 본인이 관장이기도 한 드문 경우엔 자기 알림 회피 위해 masters 에서 제외.
+ */
+export const notifyOnSkillProposed = onDocumentCreated(
+  {
+    document: "members/{memberId}/skillScores/{scoreId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    if (data.status !== "PROPOSED") return;
+
+    const memberId = event.params.memberId;
+    const byUserId = (data.byUserId as string | undefined) ?? "";
+
+    const db = admin.firestore();
+    // 평가 대상 회원 이름 (비정규화 안 됨 — doc fetch).
+    const memberSnap = await db.collection("members").doc(memberId).get();
+    const memberName = (memberSnap.data()?.name as string | undefined) ?? "회원";
+
+    // 작성자 이름 (코치 또는 관장 본인이 PROPOSED 경로 사용한 경우).
+    let byName = "코치";
+    if (byUserId) {
+      const userSnap = await db.collection("members").doc(byUserId).get();
+      byName = (userSnap.data()?.name as string | undefined) ?? "코치";
+    }
+
+    // MASTER/CREATOR 중 작성자 본인 제외 (자기 알림 회피).
+    const masters = (await fetchMasterIds()).filter((id) => id !== byUserId);
+    if (masters.length === 0) {
+      logger.warn(`[notifyOnSkillProposed] no masters to notify (byUserId=${maskId(byUserId)})`);
+      return;
+    }
+
+    logger.info(`[notifyOnSkillProposed] target=${maskName(memberName)} by=${maskName(byName)} → masters=${masters.length}`);
+    await sendNotificationTo(
+      masters,
+      "NEW_SKILL_PROPOSAL",
+      "새 스킬 점수 검토 요청",
+      `${byName} 코치가 ${memberName} 님 스킬 점수를 입력했어요. 검토 대기 중.`,
+    );
   },
 );
 
