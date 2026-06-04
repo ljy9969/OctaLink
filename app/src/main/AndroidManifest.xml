@@ -44,6 +44,16 @@
             </intent-filter>
         </service>
 
+        <!-- 수업 30분 전 리마인더 — AlarmManager.setAlarmClock 이 fire 시 onReceive 호출.
+             WorkManager 의 배치 지연(10~30분) 회피 위해 06-04 부터 AlarmManager 로 전환. -->
+        <receiver
+            android:name=".messaging.ClassReminderAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.unboundapex.octalink.CLASS_REMINDER" />
+            </intent-filter>
+        </receiver>
+
         <!-- 카카오 로그인 OAuth 콜백 핸들러 (Custom URL scheme). -->
         <!-- scheme 형식: kakao{NATIVE_APP_KEY}://oauth — build.gradle.kts manifestPlaceholder 로 주입 -->
         <activity
