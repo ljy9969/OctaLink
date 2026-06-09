@@ -10,6 +10,11 @@
     <!-- (Phase 1 이전 광고 미사용 시점엔 tools:node="remove" 로 제거했으나 복원함) -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 
+    <!-- 배터리 최적화 제외 요청 — 수업 30분 전 리마인더(AlarmManager.setAlarmClock) 가
+         Doze / 절전 상태에서도 정시 발화되도록. 사용자가 ProfileSettings 에서 명시적으로
+         권한 부여 시에만 활성. Google Play 정책상 alarm/calendar 앱 카테고리 자격. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:name=".OctaLinkApplication"
         android:allowBackup="true"

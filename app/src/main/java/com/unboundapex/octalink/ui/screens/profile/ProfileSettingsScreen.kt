@@ -55,6 +55,7 @@ import com.unboundapex.octalink.data.allWeeklyClassSlots
 import com.unboundapex.octalink.data.classSlotKey
 import com.unboundapex.octalink.data.schema.NotificationType
 import com.unboundapex.octalink.data.schema.isMaster
+import com.unboundapex.octalink.messaging.BatteryOptimizationHelper
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
@@ -88,8 +89,15 @@ fun ProfileSettingsScreen(
 
     var notifDialogOpen by remember { mutableStateOf(false) }
     var classReminderDialogOpen by remember { mutableStateOf(false) }
+    var batteryOptimDialogOpen by remember { mutableStateOf(false) }
     var leaveConfirmOpen by remember { mutableStateOf(false) }
     var pendingToggleType by remember { mutableStateOf<NotificationType?>(null) }
+
+    // 배터리 최적화 제외 상태 — notifDialogOpen 가 토글될 때마다 재평가 (사용자가
+    // OS 다이얼로그 다녀온 직후의 상태 반영).
+    val isIgnoringBattery by remember(notifDialogOpen) {
+        mutableStateOf(BatteryOptimizationHelper.isIgnoring(context))
+    }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -287,6 +295,16 @@ fun ProfileSettingsScreen(
                                     classReminderDialogOpen = true
                                 },
                             )
+                            // CLASS_REMINDER 슬롯이 선택돼 있는데 배터리 최적화 제외가 안 돼 있으면
+                            // 정시 발화 보장이 안 됨(Doze / 삼성 절전 앱). 안내 행 노출.
+                            if (classReminderSlots.isNotEmpty() && !isIgnoringBattery) {
+                                BatteryOptimizationRow(
+                                    onClick = {
+                                        notifDialogOpen = false
+                                        batteryOptimDialogOpen = true
+                                    },
+                                )
+                            }
                         } else {
                             NotificationToggleRow(
                                 type = type,
@@ -352,6 +370,22 @@ fun ProfileSettingsScreen(
                         notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
+            },
+        )
+    }
+
+    if (batteryOptimDialogOpen) {
+        BatteryOptimizationDialog(
+            onDismiss = {
+                batteryOptimDialogOpen = false
+                notifDialogOpen = true
+            },
+            onGrant = {
+                BatteryOptimizationHelper.launchRequest(context)
+                batteryOptimDialogOpen = false
+                // 다시 알림 설정 다이얼로그로 복귀 — 사용자가 OS 다이얼로그 마치고 돌아오면
+                // isIgnoringBattery 가 재평가돼 행이 자동으로 사라짐(허용 시) 또는 유지(거부 시).
+                notifDialogOpen = true
             },
         )
     }
@@ -449,6 +483,110 @@ private fun ClassReminderConfigRow(
             modifier = Modifier.padding(horizontal = 4.dp),
         )
     }
+}
+
+/**
+ * 배터리 최적화 제외 안내 행 — CLASS_REMINDER 슬롯이 선택돼 있는데 권한 미부여 시 노출.
+ * 노란/경고 톤으로 사용자 주의 환기 (정시 발화가 실패할 수 있음을 명시).
+ */
+@Composable
+private fun BatteryOptimizationRow(
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "⚠ 정시 알림 보장 설정 필요",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                "배터리 최적화 제외 권한이 없으면 절전 상태에서 수업 알림이 늦거나 안 옴 · 탭하여 설정",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "→",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+    }
+}
+
+/**
+ * 배터리 최적화 제외 안내 + 권한 요청 다이얼로그.
+ *
+ * Android 표준 배터리 최적화는 시스템 다이얼로그로 해결되지만, OEM (특히 삼성 One UI) 의
+ * "절전 앱" / "절대 절전 안 함 앱" 은 API 없음 — 사용자가 OS 설정에서 직접 처리해야 함.
+ * 두 레이어 모두 명시.
+ */
+@Composable
+private fun BatteryOptimizationDialog(
+    onDismiss: () -> Unit,
+    onGrant: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("정시 알림 보장 설정", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column {
+                Text(
+                    "수업 30분 전 알림이 절전 상태에서도 정확한 시각에 도착하려면 두 가지 설정이 필요해요.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "1. 배터리 최적화 제외 (아래 \"권한 요청\" 버튼)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Android 표준 절전 모드에서 OctaLink 의 알람을 정시에 깨우도록 시스템에 허용 요청.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "2. 삼성 폰: \"절대 절전 안 함 앱\" 에 OctaLink 추가",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "설정 → 디바이스 케어 → 배터리 → 백그라운드 사용 한도 → 절대 절전 안 함 앱 → OctaLink 추가. (API 없어 수동 설정 필요)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            Text(
+                "권한 요청",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clickable { onGrant() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        },
+        dismissButton = {
+            Text(
+                "닫기",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clickable { onDismiss() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        },
+    )
 }
 
 @Composable
