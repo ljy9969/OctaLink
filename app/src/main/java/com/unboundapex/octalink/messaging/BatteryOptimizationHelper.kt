@@ -57,4 +57,28 @@ object BatteryOptimizationHelper {
         }
         context.startActivity(intent)
     }
+
+    /**
+     * 앱 알림 설정 페이지 직접 진입 — POST_NOTIFICATIONS 거부 또는 사용자가 OS 알림 채널을
+     * 끈 경우 안내용. 사용자가 "알림 권한" 항목을 직접 토글.
+     */
+    fun openAppNotificationSettings(context: Context) {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    /**
+     * 앱 상세 정보 페이지 직접 진입 — "사용량 → 배터리 → 제한 없음" 항목을 사용자가
+     * 직접 찾아가야 할 때 (특히 삼성 One UI 의 "절전 앱" 은 별도 API 없어서 이 페이지에서 처리).
+     */
+    fun openAppDetails(context: Context) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
 }

@@ -105,10 +105,15 @@ fun ProfileSettingsScreen(
         val type = pendingToggleType ?: return@rememberLauncherForActivityResult
         notifPrefsVm.setEnabled(type, true)
         if (!granted) {
-            android.util.Log.w(
-                "OctaLink.NotifPrefs",
-                "POST_NOTIFICATIONS denied — toggle saved but no notifications will show",
-            )
+            // 거부 — Android 13+ 의 OS 시스템 다이얼로그 한 번에 그치므로 사용자가 "허용 안 함"
+            // 누른 직후 다시 토스트 + 설정 페이지로 안내 (한 번 거부하면 두 번째 호출은 무시되거나
+            // "다시 묻지 않음" 처리되므로 직접 설정으로 보내야 함).
+            android.widget.Toast.makeText(
+                context,
+                "알림 권한이 거부됐어요. 설정에서 직접 허용해주세요.",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            BatteryOptimizationHelper.openAppNotificationSettings(context)
         }
         pendingToggleType = null
     }
@@ -387,6 +392,18 @@ fun ProfileSettingsScreen(
                 // isIgnoringBattery 가 재평가돼 행이 자동으로 사라짐(허용 시) 또는 유지(거부 시).
                 notifDialogOpen = true
             },
+            onOpenSettings = {
+                // 시스템 다이얼로그 거부 후 또는 삼성 폰의 "절전 앱" 풀러 가야 할 때 — 앱 상세
+                // 페이지 직접 진입. 토스트로 어디서 뭘 풀어야 하는지 한 번 더 안내.
+                android.widget.Toast.makeText(
+                    context,
+                    "사용량 → 배터리 → \"제한 없음\" 으로 설정해주세요.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+                BatteryOptimizationHelper.openAppDetails(context)
+                batteryOptimDialogOpen = false
+                notifDialogOpen = true
+            },
         )
     }
 
@@ -532,6 +549,7 @@ private fun BatteryOptimizationRow(
 private fun BatteryOptimizationDialog(
     onDismiss: () -> Unit,
     onGrant: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -544,7 +562,7 @@ private fun BatteryOptimizationDialog(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "1. 배터리 최적화 제외 (아래 \"권한 요청\" 버튼)",
+                    "1. 배터리 최적화 제외 (\"권한 요청\" 버튼)",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -555,14 +573,21 @@ private fun BatteryOptimizationDialog(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "2. 삼성 폰: \"절대 절전 안 함 앱\" 에 OctaLink 추가",
+                    "2. 삼성 폰: \"제한 없음\" 으로 배터리 사용 설정 (\"설정으로 이동\" 버튼)",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "설정 → 디바이스 케어 → 배터리 → 백그라운드 사용 한도 → 절대 절전 안 함 앱 → OctaLink 추가. (API 없어 수동 설정 필요)",
+                    "앱 정보 → 사용량 → 배터리 → 제한 없음. 또는 디바이스 케어 → 배터리 → 백그라운드 사용 한도 → \"절대 절전 안 함 앱\" 에 OctaLink 추가. (API 없어 수동 설정 필요)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "권한 요청을 거부했거나 추가 수동 설정이 필요한 경우 \"설정으로 이동\" 으로 앱 정보 페이지로 진입할 수 있어요.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                 )
             }
         },
@@ -577,14 +602,24 @@ private fun BatteryOptimizationDialog(
             )
         },
         dismissButton = {
-            Text(
-                "닫기",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .clickable { onDismiss() }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            )
+            Row {
+                Text(
+                    "설정으로 이동",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable { onOpenSettings() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+                Text(
+                    "닫기",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable { onDismiss() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
         },
     )
 }
