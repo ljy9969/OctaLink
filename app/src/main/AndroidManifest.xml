@@ -15,6 +15,14 @@
          권한 부여 시에만 활성. Google Play 정책상 alarm/calendar 앱 카테고리 자격. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- 정확 시각 알람 설정 — Android 13+ 부터 setAlarmClock 도 이 권한 요구.
+         USE_EXACT_ALARM 은 install-time 자동 부여 (alarm / reminder 앱 카테고리).
+         SCHEDULE_EXACT_ALARM 은 Android 12 (API 32) 폴백 — 그 이상은 USE_EXACT_ALARM 으로 처리.
+         Google Play Console 의 USE_EXACT_ALARM 카테고리 선언 필요. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
     <application
         android:name=".OctaLinkApplication"
         android:allowBackup="true"

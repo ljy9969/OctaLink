@@ -87,6 +87,14 @@ object ClassReminderScheduler {
             return
         }
 
+        // Android 12+ 의 exact alarm 권한 체크 (USE_EXACT_ALARM 매니페스트 선언으로 자동 부여
+        // 되어야 하지만 만약 거부됐거나 API 차이로 미부여 시 SecurityException 회피).
+        // setAlarmClock 도 Android 13+ 부터 이 권한 필요 — false 면 graceful skip.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            Log.w(TAG, "scheduleAll skip — canScheduleExactAlarms() == false (USE_EXACT_ALARM 미부여)")
+            return
+        }
+
         // 기존 예약 모두 취소 — 중복/과거 잔재 방지. 주간 모든 슬롯 키로 PendingIntent 조회 후 cancel.
         cancelAllAlarms(context, alarmManager)
 

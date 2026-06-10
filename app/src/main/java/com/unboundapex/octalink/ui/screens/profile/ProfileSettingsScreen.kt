@@ -456,11 +456,11 @@ private fun NotificationToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(type.displayName, style = MaterialTheme.typography.bodyLarge)
+            Text(type.displayName, style = MaterialTheme.typography.bodyMedium)
             Text(
                 type.description,
                 style = MaterialTheme.typography.labelSmall,
@@ -481,11 +481,11 @@ private fun ClassReminderConfigRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(type.displayName, style = MaterialTheme.typography.bodyLarge)
+            Text(type.displayName, style = MaterialTheme.typography.bodyMedium)
             Text(
                 if (selectedCount == 0) "수업 미선택 · 탭하여 설정"
                 else "${selectedCount}개 수업 알림 ON · 탭하여 변경",
@@ -514,13 +514,13 @@ private fun BatteryOptimizationRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 "⚠ 정시 알림 보장 설정 필요",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
             )
             Text(
