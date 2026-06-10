@@ -87,11 +87,11 @@ object ClassReminderScheduler {
             return
         }
 
-        // Android 12+ 의 exact alarm 권한 체크 (USE_EXACT_ALARM 매니페스트 선언으로 자동 부여
-        // 되어야 하지만 만약 거부됐거나 API 차이로 미부여 시 SecurityException 회피).
-        // setAlarmClock 도 Android 13+ 부터 이 권한 필요 — false 면 graceful skip.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            Log.w(TAG, "scheduleAll skip — canScheduleExactAlarms() == false (USE_EXACT_ALARM 미부여)")
+        // Android 12+ 의 SCHEDULE_EXACT_ALARM 권한 체크. Android 13+ 신규 설치는 자동 부여 안 됨 —
+        // 사용자가 설정 "알람 및 리마인더" 에서 허용해야 함. 미부여 시 setAlarmClock 이
+        // SecurityException 던지므로 graceful skip (UI 가 ProfileSettings 에서 허용 유도).
+        if (!ExactAlarmHelper.canSchedule(context)) {
+            Log.w(TAG, "scheduleAll skip — SCHEDULE_EXACT_ALARM 미부여 (설정에서 허용 필요)")
             return
         }
 

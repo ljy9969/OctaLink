@@ -56,6 +56,7 @@ import com.unboundapex.octalink.data.classSlotKey
 import com.unboundapex.octalink.data.schema.NotificationType
 import com.unboundapex.octalink.data.schema.isMaster
 import com.unboundapex.octalink.messaging.BatteryOptimizationHelper
+import com.unboundapex.octalink.messaging.ExactAlarmHelper
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
@@ -97,6 +98,10 @@ fun ProfileSettingsScreen(
     // OS 다이얼로그 다녀온 직후의 상태 반영).
     val isIgnoringBattery by remember(notifDialogOpen) {
         mutableStateOf(BatteryOptimizationHelper.isIgnoring(context))
+    }
+    // 정확 알람(SCHEDULE_EXACT_ALARM) 허용 상태 — 동일하게 다이얼로그 재오픈 시 재평가.
+    val canScheduleExact by remember(notifDialogOpen) {
+        mutableStateOf(ExactAlarmHelper.canSchedule(context))
     }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -300,8 +305,17 @@ fun ProfileSettingsScreen(
                                     classReminderDialogOpen = true
                                 },
                             )
-                            // CLASS_REMINDER 슬롯이 선택돼 있는데 배터리 최적화 제외가 안 돼 있으면
-                            // 정시 발화 보장이 안 됨(Doze / 삼성 절전 앱). 안내 행 노출.
+                            // CLASS_REMINDER 슬롯이 선택돼 있는데 정확 알람 권한이 없으면 알람 자체가
+                            // 안 잡힘 (Android 13+ 신규 설치는 자동 부여 안 됨). 최우선 안내 행.
+                            if (classReminderSlots.isNotEmpty() && !canScheduleExact) {
+                                ExactAlarmRow(
+                                    onClick = {
+                                        ExactAlarmHelper.launchSettings(context)
+                                    },
+                                )
+                            }
+                            // 정확 알람은 잡혀도 배터리 최적화 제외가 안 돼 있으면 절전 상태에서 지연될
+                            // 수 있음(Doze / 삼성 절전 앱). 부차 안내 행.
                             if (classReminderSlots.isNotEmpty() && !isIgnoringBattery) {
                                 BatteryOptimizationRow(
                                     onClick = {
@@ -497,6 +511,43 @@ private fun ClassReminderConfigRow(
             "→",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+    }
+}
+
+/**
+ * 정확 알람(SCHEDULE_EXACT_ALARM) 허용 안내 행 — 슬롯 선택됐는데 권한 미부여 시 노출.
+ * 이 권한이 없으면 알람 자체가 안 잡혀서 수업 알림이 아예 안 옴 (가장 치명적) → 최상단 + 빨강.
+ * 탭 → 설정 "알람 및 리마인더" 화면 직접 진입.
+ */
+@Composable
+private fun ExactAlarmRow(
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "⚠ 알람 권한 허용 필요",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                "\"알람 및 리마인더\" 권한이 없으면 수업 알림이 아예 오지 않아요 · 탭하여 허용",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "→",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
     }
