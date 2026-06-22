@@ -366,7 +366,7 @@ private fun ShadowCoachCard(onClick: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "🥊 AI 쉐도우 코치",
+                    "🥊 AI 코치의 실시간 쉐도우 피드백",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
@@ -378,7 +378,7 @@ private fun ShadowCoachCard(onClick: () -> Unit) {
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "카메라로 쉐도우 복싱 자세를 실시간 분석 — 잽 카운트 + 가드·턱 코칭.",
+                "카메라 앞에서 쉐도우 복싱을 하며 AI 코치의 실시간 피드백을 받아보세요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -12,17 +12,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** 화면 상태 — 카운터/코칭 칩/요약. 오버레이용 [ShadowCoachViewModel.poseFrame] 은 별도 flow. */
+/** 화면 상태 — 동작 카운트/코칭 칩/요약. 오버레이용 [ShadowCoachViewModel.poseFrame] 은 별도 flow. */
 data class ShadowUiState(
     val running: Boolean = false,
     val poseDetected: Boolean = false,
-    val jabCount: Int = 0,
+    /** 동작 종류별 누적 횟수 (잽/라이트/훅/어퍼). */
+    val techniqueCounts: Map<Technique, Int> = emptyMap(),
     /** 이번 프레임에서 위반 중인 자세 항목 — 실시간 코칭 칩. */
     val liveCues: Set<PostureCheck> = emptySet(),
     val elapsedMs: Long = 0L,
-    /** 세션 종료 시 채워짐 → 요약 카드/다이얼로그 노출. null 이면 진행 중/대기. */
+    /** 세션 종료 시 채워짐 → 요약 다이얼로그 노출. null 이면 진행 중/대기. */
     val summary: ShadowSession? = null,
-)
+) {
+    val totalStrikes: Int get() = techniqueCounts.values.sum()
+}
 
 /**
  * Shadow Coach 세션 상태 보유 + [ShadowMotionAnalyzer] 결과 누적.
@@ -41,13 +44,13 @@ class ShadowCoachViewModel : ViewModel() {
     val poseFrame: StateFlow<PoseFrame?> = _poseFrame.asStateFlow()
 
     private var startedAtMs = 0L
-    private var jab = 0
+    private val counts = mutableMapOf<Technique, Int>()
     private var analyzedFrames = 0
     private val postureAcc = mutableMapOf<PostureCheck, PostureSample>()
 
     fun start() {
         analyzer.reset()
-        jab = 0
+        counts.clear()
         analyzedFrames = 0
         postureAcc.clear()
         startedAtMs = SystemClock.elapsedRealtime()
@@ -58,7 +61,7 @@ class ShadowCoachViewModel : ViewModel() {
         if (!_ui.value.running) return
         val duration = SystemClock.elapsedRealtime() - startedAtMs
         val session = ShadowSession(
-            techniqueCounts = mapOf(Technique.JAB to jab),
+            techniqueCounts = counts.toMap(),
             postureSamples = postureAcc.toMap(),
             durationMs = duration,
             analyzedFrames = analyzedFrames,
@@ -76,7 +79,6 @@ class ShadowCoachViewModel : ViewModel() {
         val result = analyzer.process(frame)
 
         if (!_ui.value.running) {
-            // 대기 중 — 자세 감지 여부만 반영(시작 전 자리잡기 힌트).
             if (_ui.value.poseDetected != result.posed) {
                 _ui.value = _ui.value.copy(poseDetected = result.posed)
             }
@@ -84,26 +86,30 @@ class ShadowCoachViewModel : ViewModel() {
         }
 
         if (result.posed) analyzedFrames++
-        jab += result.newReps
+        result.newStrikes.forEach { tech ->
+            counts[tech] = (counts[tech] ?: 0) + 1
+        }
 
         // 자세 표본 누적 (포즈 잡힌 프레임만).
         if (result.posed) {
-            PostureCheck.mvpEnabled.forEach { check ->
-                if (check == PostureCheck.POOR_EXTENSION) return@forEach // rep 단위로 별도 기록
-                val violated = check in result.activeCues
+            // 프레임 단위 자세 체크 (가드/턱).
+            listOf(PostureCheck.GUARD_DOWN, PostureCheck.CHIN_UP).forEach { check ->
                 val prev = postureAcc[check] ?: PostureSample()
-                postureAcc[check] = prev.record(violated)
+                postureAcc[check] = prev.record(check in result.activeCues)
             }
-        }
-        // 신전 부족 — rep 완료 시 1회 기록.
-        if (result.newReps > 0) {
-            val prev = postureAcc[PostureCheck.POOR_EXTENSION] ?: PostureSample()
-            postureAcc[PostureCheck.POOR_EXTENSION] = prev.record(result.transientPoorExtension)
+            // 신전 부족 — 이번에 완료된 스트레이트(잽/라이트) 단위로 기록.
+            val straights = result.newStrikes.count { it == Technique.JAB || it == Technique.STRAIGHT }
+            if (straights > 0) {
+                var prev = postureAcc[PostureCheck.POOR_EXTENSION] ?: PostureSample()
+                repeat(result.poorExtensionStrikes) { prev = prev.record(true) }
+                repeat(straights - result.poorExtensionStrikes) { prev = prev.record(false) }
+                postureAcc[PostureCheck.POOR_EXTENSION] = prev
+            }
         }
 
         _ui.value = _ui.value.copy(
             poseDetected = result.posed,
-            jabCount = jab,
+            techniqueCounts = counts.toMap(),
             liveCues = result.activeCues,
             elapsedMs = SystemClock.elapsedRealtime() - startedAtMs,
         )

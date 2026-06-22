@@ -12,6 +12,8 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +54,7 @@ import com.unboundapex.octalink.data.shadowcoach.PoseLandmarkerHelper
 import com.unboundapex.octalink.data.shadowcoach.PoseLandmarks
 import com.unboundapex.octalink.data.shadowcoach.PostureCheck
 import com.unboundapex.octalink.data.shadowcoach.ShadowSession
+import com.unboundapex.octalink.data.shadowcoach.Technique
 import java.util.concurrent.Executors
 
 /**
@@ -216,14 +219,26 @@ private fun ShadowHud(
     onStop: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        // 상단 — 카운터 + 시간.
+        // 상단 1행 — 총 카운트 + 시간 (어두운 HudChip).
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            HudChip("잽 ${ui.jabCount}")
+            HudChip("총 ${ui.totalStrikes}")
             HudChip(formatElapsed(ui.elapsedMs))
-            if (!ui.poseDetected) HudChip("전신이 보이게 서세요", warn = true)
+        }
+        Spacer(Modifier.height(6.dp))
+        // 상단 2행 — 동작 종류별 카운트 + 자세 힌트. 색상별 칩, 가로 스크롤로 항상 한 줄.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Technique.mvpEnabled.forEach { tech ->
+                ColorChip("${tech.displayName} ${ui.techniqueCounts[tech] ?: 0}", techniqueColor(tech))
+            }
+            if (!ui.poseDetected) ColorChip("전신이 보이게 서세요", Color(0xE6F59E0B))
         }
         Spacer(Modifier.height(8.dp))
         // 실시간 코칭 칩.
@@ -251,19 +266,34 @@ private fun ShadowHud(
     }
 }
 
+/** 총 카운트/시간 등 중립 정보 칩 (어두운 배경). */
 @Composable
 private fun HudChip(text: String, warn: Boolean = false) {
-    val bg = if (warn) Color(0xCCC8102E) else Color(0xAA000000)
+    ColorChip(text = text, bg = if (warn) Color(0xCCC8102E) else Color(0xAA000000))
+}
+
+/** 동작 종류·자세 힌트 칩 — 색상 구분 + 컴팩트 사이즈. */
+@Composable
+private fun ColorChip(text: String, bg: Color) {
     Text(
         text = text,
         color = Color.White,
         fontWeight = FontWeight.Bold,
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.labelMedium,
         modifier = Modifier
             .clip(RoundedCornerShape(50))
             .background(bg)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
     )
+}
+
+/** 동작 종류별 칩 색 — TagChip 팔레트 톤과 통일. 알파 0xE6 으로 카메라 위 가독 확보. */
+private fun techniqueColor(tech: Technique): Color = when (tech) {
+    Technique.JAB -> Color(0xE61E88E5)        // 블루 (왼손 잽)
+    Technique.STRAIGHT -> Color(0xE6C8102E)   // 브랜드 레드 (오른손 라이트)
+    Technique.HOOK -> Color(0xE6FF6B35)       // 오렌지 (훅)
+    Technique.UPPERCUT -> Color(0xE67C3AED)   // 바이올렛 (어퍼)
+    Technique.LOW_KICK -> Color(0xE627AE60)   // 그린 (로우킥, 후속)
 }
 
 @Composable
@@ -277,8 +307,16 @@ private fun ShadowSummaryDialog(
         title = { Text("세션 요약", style = MaterialTheme.typography.titleLarge) },
         text = {
             Column {
-                Text("잽 ${session.totalStrikes}회", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(4.dp))
+                Text("총 ${session.totalStrikes}회", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    Technique.mvpEnabled.joinToString("  ") {
+                        "${it.displayName} ${session.techniqueCounts[it] ?: 0}"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
                 Text("자세 점수 ${session.overallScore()}점 / 100", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
                 Text("시간 ${formatElapsed(session.durationMs)}", style = MaterialTheme.typography.bodyMedium)
