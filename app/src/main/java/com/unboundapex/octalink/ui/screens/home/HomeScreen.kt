@@ -118,6 +118,7 @@ fun HomeScreen(
     onOpenInfo: () -> Unit = {},
     onOpenMyAttendance: () -> Unit = {},
     onOpenAiRoutine: () -> Unit = {},
+    onOpenShadowCoach: () -> Unit = {},
     myCommentsVm: MyCommentsViewModel = viewModel(),
     weeklyAttendanceVm: HomeWeeklyAttendanceViewModel = viewModel(),
     weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
@@ -333,6 +334,8 @@ fun HomeScreen(
             if (session.canUseAiRoutine()) {
                 item { AiRoutineCard(doc = aiRoutine, onClick = onOpenAiRoutine) }
             }
+            // AI 쉐도우 코치 — 온디바이스 실시간 자세 분석. 비용 없어 전 회원 노출.
+            item { ShadowCoachCard(onClick = onOpenShadowCoach) }
             if (todayCurriculum != null && !gymClosedToday) {
                 item {
                     TodayCurriculumCard(
@@ -346,6 +349,39 @@ fun HomeScreen(
             item { TitleMetaCard(oneLineComment) }
             item { GymInfoCard(onClick = onOpenInfo) }
             item { com.unboundapex.octalink.ui.components.AdBanner() }
+        }
+    }
+}
+
+/**
+ * AI 쉐도우 코치 — 홈 진입 카드. 탭 시 카메라 기반 실시간 자세 분석 화면으로.
+ * 온디바이스 처리(영상 단말 밖 미전송)라 별도 권한 게이트 없이 전 회원 노출.
+ */
+@Composable
+private fun ShadowCoachCard(onClick: () -> Unit) {
+    PosseCard(modifier = Modifier.clickable { onClick() }) {
+        androidx.compose.foundation.layout.Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "🥊 AI 쉐도우 코치",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "→",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "카메라로 쉐도우 복싱 자세를 실시간 분석 — 잽 카운트 + 가드·턱 코칭.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

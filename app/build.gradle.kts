@@ -130,6 +130,16 @@ dependencies {
     implementation("androidx.media3:media3-effect:1.4.1")
     implementation("androidx.media3:media3-common:1.4.1")
 
+    // Shadow Coach — 온디바이스 실시간 자세 분석 (격투기 쉐도우 코칭).
+    //  - CameraX: 카메라 프리뷰 + ImageAnalysis 프레임 스트림.
+    //  - MediaPipe Tasks Vision PoseLandmarker: 온디바이스 33개 관절 추정 (LIVE_STREAM, GPU delegate).
+    //    영상은 단말 밖으로 나가지 않음 — 프라이버시. 모델 파일(pose_landmarker_*.task)은 assets 에 배치.
+    implementation("androidx.camera:camera-core:1.4.1")
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
+    implementation("com.google.mediapipe:tasks-vision:0.10.20")
+
     // 카카오 로그인 SDK (v2-user) — Kakao OAuth → Firebase Custom Token 교환 진입점
     implementation("com.kakao.sdk:v2-user:2.20.6")
     // suspend 코루틴 어댑터용 — Tasks.await() 등에서 사용

@@ -22,6 +22,11 @@
          로 확인 후 ProfileSettings 안내 UI 로 유도. maxSdkVersion 없이 전 버전 적용. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
+    <!-- Shadow Coach — 온디바이스 실시간 자세 분석용 카메라. 영상은 단말 밖으로 전송하지 않음
+         (MediaPipe 온디바이스 추론). runtime 권한 요청은 Shadow Coach 진입 시점에. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <application
         android:name=".OctaLinkApplication"
         android:allowBackup="true"
