@@ -14,11 +14,17 @@ package com.unboundapex.octalink.data.shadowcoach
 enum class Technique(
     val displayName: String,
     val enabledInMvp: Boolean,
+    /** 펀치 계열인지 (방어 회피 동작과 구분 — 신전/반대손 가드 등 펀치 전용 판정에 사용). */
+    val isPunch: Boolean = true,
 ) {
     JAB("잽", enabledInMvp = true),
     STRAIGHT("라이트", enabledInMvp = true),
     HOOK("훅", enabledInMvp = true),
     UPPERCUT("어퍼", enabledInMvp = true),
+    // 방어 회피 동작 — 머리 궤적으로 감지, 펀치처럼 카운트(잘한 동작). 교정 대상 아님.
+    DUCK("더킹", enabledInMvp = true, isPunch = false),
+    SLIP("슬립", enabledInMvp = true, isPunch = false),
+    WEAVE("위빙", enabledInMvp = true, isPunch = false),
     LOW_KICK("로우킥", enabledInMvp = false),
     ;
 

@@ -8,6 +8,13 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -31,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,11 +52,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.unboundapex.octalink.BuildConfig
 import com.unboundapex.octalink.data.shadowcoach.PoseFrame
 import com.unboundapex.octalink.data.shadowcoach.PoseLandmarkerHelper
 import com.unboundapex.octalink.data.shadowcoach.PoseLandmarks
@@ -139,6 +149,58 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
         PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
     }
 
+    // 개발용 인앱 녹화 (CameraX VideoCapture) — BuildConfig.DEBUG 일 때만. release(Play Store) 미바인딩.
+    val videoCapture = remember {
+        if (BuildConfig.DEBUG) {
+            val recorder = Recorder.Builder()
+                .setQualitySelector(QualitySelector.from(Quality.HD))
+                .build()
+            VideoCapture.withOutput(recorder)
+        } else null
+    }
+    var recording by remember { mutableStateOf<Recording?>(null) }
+    var isRecording by remember { mutableStateOf(false) }
+
+    fun toggleRecording() {
+        val vc = videoCapture ?: return
+        val active = recording
+        if (active != null) {
+            active.stop(); recording = null; isRecording = false
+            return
+        }
+        val dir = context.getExternalFilesDir("shadow_rec")
+        val file = java.io.File(dir, "shadow_${System.currentTimeMillis()}.mp4")
+        val opts = FileOutputOptions.Builder(file).build()
+        runCatching {
+            recording = vc.output.prepareRecording(context, opts)
+                .start(ContextCompat.getMainExecutor(context)) { event ->
+                    if (event is VideoRecordEvent.Finalize) {
+                        android.util.Log.i("ShadowCoach.Rec", "녹화 저장: ${file.absolutePath} (err=${event.error})")
+                    }
+                }
+            isRecording = true
+        }.onFailure { android.util.Log.e("ShadowCoach.Rec", "녹화 시작 실패", it) }
+    }
+
+    // 화면 자동 꺼짐 방지 — 쉐도우 화면에 있는 동안 항상 켜둠 (운동 중 화면 꺼지면 인식 확인 불가).
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+
+    // 자세 코칭 음성(TTS) — liveCues 변할 때 쿨다운 두고 발화.
+    val tts = remember { ShadowTts(context) }
+    DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+    LaunchedEffect(ui.liveCues, ui.running) {
+        if (ui.running) tts.announce(ui.liveCues)
+    }
+    // 격려 음성 — 10회마다 마일스톤. (교정 발화 우선, 자체 쿨다운으로 남발 방지.)
+    LaunchedEffect(ui.totalStrikes) {
+        val n = ui.totalStrikes
+        if (ui.running && n > 0 && n % 10 == 0) tts.encourage()
+    }
+
     DisposableEffect(Unit) {
         helper.setup()
         val future = ProcessCameraProvider.getInstance(context)
@@ -153,13 +215,19 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
                 .build()
                 .also { it.setAnalyzer(analysisExecutor) { proxy -> helper.analyze(proxy) } }
             val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
-            runCatching {
+            // DEBUG 면 VideoCapture 까지 3개 바인딩 시도, 실패하면 프리뷰+분석만 (녹화 미지원 기기 폴백).
+            val bound = if (videoCapture != null) runCatching {
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis, videoCapture)
+            }.isSuccess else false
+            if (!bound) runCatching {
                 provider.unbindAll()
                 provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
             }
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {
+            runCatching { recording?.stop() }
             runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
             helper.close()
             analysisExecutor.shutdown()
@@ -170,6 +238,22 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         PoseOverlay(frame = poseFrame, mirrorX = mirrorX, modifier = Modifier.fillMaxSize())
         ShadowHud(ui = ui, onStart = vm::start, onStop = vm::stop)
+        // 개발용 녹화 토글 — DEBUG 빌드에서 우상단. release 엔 미노출.
+        if (BuildConfig.DEBUG && videoCapture != null) {
+            Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.TopEnd) {
+                Text(
+                    text = if (isRecording) "■ 녹화중" else "● 녹화",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (isRecording) Color(0xE6C8102E) else Color(0xAA000000))
+                        .clickable { toggleRecording() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
     }
 
     ui.summary?.let { session ->
@@ -293,6 +377,9 @@ private fun techniqueColor(tech: Technique): Color = when (tech) {
     Technique.STRAIGHT -> Color(0xE6C8102E)   // 브랜드 레드 (오른손 라이트)
     Technique.HOOK -> Color(0xE6FF6B35)       // 오렌지 (훅)
     Technique.UPPERCUT -> Color(0xE67C3AED)   // 바이올렛 (어퍼)
+    Technique.DUCK -> Color(0xE600ACC1)       // 시안 (더킹)
+    Technique.SLIP -> Color(0xE60097A7)       // 틸 (슬립)
+    Technique.WEAVE -> Color(0xE626A69A)      // 청록 (위빙)
     Technique.LOW_KICK -> Color(0xE627AE60)   // 그린 (로우킥, 후속)
 }
 
@@ -321,10 +408,11 @@ private fun ShadowSummaryDialog(
                 Spacer(Modifier.height(4.dp))
                 Text("시간 ${formatElapsed(session.durationMs)}", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
+                // 표본이 있는 자세 항목만 노출 (다리 미노출 등으로 표본 없는 항목은 생략).
                 PostureCheck.mvpEnabled.forEach { check ->
-                    val pct = session.compliancePercent(check)
+                    val pct = session.compliancePercent(check) ?: return@forEach
                     Text(
-                        "${check.displayName}: " + (pct?.let { "$it% 준수" } ?: "표본 없음"),
+                        "${check.displayName}: $pct% 준수",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

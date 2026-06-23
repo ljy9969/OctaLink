@@ -10,11 +10,19 @@ enum class PostureCheck(
     val cue: String,
     val enabledInMvp: Boolean,
 ) {
-    GUARD_DOWN("가드", "가드를 올리세요", enabledInMvp = true),
-    CHIN_UP("턱", "턱을 당기세요", enabledInMvp = true),
-    POOR_EXTENSION("팔 신전", "팔을 끝까지 뻗으세요", enabledInMvp = true),
-    POOR_HIP_ROTATION("골반 회전", "골반 회전을 더 주세요", enabledInMvp = false),
-    BALANCE_LOSS("중심", "중심을 잡으세요", enabledInMvp = false),
+    // enum 순서 = TTS 발화 우선순위 (위가 먼저). 한 번에 한 개만 읽음.
+    GUARD_DOWN("가드", "가드 올리세요", enabledInMvp = true),
+    CHIN_UP("턱", "턱 당기세요", enabledInMvp = true),
+    OFF_HAND_DROP("반대손 가드", "반대손 가드 유지하세요", enabledInMvp = true),
+    BALANCE_LOSS("중심", "중심 잡으세요", enabledInMvp = true),
+    POOR_EXTENSION("팔 신전", "팔 끝까지 뻗으세요", enabledInMvp = true),
+    POOR_HIP_ROTATION("골반 회전", "골반 회전하세요", enabledInMvp = true),
+    ELBOW_FLARE("팔꿈치", "팔꿈치 붙이세요", enabledInMvp = true),
+    SHOULDER_SHRUG("어깨 긴장", "어깨 힘 빼세요", enabledInMvp = true),
+    HEAD_OFFLINE("머리 중심", "머리 중심선 유지하세요", enabledInMvp = true),
+    SLOW_RECOVERY("리커버리", "친 손 빨리 가드로", enabledInMvp = true),
+    STANCE_NARROW("스탠스", "스탠스 넓히세요", enabledInMvp = true),
+    KNEES_STRAIGHT("무릎", "무릎 살짝 굽히세요", enabledInMvp = true),
     ;
 
     companion object {

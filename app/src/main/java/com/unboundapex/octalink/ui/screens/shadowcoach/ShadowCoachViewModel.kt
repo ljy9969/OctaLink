@@ -48,6 +48,18 @@ class ShadowCoachViewModel : ViewModel() {
     private var analyzedFrames = 0
     private val postureAcc = mutableMapOf<PostureCheck, PostureSample>()
 
+    private companion object {
+        // 점수에 반영하는 프레임 단위 상반신 자세 항목 (다리/리커버리 제외 — TTS 코칭만).
+        val SCORED_FRAME_CHECKS = listOf(
+            PostureCheck.GUARD_DOWN,
+            PostureCheck.CHIN_UP,
+            PostureCheck.BALANCE_LOSS,
+            PostureCheck.ELBOW_FLARE,
+            PostureCheck.SHOULDER_SHRUG,
+            PostureCheck.HEAD_OFFLINE,
+        )
+    }
+
     fun start() {
         analyzer.reset()
         counts.clear()
@@ -92,18 +104,35 @@ class ShadowCoachViewModel : ViewModel() {
 
         // 자세 표본 누적 (포즈 잡힌 프레임만).
         if (result.posed) {
-            // 프레임 단위 자세 체크 (가드/턱).
-            listOf(PostureCheck.GUARD_DOWN, PostureCheck.CHIN_UP).forEach { check ->
+            // 프레임 단위 자세 체크 (상반신 — 보통 항상 보임). 다리(스탠스/무릎)·리커버리는
+            // 가시성·이벤트 특성상 점수에서 제외, TTS 코칭만 제공.
+            SCORED_FRAME_CHECKS.forEach { check ->
                 val prev = postureAcc[check] ?: PostureSample()
-                postureAcc[check] = prev.record(check in result.activeCues)
+                postureAcc[check] = prev.record(check in result.frameViolations)
             }
-            // 신전 부족 — 이번에 완료된 스트레이트(잽/라이트) 단위로 기록.
+            // 신전 부족 — 완료된 스트레이트(잽/라이트) 단위.
             val straights = result.newStrikes.count { it == Technique.JAB || it == Technique.STRAIGHT }
             if (straights > 0) {
                 var prev = postureAcc[PostureCheck.POOR_EXTENSION] ?: PostureSample()
                 repeat(result.poorExtensionStrikes) { prev = prev.record(true) }
                 repeat(straights - result.poorExtensionStrikes) { prev = prev.record(false) }
                 postureAcc[PostureCheck.POOR_EXTENSION] = prev
+            }
+            // 골반 회전 부족 — 완료된 라이트(오른손) 단위.
+            val rightStraights = result.newStrikes.count { it == Technique.STRAIGHT }
+            if (rightStraights > 0) {
+                var prev = postureAcc[PostureCheck.POOR_HIP_ROTATION] ?: PostureSample()
+                repeat(result.poorHipStrikes) { prev = prev.record(true) }
+                repeat(rightStraights - result.poorHipStrikes) { prev = prev.record(false) }
+                postureAcc[PostureCheck.POOR_HIP_ROTATION] = prev
+            }
+            // 반대손 가드 — 완료된 펀치 단위 (회피 동작 제외).
+            val punchesThisFrame = result.newStrikes.count { it.isPunch }
+            if (punchesThisFrame > 0) {
+                var prev = postureAcc[PostureCheck.OFF_HAND_DROP] ?: PostureSample()
+                repeat(result.offHandDropStrikes) { prev = prev.record(true) }
+                repeat(punchesThisFrame - result.offHandDropStrikes) { prev = prev.record(false) }
+                postureAcc[PostureCheck.OFF_HAND_DROP] = prev
             }
         }
 

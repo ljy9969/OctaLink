@@ -138,6 +138,9 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.4.1")
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
+    // VideoCapture — 개발용 인앱 화면(카메라) 녹화. BuildConfig.DEBUG 일 때만 바인딩/노출 →
+    // release(Play Store) 빌드엔 녹화 기능 미동작 (튜닝 참고용 dev 전용).
+    implementation("androidx.camera:camera-video:1.4.1")
     implementation("com.google.mediapipe:tasks-vision:0.10.20")
 
     // 카카오 로그인 SDK (v2-user) — Kakao OAuth → Firebase Custom Token 교환 진입점
