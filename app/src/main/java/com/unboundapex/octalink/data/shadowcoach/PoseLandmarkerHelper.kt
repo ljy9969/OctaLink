@@ -96,7 +96,16 @@ class PoseLandmarkerHelper(
                 visibility = lm.visibility().orElse(0f),
             )
         }
-        onResult(PoseFrame(points = pts, timestampMs = tsMs))
+        // 3D world landmarks(미터, 골반 원점) — 깊이 기반 분석용. 없으면 빈 리스트.
+        val worldPts = result.worldLandmarks().getOrNull(0)?.map { lm ->
+            PosePoint(
+                x = lm.x(),
+                y = lm.y(),
+                z = lm.z(),
+                visibility = lm.visibility().orElse(0f),
+            )
+        } ?: emptyList()
+        onResult(PoseFrame(points = pts, timestampMs = tsMs, world = worldPts))
     }
 
     fun close() {

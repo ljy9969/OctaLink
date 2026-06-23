@@ -1,6 +1,7 @@
 package com.unboundapex.octalink.data.shadowcoach
 
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.hypot
 
 /**
@@ -45,28 +46,28 @@ class ShadowMotionAnalyzer {
         /** 가드(기준) 위치 EMA 추종 계수 — 클수록 빨리 따라감. */
         const val BASELINE_EMA = 0.25f
         /**
-         * 손목이 기준에서 이만큼(어깨폭 배수) 이상 멀어지는 "순간" 펀치 1회 카운트 (rising edge).
-         * 완전 복귀를 기다리지 않으므로 빠른 연타도 잡힘. 낮출수록 민감(오탐↑).
+         * (3D) 손목이 기준에서 이만큼(3D 어깨폭 배수) 멀어지는 "순간" 펀치 1회 카운트(rising edge).
+         * world 좌표(미터) 기준이라 2D 보다 스케일이 큼. 낮출수록 민감(오탐↑).
          */
-        const val STRIKE_OUT = 0.5f
-        /** 손목이 기준에서 이만큼 이내로 돌아오면 가드 복귀 → 다음 펀치 카운트 재무장(rearm). */
-        const val STRIKE_RETURN = 0.3f
-        /** 스트레이트 분류: 카운트 시점 팔꿈치 각도(도) 이 값 이상. */
-        const val STRAIGHT_ELBOW = 138f
+        const val STRIKE_OUT = 0.9f
+        /** (3D) 손목이 기준 이내로 돌아오면 가드 복귀 → 재무장. */
+        const val STRIKE_RETURN = 0.5f
+        /** 스트레이트 분류: 카운트 시점 3D 팔꿈치 각도(도) 이 값 이상. */
+        const val STRAIGHT_ELBOW = 150f
         /** "좋은 신전" — 미만이면 신전 부족 스트레이트. */
-        const val GOOD_EXTENSION = 155f
-        /** 어퍼컷 분류: 손목 상승량(어깨폭 배수) 이 값 이상 + 수평보다 큼. */
-        const val UPPERCUT_RISE = 0.3f
-        /** 훅 분류: 손목 수평 이동량(어깨폭 배수) 이 값 이상. */
-        const val HOOK_HORIZONTAL = 0.4f
+        const val GOOD_EXTENSION = 162f
+        /** 어퍼컷 분류: 손목 상승량(3D 어깨폭 배수) 이 값 이상 + 전방/수평보다 우세. */
+        const val UPPERCUT_RISE = 0.5f
+        /** 훅 분류: 손목 수평 이동량(3D 어깨폭 배수) 이 값 이상. */
+        const val HOOK_LATERAL = 0.6f
         /** 가드 다운: 양 손목이 어깨선보다 이만큼(정규화 y) 아래. */
         const val GUARD_DOWN_MARGIN = 0.06f
         /** 턱 들림: 코가 귀선보다 이만큼(정규화 y) 위. */
         const val CHIN_UP_MARGIN = 0.04f
         /** 중심 무너짐: 어깨 중심이 골반 중심에서 좌우로 이만큼(어깨폭 배수) 벗어남. (보수적 = 큰 기울기만) */
         const val BALANCE_LEAN = 0.55f
-        /** 골반 회전 부족: 라이트(오른손) 칠 때 골반 좌우 이동이 이 값(어깨폭 배수) 미만. (보수적 = 거의 0 일 때만) */
-        const val HIP_ROTATION_MIN = 0.05f
+        /** (3D) 골반 회전 부족: 라이트(오른손) 칠 때 골반 회전각 변화(라디안)가 이 값 미만. (~9°) */
+        const val HIP_ROTATION_MIN_RAD = 0.15f
         /** 반대손 가드 다운: 펀치 시 반대손 손목이 어깨선보다 이만큼 아래. */
         const val OFF_HAND_MARGIN = 0.08f
         /** 리커버리 지연: 펀치 후 이 시간(ms) 안에 손이 가드로 안 돌아오면 경고. */
@@ -98,10 +99,11 @@ class ShadowMotionAnalyzer {
 
     private enum class Arm { LEFT, RIGHT }
 
-    /** 한 팔의 펀치 추적 상태 (rising-edge 카운트 + 리커버리 타이밍). */
+    /** 한 팔의 펀치 추적 상태 (rising-edge 카운트 + 리커버리 타이밍). 좌표는 3D world(미터). */
     private class ArmState {
         var baseX = Float.NaN
         var baseY = Float.NaN
+        var baseZ = Float.NaN
         /** true = 다음 펀치 카운트 가능. 카운트 후 가드 복귀까지 false(중복 방지). */
         var armed = true
         /** 마지막 펀치 카운트 시각(ms). 리커버리 지연 판정용. */
@@ -122,29 +124,30 @@ class ShadowMotionAnalyzer {
     private val left = ArmState()
     private val right = ArmState()
     private val head = HeadState()
-    /** 골반 중심 x 기준(EMA) — 라이트 칠 때 회전(좌우 이동) 판정용. */
-    private var hipBaseX = Float.NaN
+    /** (3D) 골반 회전각 기준(EMA, 라디안) — 라이트 칠 때 회전량 판정용. */
+    private var hipBaseAngle = Float.NaN
 
     fun reset() {
         listOf(left, right).forEach {
-            it.baseX = Float.NaN; it.baseY = Float.NaN; it.armed = true
+            it.baseX = Float.NaN; it.baseY = Float.NaN; it.baseZ = Float.NaN; it.armed = true
             it.lastStrikeMs = 0L; it.recovered = true; it.recoveryWarned = false
         }
         head.baseX = Float.NaN; head.baseY = Float.NaN; head.armed = true
-        hipBaseX = Float.NaN
+        hipBaseAngle = Float.NaN
     }
 
     fun process(frame: PoseFrame): ShadowFrameResult {
         if (frame.points.isEmpty()) return ShadowFrameResult(frame = frame, posed = false)
-        val shoulderW = frame.shoulderWidth()?.takeIf { it > 1e-3f }
-            ?: return ShadowFrameResult(frame = frame, posed = true)
+        // 펀치/골반은 3D world 좌표 사용. world 가 없으면(미지원) 자세 프레임 체크만 수행.
+        val world3dW = frame.worldShoulderWidth()?.takeIf { it > 1e-4f }
 
-        // 골반 중심 x 추적(EMA) — 펀치 여부와 무관하게 천천히 따라감.
-        val hipMidX = hipMidX(frame)
-        if (hipMidX != null) {
-            hipBaseX = if (hipBaseX.isNaN()) hipMidX else hipBaseX + (hipMidX - hipBaseX) * 0.1f
+        // (3D) 골반 회전각 추적(EMA) — 골반 벡터(좌→우)의 수평면(xz) 방향. 펀치와 무관하게 천천히 따라감.
+        var hipRotDelta = 0f
+        val hipAngle = hipRotationAngle(frame)
+        if (hipAngle != null) {
+            hipBaseAngle = if (hipBaseAngle.isNaN()) hipAngle else hipBaseAngle + (hipAngle - hipBaseAngle) * 0.1f
+            hipRotDelta = abs(hipAngle - hipBaseAngle)
         }
-        val hipShiftNorm = if (hipMidX != null && !hipBaseX.isNaN()) abs(hipMidX - hipBaseX) / shoulderW else 0f
 
         val strikes = mutableListOf<Technique>()
         var poorExt = 0
@@ -152,35 +155,42 @@ class ShadowMotionAnalyzer {
         var offHand = 0
         val strikeCues = mutableSetOf<PostureCheck>()
 
-        updateArm(left, Arm.LEFT, frame, shoulderW,
-            PoseLandmarks.LEFT_SHOULDER, PoseLandmarks.LEFT_ELBOW, PoseLandmarks.LEFT_WRIST, hipShiftNorm)
-            ?.let { (tech, ext, hip) ->
-                strikes += tech
-                if (ext) { poorExt++; strikeCues += PostureCheck.POOR_EXTENSION }
-                if (hip) { poorHip++; strikeCues += PostureCheck.POOR_HIP_ROTATION }
-                // 왼손 펀치 → 오른손(반대손) 가드 유지 확인.
-                if (isWristDropped(frame, PoseLandmarks.RIGHT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
-            }
-        updateArm(right, Arm.RIGHT, frame, shoulderW,
-            PoseLandmarks.RIGHT_SHOULDER, PoseLandmarks.RIGHT_ELBOW, PoseLandmarks.RIGHT_WRIST, hipShiftNorm)
-            ?.let { (tech, ext, hip) ->
-                strikes += tech
-                if (ext) { poorExt++; strikeCues += PostureCheck.POOR_EXTENSION }
-                if (hip) { poorHip++; strikeCues += PostureCheck.POOR_HIP_ROTATION }
-                if (isWristDropped(frame, PoseLandmarks.LEFT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
-            }
+        // 펀치 검출 — 3D world 좌표 (전방 깊이로 스트레이트/훅/어퍼 구분).
+        if (world3dW != null) {
+            updateArm(left, Arm.LEFT, frame, world3dW,
+                PoseLandmarks.LEFT_SHOULDER, PoseLandmarks.LEFT_ELBOW, PoseLandmarks.LEFT_WRIST, hipRotDelta)
+                ?.let { (tech, ext, hip) ->
+                    strikes += tech
+                    if (ext) { poorExt++; strikeCues += PostureCheck.POOR_EXTENSION }
+                    if (hip) { poorHip++; strikeCues += PostureCheck.POOR_HIP_ROTATION }
+                    if (isWristDropped(frame, PoseLandmarks.RIGHT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
+                }
+            updateArm(right, Arm.RIGHT, frame, world3dW,
+                PoseLandmarks.RIGHT_SHOULDER, PoseLandmarks.RIGHT_ELBOW, PoseLandmarks.RIGHT_WRIST, hipRotDelta)
+                ?.let { (tech, ext, hip) ->
+                    strikes += tech
+                    if (ext) { poorExt++; strikeCues += PostureCheck.POOR_EXTENSION }
+                    if (hip) { poorHip++; strikeCues += PostureCheck.POOR_HIP_ROTATION }
+                    if (isWristDropped(frame, PoseLandmarks.LEFT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
+                }
+        }
 
-        // 회피 동작(더킹/슬립/위빙) — 머리 궤적으로 감지, 펀치처럼 카운트.
-        detectHeadMove(frame, shoulderW)?.let { strikes += it }
+        // 자세 프레임 체크 + 회피 동작은 화면(2D) 좌표 기준.
+        val shoulderW2d = frame.shoulderWidth()?.takeIf { it > 1e-3f }
+        if (shoulderW2d != null) {
+            detectHeadMove(frame, shoulderW2d)?.let { strikes += it }
+        }
 
         val frameViolations = mutableSetOf<PostureCheck>()
         if (isGuardDown(frame)) frameViolations += PostureCheck.GUARD_DOWN
         if (isChinUp(frame)) frameViolations += PostureCheck.CHIN_UP
-        if (isBalanceLost(frame, shoulderW)) frameViolations += PostureCheck.BALANCE_LOSS
-        if (isElbowFlared(frame, shoulderW)) frameViolations += PostureCheck.ELBOW_FLARE
-        if (isShoulderShrug(frame, shoulderW)) frameViolations += PostureCheck.SHOULDER_SHRUG
-        if (isHeadOffline(frame, shoulderW)) frameViolations += PostureCheck.HEAD_OFFLINE
-        if (isStanceNarrow(frame, shoulderW)) frameViolations += PostureCheck.STANCE_NARROW
+        if (shoulderW2d != null) {
+            if (isBalanceLost(frame, shoulderW2d)) frameViolations += PostureCheck.BALANCE_LOSS
+            if (isElbowFlared(frame, shoulderW2d)) frameViolations += PostureCheck.ELBOW_FLARE
+            if (isShoulderShrug(frame, shoulderW2d)) frameViolations += PostureCheck.SHOULDER_SHRUG
+            if (isHeadOffline(frame, shoulderW2d)) frameViolations += PostureCheck.HEAD_OFFLINE
+            if (isStanceNarrow(frame, shoulderW2d)) frameViolations += PostureCheck.STANCE_NARROW
+        }
         if (areKneesStraight(frame)) frameViolations += PostureCheck.KNEES_STRAIGHT
         if (checkRecovery(left, frame.timestampMs) || checkRecovery(right, frame.timestampMs)) {
             frameViolations += PostureCheck.SLOW_RECOVERY
@@ -198,19 +208,26 @@ class ShadowMotionAnalyzer {
         )
     }
 
-    private fun hipMidX(frame: PoseFrame): Float? {
-        val lh = frame.point(PoseLandmarks.LEFT_HIP) ?: return null
-        val rh = frame.point(PoseLandmarks.RIGHT_HIP) ?: return null
+    /**
+     * (3D) 골반 회전각 — 골반 벡터(왼→오른 엉덩이)를 수평면(xz)에 투영한 방향(라디안).
+     * 정면 squared 면 ≈0, 오른쪽이 앞으로 돌면 부호가 바뀜. world 없으면 null.
+     */
+    private fun hipRotationAngle(frame: PoseFrame): Float? {
+        val lh = frame.worldPoint(PoseLandmarks.LEFT_HIP) ?: return null
+        val rh = frame.worldPoint(PoseLandmarks.RIGHT_HIP) ?: return null
         if (minOf(lh.visibility, rh.visibility) < Thresholds.MIN_VIS) return null
-        return (lh.x + rh.x) / 2f
+        val dx = rh.x - lh.x
+        val dz = rh.z - lh.z
+        return atan2(dz, dx)
     }
 
     /**
-     * rising-edge 펀치 검출. 손목이 가드 근처면 기준 추종 + 재무장, 기준에서 [STRIKE_OUT] 넘게
-     * 튀어나가는 순간(무장 상태) 1회 카운트. 완전 복귀를 기다리지 않아 빠른 펀치도 잡힘.
-     * @return 카운트된 펀치 (종류, 신전부족여부) 또는 null.
+     * (3D) rising-edge 펀치 검출. 손목 3D 좌표가 가드 근처면 기준 추종 + 재무장, 기준에서
+     * [STRIKE_OUT](3D 어깨폭 배수) 넘게 튀어나가는 순간 1회 카운트. 전방(깊이) 성분으로 스트레이트
+     * 분류가 정면에서도 정확.
+     * @param hipRotDelta 현재 골반 회전각 변화량(라디안) — 라이트 골반회전 판정용.
+     * @return (펀치 종류, 신전부족, 골반회전부족) 또는 null.
      */
-    /** @return (펀치 종류, 신전부족, 골반회전부족) 또는 null. */
     private fun updateArm(
         s: ArmState,
         arm: Arm,
@@ -219,22 +236,24 @@ class ShadowMotionAnalyzer {
         shoulder: Int,
         elbow: Int,
         wrist: Int,
-        hipShiftNorm: Float,
+        hipRotDelta: Float,
     ): Triple<Technique, Boolean, Boolean>? {
-        val w = frame.point(wrist) ?: return null
-        val e = frame.point(elbow) ?: return null
+        val w = frame.worldPoint(wrist) ?: return null
+        val e = frame.worldPoint(elbow) ?: return null
         if (w.visibility < Thresholds.MIN_VIS || e.visibility < Thresholds.MIN_VIS) return null
 
-        if (s.baseX.isNaN()) { s.baseX = w.x; s.baseY = w.y; return null }
+        if (s.baseX.isNaN()) { s.baseX = w.x; s.baseY = w.y; s.baseZ = w.z; return null }
 
-        val dx = (w.x - s.baseX) / shoulderW
-        val dy = (w.y - s.baseY) / shoulderW   // 음수 = 위로 이동
-        val dispNorm = hypot(w.x - s.baseX, w.y - s.baseY) / shoulderW
+        val dx = (w.x - s.baseX) / shoulderW          // +오른쪽
+        val dy = (w.y - s.baseY) / shoulderW          // +아래
+        val dz = (w.z - s.baseZ) / shoulderW          // +카메라 반대(뒤). 전방 펀치는 음수.
+        val dispNorm = mag3(w.x - s.baseX, w.y - s.baseY, w.z - s.baseZ) / shoulderW
 
         // 가드 근처 — 기준 추종 + 재무장 + 리커버리 완료.
         if (dispNorm < Thresholds.STRIKE_RETURN) {
             s.baseX += (w.x - s.baseX) * Thresholds.BASELINE_EMA
             s.baseY += (w.y - s.baseY) * Thresholds.BASELINE_EMA
+            s.baseZ += (w.z - s.baseZ) * Thresholds.BASELINE_EMA
             s.armed = true
             s.recovered = true
             return null
@@ -246,12 +265,12 @@ class ShadowMotionAnalyzer {
             s.lastStrikeMs = frame.timestampMs
             s.recovered = false
             s.recoveryWarned = false
-            val elbowAngle = frame.angleDeg(shoulder, elbow, wrist) ?: 0f
-            val tech = classify(arm, elbowAngle, dx, dy)
+            val elbowAngle = frame.angle3Deg(shoulder, elbow, wrist) ?: 0f
+            val tech = classify(arm, elbowAngle, forward = -dz, lateral = abs(dx), rise = -dy)
             val poorExt = (tech == Technique.JAB || tech == Technique.STRAIGHT) &&
                 elbowAngle < Thresholds.GOOD_EXTENSION
-            // 골반 회전 부족 — 라이트(오른손 파워펀치)인데 골반 좌우 이동이 거의 없을 때.
-            val poorHip = tech == Technique.STRAIGHT && hipShiftNorm < Thresholds.HIP_ROTATION_MIN
+            // 골반 회전 부족 — 라이트(오른손 파워펀치)인데 골반 회전각 변화가 작을 때.
+            val poorHip = tech == Technique.STRAIGHT && hipRotDelta < Thresholds.HIP_ROTATION_MIN_RAD
             return Triple(tech, poorExt, poorHip)
         }
         return null
@@ -300,15 +319,18 @@ class ShadowMotionAnalyzer {
         return false
     }
 
-    private fun classify(arm: Arm, elbowAngle: Float, dx: Float, dy: Float): Technique {
-        val rise = -dy            // 위로 이동량(양수면 상승)
-        val horiz = abs(dx)
+    /**
+     * (3D) 펀치 분류 — [forward] 전방(카메라쪽), [lateral] 좌우, [rise] 상방 성분(3D 어깨폭 배수).
+     *  - 팔꿈치 펴짐 + 전방 우세 → 스트레이트(왼팔=잽 / 오른팔=라이트)
+     *  - 상방 우세 → 어퍼, 좌우 우세 → 훅.
+     */
+    private fun classify(arm: Arm, elbowAngle: Float, forward: Float, lateral: Float, rise: Float): Technique {
+        val straight = if (arm == Arm.LEFT) Technique.JAB else Technique.STRAIGHT
         return when {
-            elbowAngle >= Thresholds.STRAIGHT_ELBOW ->
-                if (arm == Arm.LEFT) Technique.JAB else Technique.STRAIGHT
-            rise >= Thresholds.UPPERCUT_RISE && rise > horiz -> Technique.UPPERCUT
-            horiz >= Thresholds.HOOK_HORIZONTAL -> Technique.HOOK
-            else -> if (arm == Arm.LEFT) Technique.JAB else Technique.STRAIGHT
+            elbowAngle >= Thresholds.STRAIGHT_ELBOW && forward >= lateral && forward >= rise -> straight
+            rise >= Thresholds.UPPERCUT_RISE && rise >= lateral && rise >= forward -> Technique.UPPERCUT
+            lateral >= Thresholds.HOOK_LATERAL -> Technique.HOOK
+            else -> straight
         }
     }
 

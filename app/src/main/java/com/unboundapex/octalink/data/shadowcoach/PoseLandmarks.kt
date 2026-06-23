@@ -80,13 +80,42 @@ object PoseLandmarks {
 /**
  * 한 프레임의 포즈 — 33개 점. 휴리스틱 계산용 기하 헬퍼 포함.
  * 인덱스 접근이 범위를 벗어나거나 점이 없으면 null 안전.
+ *
+ * [points] : 2D normalized(화면 비율) — 오버레이 + 화면 좌표 기반 자세 체크용.
+ * [world]  : 3D world landmark(미터, 골반 중심 원점, x→오른쪽 / y→아래 / z→카메라쪽이 음수).
+ *            깊이가 있어 정면에서도 스트레이트(전방)/훅(수평)/어퍼(상방) 구분과 골반 회전 측정에 유리.
  */
 data class PoseFrame(
     val points: List<PosePoint>,
     /** 프레임 캡처 시각 (ms, monotonic) — 속도 계산용. */
     val timestampMs: Long,
+    val world: List<PosePoint> = emptyList(),
 ) {
     fun point(index: Int): PosePoint? = points.getOrNull(index)
+
+    // ── 3D(world) 헬퍼 ───────────────────────────────────────────────
+    fun worldPoint(index: Int): PosePoint? = world.getOrNull(index)
+
+    /** 3D 어깨 폭(미터) — 체형/거리 보정 정규화 기준. */
+    fun worldShoulderWidth(): Float? {
+        val l = worldPoint(PoseLandmarks.LEFT_SHOULDER) ?: return null
+        val r = worldPoint(PoseLandmarks.RIGHT_SHOULDER) ?: return null
+        return dist3(l, r)
+    }
+
+    /** 세 점 a-b-c 의 3D 각도(도). b 가 꼭짓점. (팔꿈치 신전각 등) */
+    fun angle3Deg(a: Int, b: Int, c: Int): Float? {
+        val pa = worldPoint(a) ?: return null
+        val pb = worldPoint(b) ?: return null
+        val pc = worldPoint(c) ?: return null
+        val v1x = pa.x - pb.x; val v1y = pa.y - pb.y; val v1z = pa.z - pb.z
+        val v2x = pc.x - pb.x; val v2y = pc.y - pb.y; val v2z = pc.z - pb.z
+        val dot = v1x * v2x + v1y * v2y + v1z * v2z
+        val mag = mag3(v1x, v1y, v1z) * mag3(v2x, v2y, v2z)
+        if (mag < 1e-9f) return null
+        val cos = (dot / mag).coerceIn(-1f, 1f)
+        return Math.toDegrees(acos(cos).toDouble()).toFloat()
+    }
 
     /**
      * 세 점 a-b-c 가 이루는 각도(도). b 가 꼭짓점. 팔 신전각(어깨-팔꿈치-손목) 등에 사용.
@@ -130,5 +159,11 @@ data class PoseFrame(
 
 /** 정규화 좌표 거리 헬퍼 (프레임 밖에서도 사용). */
 internal fun dist(a: PosePoint, b: PosePoint): Float = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
+
+/** 3D 거리(미터). */
+internal fun dist3(a: PosePoint, b: PosePoint): Float =
+    sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z))
+
+internal fun mag3(x: Float, y: Float, z: Float): Float = sqrt(x * x + y * y + z * z)
 
 internal fun absF(v: Float): Float = abs(v)
