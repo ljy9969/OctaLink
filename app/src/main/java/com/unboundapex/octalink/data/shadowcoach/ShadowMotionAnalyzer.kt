@@ -50,12 +50,14 @@ class ShadowMotionAnalyzer {
          * world 좌표(미터) 기준이라 2D 보다 스케일이 큼. 낮출수록 민감(오탐↑).
          */
         const val STRIKE_OUT = 0.9f
-        /** (3D) 손목이 기준 이내로 돌아오면 가드 복귀 → 재무장. */
+        /** (3D) 손목이 기준 이내로 돌아오면 가드 복귀 → 펀치 확정 + 재무장. */
         const val STRIKE_RETURN = 0.5f
-        /** 스트레이트 분류: 카운트 시점 3D 팔꿈치 각도(도) 이 값 이상. */
+        /** 펀치 시작 후 복귀가 없어도 이 시간(ms) 지나면 정점값으로 확정(길게 뻗고 멈춘 경우). */
+        const val STRIKE_FINALIZE_MS = 600L
+        /** 스트레이트 분류: 정점 3D 팔꿈치 각도(도) 이 값 이상. */
         const val STRAIGHT_ELBOW = 150f
-        /** "좋은 신전" — 미만이면 신전 부족 스트레이트. */
-        const val GOOD_EXTENSION = 162f
+        /** "좋은 신전" — 정점 팔꿈치각 이 값 미만이면 신전 부족 스트레이트. */
+        const val GOOD_EXTENSION = 160f
         /** 어퍼컷 분류: 손목 상승량(3D 어깨폭 배수) 이 값 이상 + 전방/수평보다 우세. */
         const val UPPERCUT_RISE = 0.5f
         /** 훅 분류: 손목 수평 이동량(3D 어깨폭 배수) 이 값 이상. */
@@ -99,14 +101,27 @@ class ShadowMotionAnalyzer {
 
     private enum class Arm { LEFT, RIGHT }
 
-    /** 한 팔의 펀치 추적 상태 (rising-edge 카운트 + 리커버리 타이밍). 좌표는 3D world(미터). */
+    /**
+     * 한 팔의 펀치 추적 상태. 좌표는 3D world(미터).
+     *
+     * 검출 흐름: 손목이 가드에서 [STRIKE_OUT] 넘게 나가는 순간 펀치 **시작**(아직 카운트 X) →
+     * 그 사이 정점(최대 팔꿈치각·전방·상승·수평) 추적 → 가드 복귀 또는 [STRIKE_FINALIZE_MS]
+     * 경과 시 **정점값으로 분류·신전 판정 후 카운트**. (나가는 순간이 아닌 정점 기준이라 정확.)
+     */
     private class ArmState {
         var baseX = Float.NaN
         var baseY = Float.NaN
         var baseZ = Float.NaN
-        /** true = 다음 펀치 카운트 가능. 카운트 후 가드 복귀까지 false(중복 방지). */
+        /** true = 다음 펀치 시작 가능. 시작 후 가드 복귀까지 false(중복 방지). */
         var armed = true
-        /** 마지막 펀치 카운트 시각(ms). 리커버리 지연 판정용. */
+        /** 펀치 진행 중(시작됨, 미확정). */
+        var inStrike = false
+        var strikeStartMs = 0L
+        var peakElbow = 0f
+        var peakFwd = 0f
+        var peakLat = 0f
+        var peakRise = 0f
+        /** 마지막 펀치 시작 시각(ms). 리커버리 지연 판정용. */
         var lastStrikeMs = 0L
         /** 마지막 펀치 후 손이 가드로 복귀했는지. */
         var recovered = true
@@ -130,6 +145,8 @@ class ShadowMotionAnalyzer {
     fun reset() {
         listOf(left, right).forEach {
             it.baseX = Float.NaN; it.baseY = Float.NaN; it.baseZ = Float.NaN; it.armed = true
+            it.inStrike = false; it.strikeStartMs = 0L
+            it.peakElbow = 0f; it.peakFwd = 0f; it.peakLat = 0f; it.peakRise = 0f
             it.lastStrikeMs = 0L; it.recovered = true; it.recoveryWarned = false
         }
         head.baseX = Float.NaN; head.baseY = Float.NaN; head.armed = true
@@ -248,33 +265,59 @@ class ShadowMotionAnalyzer {
         val dy = (w.y - s.baseY) / shoulderW          // +아래
         val dz = (w.z - s.baseZ) / shoulderW          // +카메라 반대(뒤). 전방 펀치는 음수.
         val dispNorm = mag3(w.x - s.baseX, w.y - s.baseY, w.z - s.baseZ) / shoulderW
+        val elbowAngle = frame.angle3Deg(shoulder, elbow, wrist) ?: 0f
+        val fwd = -dz; val lat = abs(dx); val rise = -dy
 
-        // 가드 근처 — 기준 추종 + 재무장 + 리커버리 완료.
+        // 가드 근처 — 진행 중 펀치 정점값으로 확정 + 기준 추종 + 재무장 + 리커버리 완료.
         if (dispNorm < Thresholds.STRIKE_RETURN) {
+            val result = if (s.inStrike) finalizeStrike(s, arm, hipRotDelta) else null
+            s.inStrike = false
             s.baseX += (w.x - s.baseX) * Thresholds.BASELINE_EMA
             s.baseY += (w.y - s.baseY) * Thresholds.BASELINE_EMA
             s.baseZ += (w.z - s.baseZ) * Thresholds.BASELINE_EMA
             s.armed = true
             s.recovered = true
-            return null
+            return result
         }
 
-        // 튀어나가는 순간 카운트 (무장 상태에서 1회).
-        if (s.armed && dispNorm >= Thresholds.STRIKE_OUT) {
+        // 펀치 시작 — 나가는 순간(무장). 아직 카운트 X, 정점 추적 시작.
+        if (!s.inStrike && s.armed && dispNorm >= Thresholds.STRIKE_OUT) {
+            s.inStrike = true
             s.armed = false
+            s.strikeStartMs = frame.timestampMs
             s.lastStrikeMs = frame.timestampMs
             s.recovered = false
             s.recoveryWarned = false
-            val elbowAngle = frame.angle3Deg(shoulder, elbow, wrist) ?: 0f
-            val tech = classify(arm, elbowAngle, forward = -dz, lateral = abs(dx), rise = -dy)
-            val poorExt = (tech == Technique.JAB || tech == Technique.STRAIGHT) &&
-                elbowAngle < Thresholds.GOOD_EXTENSION
-            // 골반 회전 부족 — 라이트(오른손 파워펀치)인데 골반 회전각 변화가 작을 때.
-            val poorHip = tech == Technique.STRAIGHT && hipRotDelta < Thresholds.HIP_ROTATION_MIN_RAD
-            return Triple(tech, poorExt, poorHip)
+            s.peakElbow = elbowAngle; s.peakFwd = fwd; s.peakLat = lat; s.peakRise = rise
+            return null
+        }
+
+        // 펀치 진행 — 정점 추적, 타임아웃 시 정점값으로 확정.
+        if (s.inStrike) {
+            s.peakElbow = maxOf(s.peakElbow, elbowAngle)
+            s.peakFwd = maxOf(s.peakFwd, fwd)
+            s.peakLat = maxOf(s.peakLat, lat)
+            s.peakRise = maxOf(s.peakRise, rise)
+            if (frame.timestampMs - s.strikeStartMs > Thresholds.STRIKE_FINALIZE_MS) {
+                val result = finalizeStrike(s, arm, hipRotDelta)
+                s.inStrike = false // armed 은 가드 복귀 시까지 false 유지(중복 방지)
+                return result
+            }
         }
         return null
     }
+
+    /** 펀치 정점값으로 종류·신전·골반 판정. */
+    private fun finalizeStrike(s: ArmState, arm: Arm, hipRotDelta: Float): Triple<Technique, Boolean, Boolean> {
+        val tech = classify(arm, s.peakElbow, forward = s.peakFwd, lateral = s.peakLat, rise = s.peakRise)
+        val poorExt = (tech == Technique.JAB || tech == Technique.STRAIGHT) &&
+            s.peakElbow < Thresholds.GOOD_EXTENSION
+        val poorHip = tech == Technique.STRAIGHT && hipRotDelta < Thresholds.HIP_ROTATION_MIN_RAD
+        return Triple(tech, poorExt, poorHip)
+    }
+
+    /** 해당 팔이 펀치 진행 중인지 — 자세 체크(팔꿈치 벌어짐)에서 펀치 동작 오탐 제외용. */
+    private fun isArmStriking(arm: Arm): Boolean = if (arm == Arm.LEFT) left.inStrike else right.inStrike
 
     /**
      * 회피 동작 검출 — 코가 기준에서 [HEAD_OUT] 넘게 나가는 순간 1회 분류.
@@ -377,9 +420,13 @@ class ShadowMotionAnalyzer {
         return w.y > shoulderY + Thresholds.OFF_HAND_MARGIN
     }
 
-    /** 팔꿈치 벌어짐 — 손이 가드(어깨 높이 위)인데 팔꿈치가 어깨에서 좌우로 크게 벌어짐. */
+    /**
+     * 팔꿈치 벌어짐 — 손이 가드(어깨 높이 위)인데 팔꿈치가 어깨에서 좌우로 크게 벌어짐.
+     * **펀치 진행 중인 팔은 제외** — 어퍼/훅은 팔꿈치가 정상적으로 벌어지므로 오탐 방지(가드 흐트러짐만 잡음).
+     */
     private fun isElbowFlared(frame: PoseFrame, shoulderW: Float): Boolean {
-        fun flared(shoulder: Int, elbow: Int, wrist: Int): Boolean {
+        fun flared(arm: Arm, shoulder: Int, elbow: Int, wrist: Int): Boolean {
+            if (isArmStriking(arm)) return false // 펀치 동작 중엔 평가 안 함
             val s = frame.point(shoulder) ?: return false
             val el = frame.point(elbow) ?: return false
             val w = frame.point(wrist) ?: return false
@@ -388,8 +435,8 @@ class ShadowMotionAnalyzer {
             if (w.y > s.y) return false
             return abs(el.x - s.x) / shoulderW > Thresholds.ELBOW_FLARE
         }
-        return flared(PoseLandmarks.LEFT_SHOULDER, PoseLandmarks.LEFT_ELBOW, PoseLandmarks.LEFT_WRIST) ||
-            flared(PoseLandmarks.RIGHT_SHOULDER, PoseLandmarks.RIGHT_ELBOW, PoseLandmarks.RIGHT_WRIST)
+        return flared(Arm.LEFT, PoseLandmarks.LEFT_SHOULDER, PoseLandmarks.LEFT_ELBOW, PoseLandmarks.LEFT_WRIST) ||
+            flared(Arm.RIGHT, PoseLandmarks.RIGHT_SHOULDER, PoseLandmarks.RIGHT_ELBOW, PoseLandmarks.RIGHT_WRIST)
     }
 
     /** 어깨 긴장(으쓱) — 어깨–귀 세로 간격이 좁음(어깨가 귀 쪽으로 올라옴). */

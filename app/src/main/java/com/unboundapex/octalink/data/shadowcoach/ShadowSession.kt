@@ -20,7 +20,7 @@ enum class PostureCheck(
     ELBOW_FLARE("팔꿈치", "팔꿈치 붙이세요", enabledInMvp = true),
     SHOULDER_SHRUG("어깨 긴장", "어깨 힘 빼세요", enabledInMvp = true),
     HEAD_OFFLINE("머리 중심", "머리 중심선 유지하세요", enabledInMvp = true),
-    SLOW_RECOVERY("리커버리", "친 손 빨리 가드로", enabledInMvp = true),
+    SLOW_RECOVERY("리커버리", "친 손 빨리 가드로 회수하세요", enabledInMvp = true),
     STANCE_NARROW("스탠스", "스탠스 넓히세요", enabledInMvp = true),
     KNEES_STRAIGHT("무릎", "무릎 살짝 굽히세요", enabledInMvp = true),
     ;
