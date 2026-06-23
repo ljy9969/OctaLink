@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -237,23 +238,15 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         PoseOverlay(frame = poseFrame, mirrorX = mirrorX, modifier = Modifier.fillMaxSize())
-        ShadowHud(ui = ui, onStart = vm::start, onStop = vm::stop)
-        // 개발용 녹화 토글 — DEBUG 빌드에서 우상단. release 엔 미노출.
-        if (BuildConfig.DEBUG && videoCapture != null) {
-            Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.TopEnd) {
-                Text(
-                    text = if (isRecording) "■ 녹화중" else "● 녹화",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(if (isRecording) Color(0xE6C8102E) else Color(0xAA000000))
-                        .clickable { toggleRecording() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
-        }
+        ShadowHud(
+            ui = ui,
+            onStart = vm::start,
+            onStop = vm::stop,
+            // 개발용 녹화 — DEBUG 빌드에서만 하단 우측에 노출. release 엔 미노출.
+            showRecord = BuildConfig.DEBUG && videoCapture != null,
+            isRecording = isRecording,
+            onToggleRecord = { toggleRecording() },
+        )
     }
 
     ui.summary?.let { session ->
@@ -301,18 +294,12 @@ private fun ShadowHud(
     ui: ShadowUiState,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    showRecord: Boolean = false,
+    isRecording: Boolean = false,
+    onToggleRecord: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        // 상단 1행 — 총 카운트 + 시간 (어두운 HudChip).
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            HudChip("총 ${ui.totalStrikes}")
-            HudChip(formatElapsed(ui.elapsedMs))
-        }
-        Spacer(Modifier.height(6.dp))
-        // 상단 2행 — 동작 종류별 카운트 + 자세 힌트. 색상별 칩, 가로 스크롤로 항상 한 줄.
+        // 상단 1행 — 동작 종류별 카운트 + 자세 힌트. 색상별 칩, 가로 스크롤로 항상 한 줄.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -323,6 +310,15 @@ private fun ShadowHud(
                 ColorChip("${tech.displayName} ${ui.techniqueCounts[tech] ?: 0}", techniqueColor(tech))
             }
             if (!ui.poseDetected) ColorChip("전신이 보이게 서세요", Color(0xE6F59E0B))
+        }
+        Spacer(Modifier.height(6.dp))
+        // 상단 2행 — 총 카운트 + 시간 (어두운 HudChip).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HudChip("총 ${ui.totalStrikes}")
+            HudChip(formatElapsed(ui.elapsedMs))
         }
         Spacer(Modifier.height(8.dp))
         // 실시간 코칭 칩.
@@ -335,18 +331,68 @@ private fun ShadowHud(
 
         Spacer(Modifier.weight(1f))
 
-        // 하단 — 시작/정지.
-        if (ui.running) {
-            Button(
-                onClick = onStop,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("세션 종료") }
-        } else {
-            Button(
-                onClick = onStart,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("쉐도우 시작") }
+        // 하단 한 줄 — 시작/정지 버튼(그라데이션) + (DEBUG) 녹화 버튼 우측.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (ui.running) {
+                GradientPillButton(
+                    text = "세션 종료",
+                    brush = Brush.horizontalGradient(listOf(Color(0xFF374151), Color(0xFF111827))),
+                    onClick = onStop,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                GradientPillButton(
+                    text = "쉐도우 시작",
+                    brush = Brush.horizontalGradient(
+                        listOf(Color(0xFF4F46E5), Color(0xFF9333EA), Color(0xFFDB2777)),
+                    ),
+                    onClick = onStart,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (showRecord) {
+                Text(
+                    text = if (isRecording) "■ 녹화중" else "● 녹화",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (isRecording) Color(0xE6C8102E) else Color(0xAA000000))
+                        .clickable { onToggleRecord() }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                )
+            }
         }
+    }
+}
+
+/** 그라데이션 알약 버튼 — 카메라 위 CTA 용. */
+@Composable
+private fun GradientPillButton(
+    text: String,
+    brush: androidx.compose.ui.graphics.Brush,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(brush)
+            .clickable { onClick() }
+            .padding(vertical = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleMedium,
+        )
     }
 }
 
