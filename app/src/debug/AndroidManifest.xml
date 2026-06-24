@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  개발(debug) 빌드 전용 매니페스트.
+  쉐도우 코치 인앱 녹화가 Android 9 이하(API 26~28)에서 MediaStore(공유 Movies)에 저장하려면
+  WRITE_EXTERNAL_STORAGE 가 필요해 여기에만 선언한다. Android 10(Q)+ 는 scoped storage 라 불필요(maxSdk 28).
+  release(Play Store) 빌드엔 병합되지 않아 권한이 포함되지 않는다.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+</manifest>

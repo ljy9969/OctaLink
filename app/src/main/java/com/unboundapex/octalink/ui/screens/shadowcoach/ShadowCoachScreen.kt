@@ -8,7 +8,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
@@ -169,14 +169,25 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
             active.stop(); recording = null; isRecording = false
             return
         }
-        val dir = context.getExternalFilesDir("shadow_rec")
-        val file = java.io.File(dir, "shadow_${System.currentTimeMillis()}.mp4")
-        val opts = FileOutputOptions.Builder(file).build()
+        // 공유 동영상(MediaStore Movies/ShadowCoach)에 저장 → 폰 갤러리/사진 앱에서 바로 재생·공유 가능.
+        // (앱 전용 외부 저장소는 Android 11+ 파일 관리자로 접근 불가해 검토가 불편함.)
+        val name = "shadow_${System.currentTimeMillis()}.mp4"
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, name)
+            put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/ShadowCoach")
+            }
+        }
+        val opts = MediaStoreOutputOptions.Builder(
+            context.contentResolver,
+            android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+        ).setContentValues(values).build()
         runCatching {
             recording = vc.output.prepareRecording(context, opts)
                 .start(ContextCompat.getMainExecutor(context)) { event ->
                     if (event is VideoRecordEvent.Finalize) {
-                        android.util.Log.i("ShadowCoach.Rec", "녹화 저장: ${file.absolutePath} (err=${event.error})")
+                        android.util.Log.i("ShadowCoach.Rec", "녹화 저장: ${event.outputResults.outputUri} (err=${event.error})")
                     }
                 }
             isRecording = true
