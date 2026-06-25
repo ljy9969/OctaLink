@@ -8,13 +8,6 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.MediaStoreOutputOptions
-import androidx.camera.video.Quality
-import androidx.camera.video.QualitySelector
-import androidx.camera.video.Recorder
-import androidx.camera.video.Recording
-import androidx.camera.video.VideoCapture
-import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -150,49 +143,65 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
         PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
     }
 
-    // 개발용 인앱 녹화 (CameraX VideoCapture) — BuildConfig.DEBUG 일 때만. release(Play Store) 미바인딩.
-    val videoCapture = remember {
-        if (BuildConfig.DEBUG) {
-            val recorder = Recorder.Builder()
-                .setQualitySelector(QualitySelector.from(Quality.HD))
-                .build()
-            VideoCapture.withOutput(recorder)
-        } else null
-    }
-    var recording by remember { mutableStateOf<Recording?>(null) }
+    // 개발용 인앱 "화면 녹화" (MediaProjection) — 스켈레톤·카운트 칩까지 입혀 갤러리(Movies/ShadowCoach)
+    // 에 저장. BuildConfig.DEBUG 일 때만. 서비스/권한은 app/src/debug 에만 있어 release 엔 미포함.
+    // 카메라 원본만 찍던 CameraX VideoCapture 로는 오버레이가 안 들어가 화면 캡처 방식으로 전환.
     var isRecording by remember { mutableStateOf(false) }
 
-    fun toggleRecording() {
-        val vc = videoCapture ?: return
-        val active = recording
-        if (active != null) {
-            active.stop(); recording = null; isRecording = false
-            return
+    fun recordServiceIntent(action: String): android.content.Intent =
+        android.content.Intent().apply {
+            component = android.content.ComponentName(
+                context.packageName,
+                "com.unboundapex.octalink.data.shadowcoach.ShadowScreenRecordService",
+            )
+            this.action = action
         }
-        // 공유 동영상(MediaStore Movies/ShadowCoach)에 저장 → 폰 갤러리/사진 앱에서 바로 재생·공유 가능.
-        // (앱 전용 외부 저장소는 Android 11+ 파일 관리자로 접근 불가해 검토가 불편함.)
-        val name = "shadow_${System.currentTimeMillis()}.mp4"
-        val values = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, name)
-            put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/ShadowCoach")
-            }
+
+    fun startRecordService(resultCode: Int, data: android.content.Intent) {
+        val dm = context.resources.displayMetrics
+        val intent = recordServiceIntent("com.unboundapex.octalink.SHADOW_REC_START").apply {
+            putExtra("result_code", resultCode)
+            putExtra("data", data)
+            putExtra("width", dm.widthPixels)
+            putExtra("height", dm.heightPixels)
+            putExtra("dpi", dm.densityDpi)
         }
-        val opts = MediaStoreOutputOptions.Builder(
-            context.contentResolver,
-            android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-        ).setContentValues(values).build()
-        runCatching {
-            recording = vc.output.prepareRecording(context, opts)
-                .start(ContextCompat.getMainExecutor(context)) { event ->
-                    if (event is VideoRecordEvent.Finalize) {
-                        android.util.Log.i("ShadowCoach.Rec", "녹화 저장: ${event.outputResults.outputUri} (err=${event.error})")
-                    }
-                }
-            isRecording = true
-        }.onFailure { android.util.Log.e("ShadowCoach.Rec", "녹화 시작 실패", it) }
+        runCatching { ContextCompat.startForegroundService(context, intent); isRecording = true }
+            .onFailure { android.util.Log.e("ShadowCoach.Rec", "녹화 서비스 시작 실패", it) }
     }
+
+    fun stopRecordService() {
+        runCatching {
+            ContextCompat.startForegroundService(
+                context, recordServiceIntent("com.unboundapex.octalink.SHADOW_REC_STOP"),
+            )
+        }
+        isRecording = false
+    }
+
+    val projectionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && data != null) {
+            startRecordService(result.resultCode, data)
+        }
+    }
+
+    fun toggleRecording() {
+        if (!BuildConfig.DEBUG) return
+        if (isRecording) {
+            stopRecordService()
+        } else {
+            val mpm = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                as android.media.projection.MediaProjectionManager
+            runCatching { projectionLauncher.launch(mpm.createScreenCaptureIntent()) }
+                .onFailure { android.util.Log.e("ShadowCoach.Rec", "화면 캡처 권한 요청 실패", it) }
+        }
+    }
+
+    // 화면 떠날 때 녹화 중이면 정지.
+    DisposableEffect(Unit) { onDispose { if (isRecording) stopRecordService() } }
 
     // 화면 자동 꺼짐 방지 — 쉐도우 화면에 있는 동안 항상 켜둠 (운동 중 화면 꺼지면 인식 확인 불가).
     val view = LocalView.current
@@ -227,19 +236,14 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
                 .build()
                 .also { it.setAnalyzer(analysisExecutor) { proxy -> helper.analyze(proxy) } }
             val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
-            // DEBUG 면 VideoCapture 까지 3개 바인딩 시도, 실패하면 프리뷰+분석만 (녹화 미지원 기기 폴백).
-            val bound = if (videoCapture != null) runCatching {
-                provider.unbindAll()
-                provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis, videoCapture)
-            }.isSuccess else false
-            if (!bound) runCatching {
+            // 프리뷰 + 분석만 바인딩. 녹화는 화면 캡처(MediaProjection) 라 카메라 use case 불필요.
+            runCatching {
                 provider.unbindAll()
                 provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
             }
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {
-            runCatching { recording?.stop() }
             runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
             helper.close()
             analysisExecutor.shutdown()
@@ -254,7 +258,7 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
             onStart = vm::start,
             onStop = vm::stop,
             // 개발용 녹화 — DEBUG 빌드에서만 하단 우측에 노출. release 엔 미노출.
-            showRecord = BuildConfig.DEBUG && videoCapture != null,
+            showRecord = BuildConfig.DEBUG,
             isRecording = isRecording,
             onToggleRecord = { toggleRecording() },
         )
