@@ -92,7 +92,9 @@ class ShadowScreenRecordService : Service() {
     }
 
     private fun setupRecorder(width: Int, height: Int) {
-        val name = "shadow_${System.currentTimeMillis()}.mp4"
+        // 파일명에 날짜·시간 표기 (yyMMdd_HHmmss) — 갤러리에서 어떤 회차인지 바로 구분.
+        val stamp = java.text.SimpleDateFormat("yyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+        val name = "shadow_$stamp.mp4"
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, name)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")

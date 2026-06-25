@@ -261,12 +261,31 @@ class ShadowMotionAnalyzer {
 
         if (s.baseX.isNaN()) { s.baseX = w.x; s.baseY = w.y; s.baseZ = w.z; return null }
 
-        val dx = (w.x - s.baseX) / shoulderW          // +오른쪽
-        val dy = (w.y - s.baseY) / shoulderW          // +아래
-        val dz = (w.z - s.baseZ) / shoulderW          // +카메라 반대(뒤). 전방 펀치는 음수.
-        val dispNorm = mag3(w.x - s.baseX, w.y - s.baseY, w.z - s.baseZ) / shoulderW
+        val ddx = w.x - s.baseX
+        val ddy = w.y - s.baseY
+        val ddz = w.z - s.baseZ
+        val dispNorm = mag3(ddx, ddy, ddz) / shoulderW
         val elbowAngle = frame.angle3Deg(shoulder, elbow, wrist) ?: 0f
-        val fwd = -dz; val lat = abs(dx); val rise = -dy
+
+        // 펀치 방향을 "몸 기준 좌표"로 분해 — 옆으로 선(블레이드) 스탠스에서도 스트레이트/훅 구분이 정확.
+        // 어깨선(수평면 xz 투영)을 좌우축, 거기에 수직인 방향을 전방축으로 보고 손목 변위를 투영.
+        // 어깨선이 불명확하면(정면 등 길이 0) 카메라축으로 폴백 → 정면에선 기존과 동일.
+        val rise = -ddy / shoulderW
+        val ls = frame.worldPoint(PoseLandmarks.LEFT_SHOULDER)
+        val rs = frame.worldPoint(PoseLandmarks.RIGHT_SHOULDER)
+        val sLen = if (ls != null && rs != null) hypot(rs.x - ls.x, rs.z - ls.z) else 0f
+        val fwd: Float
+        val lat: Float
+        if (ls != null && rs != null && sLen > 1e-4f) {
+            val ux = (rs.x - ls.x) / sLen; val uz = (rs.z - ls.z) / sLen   // 좌우(어깨) 단위축
+            val lateralM = ddx * ux + ddz * uz                            // 어깨선 방향(훅 성분)
+            val forwardM = ddx * (-uz) + ddz * ux                         // 어깨선 수직(스트레이트 성분)
+            lat = abs(lateralM) / shoulderW
+            fwd = abs(forwardM) / shoulderW
+        } else {
+            lat = abs(ddx) / shoulderW
+            fwd = abs(ddz) / shoulderW
+        }
 
         // 가드 근처 — 진행 중 펀치 정점값으로 확정 + 기준 추종 + 재무장 + 리커버리 완료.
         if (dispNorm < Thresholds.STRIKE_RETURN) {
@@ -363,7 +382,8 @@ class ShadowMotionAnalyzer {
     }
 
     /**
-     * (3D) 펀치 분류 — [forward] 전방(카메라쪽), [lateral] 좌우, [rise] 상방 성분(3D 어깨폭 배수).
+     * (3D) 펀치 분류 — 성분은 **몸 기준 좌표**(어깨폭 배수). [forward] 어깨선 수직(앞으로 뻗음),
+     * [lateral] 어깨선 방향(좌우 스윙), [rise] 상방. 블레이드 스탠스에서도 스탠스 각도와 무관.
      *  - 팔꿈치 펴짐 + 전방 우세 → 스트레이트(왼팔=잽 / 오른팔=라이트)
      *  - 상방 우세 → 어퍼, 좌우 우세 → 훅.
      */
