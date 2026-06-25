@@ -62,36 +62,37 @@ class ShadowMotionAnalyzer {
         const val UPPERCUT_RISE = 0.5f
         /** 훅 분류: 손목 수평 이동량(3D 어깨폭 배수) 이 값 이상. */
         const val HOOK_LATERAL = 0.6f
-        /** 가드 다운: 양 손목이 어깨선보다 이만큼(정규화 y) 아래. */
-        const val GUARD_DOWN_MARGIN = 0.06f
-        /** 턱 들림: 코가 귀선보다 이만큼(정규화 y) 위. */
-        const val CHIN_UP_MARGIN = 0.04f
-        /** 중심 무너짐: 어깨 중심이 골반 중심에서 좌우로 이만큼(어깨폭 배수) 벗어남. (보수적 = 큰 기울기만) */
+        /** (3D) 가드 다운: 양 손목이 어깨선보다 이만큼(3D 어깨폭 배수) 아래(world y). */
+        const val GUARD_DOWN_MARGIN = 0.20f
+        /** (3D) 턱 들림: 코가 귀선보다 이만큼(3D 어깨폭 배수) 위(world y). */
+        const val CHIN_UP_MARGIN = 0.10f
+        /** (3D) 중심 무너짐: 어깨 중심이 골반 중심에서 **몸 기준 좌우**로 이만큼(어깨폭 배수) 벗어남.
+         *  (전후 기울기는 정상 복싱 자세라 제외 — 좌우 성분만. 보수적 = 큰 기울기만) */
         const val BALANCE_LEAN = 0.55f
         /** (3D) 골반 회전 부족: 라이트(오른손) 칠 때 골반 회전각 변화(라디안)가 이 값 미만. (~9°) */
         const val HIP_ROTATION_MIN_RAD = 0.15f
-        /** 반대손 가드 다운: 펀치 시 반대손 손목이 어깨선보다 이만큼 아래. */
-        const val OFF_HAND_MARGIN = 0.08f
+        /** (3D) 반대손 가드 다운: 펀치 시 반대손 손목이 어깨선보다 이만큼(어깨폭 배수) 아래(world y). */
+        const val OFF_HAND_MARGIN = 0.30f
         /** 리커버리 지연: 펀치 후 이 시간(ms) 안에 손이 가드로 안 돌아오면 경고. */
         const val RECOVERY_MS = 1000L
-        /** 팔꿈치 벌어짐: 손 올린 가드 중 팔꿈치가 어깨에서 좌우로 이만큼(어깨폭 배수) 벌어짐. */
+        /** (3D) 팔꿈치 벌어짐: 손 올린 가드 중 팔꿈치가 어깨에서 수평(xz)으로 이만큼(어깨폭 배수) 벌어짐. */
         const val ELBOW_FLARE = 0.7f
-        /** 어깨 긴장(으쓱): 어깨–귀 세로 간격(어깨폭 배수)이 이 값 미만(어깨가 올라옴). */
+        /** (3D) 어깨 긴장(으쓱): 어깨–귀 세로 간격(world y, 어깨폭 배수)이 이 값 미만(어깨가 올라옴). */
         const val SHOULDER_GAP_MIN = 0.32f
-        /** 머리 중심 이탈: 코가 몸통 중심선에서 좌우로 이만큼(어깨폭 배수) 벗어남. */
+        /** (3D) 머리 중심 이탈: 코가 몸통 중심선에서 **몸 기준 좌우**로 이만큼(어깨폭 배수) 벗어남. */
         const val HEAD_OFFLINE = 0.38f
-        /** 스탠스 좁음: 발목 간격(어깨폭 배수)이 이 값 미만. */
+        /** (3D) 스탠스 좁음: 발목 수평(xz) 간격(어깨폭 배수)이 이 값 미만. (블레이드 앞뒤 간격 포함) */
         const val STANCE_NARROW = 0.75f
         /** 무릎 뻣뻣: 무릎 각도(도)가 양다리 이 값 이상(거의 직선). */
         const val KNEE_STRAIGHT = 172f
-        // 회피 동작(머리 궤적) — 코가 기준에서 나가는 순간 카운트, 방향으로 분류.
-        /** 머리가 기준에서 이만큼(어깨폭 배수) 나가면 회피 1회. */
+        // (3D) 회피 동작(머리 궤적) — 코가 기준에서 나가는 순간 카운트, 몸 기준 방향으로 분류.
+        /** 머리가 기준에서 이만큼(어깨폭 배수, 몸 기준 좌우+상하) 나가면 회피 1회. */
         const val HEAD_OUT = 0.35f
         /** 머리가 기준 이내로 돌아오면 재무장. */
         const val HEAD_RETURN = 0.2f
-        /** 더킹: 머리 하강량(어깨폭 배수) 이 값 이상. */
+        /** 더킹: 머리 하강량(world y, 어깨폭 배수) 이 값 이상. */
         const val DUCK_DROP = 0.28f
-        /** 슬립: 머리 좌우 이동량(어깨폭 배수) 이 값 이상. */
+        /** 슬립: 머리 **몸 기준 좌우** 이동량(어깨폭 배수) 이 값 이상. */
         const val SLIP_LATERAL = 0.28f
         /** 위빙: 하강 + 좌우 동시 — 좌우 성분 최소치. */
         const val WEAVE_LATERAL = 0.22f
@@ -129,10 +130,11 @@ class ShadowMotionAnalyzer {
         var recoveryWarned = false
     }
 
-    /** 머리(코) 회피 궤적 추적 — rising-edge 카운트. */
+    /** 머리(코) 회피 궤적 추적 — rising-edge 카운트. 좌표는 3D world(미터). */
     private class HeadState {
         var baseX = Float.NaN
         var baseY = Float.NaN
+        var baseZ = Float.NaN
         var armed = true
     }
 
@@ -149,7 +151,7 @@ class ShadowMotionAnalyzer {
             it.peakElbow = 0f; it.peakFwd = 0f; it.peakLat = 0f; it.peakRise = 0f
             it.lastStrikeMs = 0L; it.recovered = true; it.recoveryWarned = false
         }
-        head.baseX = Float.NaN; head.baseY = Float.NaN; head.armed = true
+        head.baseX = Float.NaN; head.baseY = Float.NaN; head.baseZ = Float.NaN; head.armed = true
         hipBaseAngle = Float.NaN
     }
 
@@ -172,7 +174,8 @@ class ShadowMotionAnalyzer {
         var offHand = 0
         val strikeCues = mutableSetOf<PostureCheck>()
 
-        // 펀치 검출 — 3D world 좌표 (전방 깊이로 스트레이트/훅/어퍼 구분).
+        // 펀치 검출 + 자세/회피 모두 3D world 좌표 기준. world 없으면(미지원) 분석 스킵.
+        val frameViolations = mutableSetOf<PostureCheck>()
         if (world3dW != null) {
             updateArm(left, Arm.LEFT, frame, world3dW,
                 PoseLandmarks.LEFT_SHOULDER, PoseLandmarks.LEFT_ELBOW, PoseLandmarks.LEFT_WRIST, hipRotDelta)
@@ -180,7 +183,7 @@ class ShadowMotionAnalyzer {
                     strikes += tech
                     if (ext) { poorExt++; strikeCues += PostureCheck.POOR_EXTENSION }
                     if (hip) { poorHip++; strikeCues += PostureCheck.POOR_HIP_ROTATION }
-                    if (isWristDropped(frame, PoseLandmarks.RIGHT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
+                    if (isWristDropped(frame, world3dW, PoseLandmarks.RIGHT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
                 }
             updateArm(right, Arm.RIGHT, frame, world3dW,
                 PoseLandmarks.RIGHT_SHOULDER, PoseLandmarks.RIGHT_ELBOW, PoseLandmarks.RIGHT_WRIST, hipRotDelta)
@@ -188,27 +191,20 @@ class ShadowMotionAnalyzer {
                     strikes += tech
                     if (ext) { poorExt++; strikeCues += PostureCheck.POOR_EXTENSION }
                     if (hip) { poorHip++; strikeCues += PostureCheck.POOR_HIP_ROTATION }
-                    if (isWristDropped(frame, PoseLandmarks.LEFT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
+                    if (isWristDropped(frame, world3dW, PoseLandmarks.LEFT_WRIST)) { offHand++; strikeCues += PostureCheck.OFF_HAND_DROP }
                 }
-        }
 
-        // 자세 프레임 체크 + 회피 동작은 화면(2D) 좌표 기준.
-        val shoulderW2d = frame.shoulderWidth()?.takeIf { it > 1e-3f }
-        if (shoulderW2d != null) {
-            detectHeadMove(frame, shoulderW2d)?.let { strikes += it }
-        }
+            detectHeadMove(frame, world3dW)?.let { strikes += it }
 
-        val frameViolations = mutableSetOf<PostureCheck>()
-        if (isGuardDown(frame)) frameViolations += PostureCheck.GUARD_DOWN
-        if (isChinUp(frame)) frameViolations += PostureCheck.CHIN_UP
-        if (shoulderW2d != null) {
-            if (isBalanceLost(frame, shoulderW2d)) frameViolations += PostureCheck.BALANCE_LOSS
-            if (isElbowFlared(frame, shoulderW2d)) frameViolations += PostureCheck.ELBOW_FLARE
-            if (isShoulderShrug(frame, shoulderW2d)) frameViolations += PostureCheck.SHOULDER_SHRUG
-            if (isHeadOffline(frame, shoulderW2d)) frameViolations += PostureCheck.HEAD_OFFLINE
-            if (isStanceNarrow(frame, shoulderW2d)) frameViolations += PostureCheck.STANCE_NARROW
+            if (isGuardDown(frame, world3dW)) frameViolations += PostureCheck.GUARD_DOWN
+            if (isChinUp(frame, world3dW)) frameViolations += PostureCheck.CHIN_UP
+            if (isBalanceLost(frame, world3dW)) frameViolations += PostureCheck.BALANCE_LOSS
+            if (isElbowFlared(frame, world3dW)) frameViolations += PostureCheck.ELBOW_FLARE
+            if (isShoulderShrug(frame, world3dW)) frameViolations += PostureCheck.SHOULDER_SHRUG
+            if (isHeadOffline(frame, world3dW)) frameViolations += PostureCheck.HEAD_OFFLINE
+            if (isStanceNarrow(frame, world3dW)) frameViolations += PostureCheck.STANCE_NARROW
+            if (areKneesStraight(frame)) frameViolations += PostureCheck.KNEES_STRAIGHT
         }
-        if (areKneesStraight(frame)) frameViolations += PostureCheck.KNEES_STRAIGHT
         if (checkRecovery(left, frame.timestampMs) || checkRecovery(right, frame.timestampMs)) {
             frameViolations += PostureCheck.SLOW_RECOVERY
         }
@@ -339,28 +335,49 @@ class ShadowMotionAnalyzer {
     private fun isArmStriking(arm: Arm): Boolean = if (arm == Arm.LEFT) left.inStrike else right.inStrike
 
     /**
-     * 회피 동작 검출 — 코가 기준에서 [HEAD_OUT] 넘게 나가는 순간 1회 분류.
-     *  - 하강 우세 → 더킹, 좌우 우세 → 슬립, 하강+좌우 동시 → 위빙.
+     * (3D) 어깨선의 수평면(xz) 단위 좌우축 (ux,uz). 좌→오른 어깨 방향. 가시성/길이 부족 시 null.
+     * 펀치·중심·머리 판정에서 변위를 "몸 기준 좌우 vs 전방"으로 분해하는 기준축.
+     */
+    private fun bodyLateralAxis(frame: PoseFrame): Pair<Float, Float>? {
+        val ls = frame.worldPoint(PoseLandmarks.LEFT_SHOULDER) ?: return null
+        val rs = frame.worldPoint(PoseLandmarks.RIGHT_SHOULDER) ?: return null
+        if (minOf(ls.visibility, rs.visibility) < Thresholds.MIN_VIS) return null
+        val sx = rs.x - ls.x; val sz = rs.z - ls.z
+        val len = hypot(sx, sz)
+        if (len < 1e-4f) return null
+        return (sx / len) to (sz / len)
+    }
+
+    /** 수평 변위(dx,dz)의 몸 기준 좌우 성분 크기. [axis]=좌우 단위축. */
+    private fun lateralComp(dx: Float, dz: Float, axis: Pair<Float, Float>): Float =
+        abs(dx * axis.first + dz * axis.second)
+
+    /**
+     * (3D) 회피 동작 검출 — 코(world)가 기준에서 [HEAD_OUT] 넘게 나가는 순간 1회 분류.
+     *  - 하강(world y) 우세 → 더킹, 몸 기준 좌우 우세 → 슬립, 하강+좌우 동시 → 위빙.
      */
     private fun detectHeadMove(frame: PoseFrame, shoulderW: Float): Technique? {
-        val n = frame.point(PoseLandmarks.NOSE) ?: return null
+        val n = frame.worldPoint(PoseLandmarks.NOSE) ?: return null
         if (n.visibility < Thresholds.MIN_VIS) return null
-        if (head.baseX.isNaN()) { head.baseX = n.x; head.baseY = n.y; return null }
+        if (head.baseX.isNaN()) { head.baseX = n.x; head.baseY = n.y; head.baseZ = n.z; return null }
 
-        val dx = (n.x - head.baseX) / shoulderW
-        val dy = (n.y - head.baseY) / shoulderW   // 양수 = 아래로(하강)
-        val disp = hypot(n.x - head.baseX, n.y - head.baseY) / shoulderW
+        val ddx = n.x - head.baseX
+        val ddy = n.y - head.baseY    // 양수 = 아래로(하강)
+        val ddz = n.z - head.baseZ
+        val axis = bodyLateralAxis(frame)
+        val lat = (if (axis != null) lateralComp(ddx, ddz, axis) else hypot(ddx, ddz)) / shoulderW
+        val drop = ddy / shoulderW
+        val disp = hypot(lat, drop)   // 몸 기준 머리 변위(좌우+상하).
 
         if (disp < Thresholds.HEAD_RETURN) {
-            head.baseX += (n.x - head.baseX) * Thresholds.BASELINE_EMA
-            head.baseY += (n.y - head.baseY) * Thresholds.BASELINE_EMA
+            head.baseX += ddx * Thresholds.BASELINE_EMA
+            head.baseY += ddy * Thresholds.BASELINE_EMA
+            head.baseZ += ddz * Thresholds.BASELINE_EMA
             head.armed = true
             return null
         }
         if (head.armed && disp >= Thresholds.HEAD_OUT) {
             head.armed = false
-            val drop = dy
-            val lat = abs(dx)
             return when {
                 drop >= Thresholds.DUCK_DROP && lat >= Thresholds.WEAVE_LATERAL -> Technique.WEAVE
                 drop >= Thresholds.DUCK_DROP && drop >= lat -> Technique.DUCK
@@ -397,107 +414,114 @@ class ShadowMotionAnalyzer {
         }
     }
 
-    private fun isGuardDown(frame: PoseFrame): Boolean {
-        val ls = frame.point(PoseLandmarks.LEFT_SHOULDER) ?: return false
-        val rs = frame.point(PoseLandmarks.RIGHT_SHOULDER) ?: return false
-        val lw = frame.point(PoseLandmarks.LEFT_WRIST) ?: return false
-        val rw = frame.point(PoseLandmarks.RIGHT_WRIST) ?: return false
+    /** (3D) 가드 다운 — 양 손목이 어깨선보다 world y 로 [GUARD_DOWN_MARGIN]·어깨폭 만큼 아래. */
+    private fun isGuardDown(frame: PoseFrame, shoulderW: Float): Boolean {
+        val ls = frame.worldPoint(PoseLandmarks.LEFT_SHOULDER) ?: return false
+        val rs = frame.worldPoint(PoseLandmarks.RIGHT_SHOULDER) ?: return false
+        val lw = frame.worldPoint(PoseLandmarks.LEFT_WRIST) ?: return false
+        val rw = frame.worldPoint(PoseLandmarks.RIGHT_WRIST) ?: return false
         if (minOf(ls.visibility, rs.visibility, lw.visibility, rw.visibility) < Thresholds.MIN_VIS) return false
         val shoulderY = (ls.y + rs.y) / 2f
-        val leftDown = lw.y > shoulderY + Thresholds.GUARD_DOWN_MARGIN
-        val rightDown = rw.y > shoulderY + Thresholds.GUARD_DOWN_MARGIN
-        return leftDown && rightDown
+        val margin = Thresholds.GUARD_DOWN_MARGIN * shoulderW
+        return (lw.y > shoulderY + margin) && (rw.y > shoulderY + margin)
     }
 
-    private fun isChinUp(frame: PoseFrame): Boolean {
-        val nose = frame.point(PoseLandmarks.NOSE) ?: return false
-        val le = frame.point(PoseLandmarks.LEFT_EAR) ?: return false
-        val re = frame.point(PoseLandmarks.RIGHT_EAR) ?: return false
+    /** (3D) 턱 들림 — 코가 귀선보다 world y 로 위로 [CHIN_UP_MARGIN]·어깨폭 이상. */
+    private fun isChinUp(frame: PoseFrame, shoulderW: Float): Boolean {
+        val nose = frame.worldPoint(PoseLandmarks.NOSE) ?: return false
+        val le = frame.worldPoint(PoseLandmarks.LEFT_EAR) ?: return false
+        val re = frame.worldPoint(PoseLandmarks.RIGHT_EAR) ?: return false
         if (minOf(nose.visibility, le.visibility, re.visibility) < Thresholds.MIN_VIS) return false
         val earY = (le.y + re.y) / 2f
-        return (earY - nose.y) > Thresholds.CHIN_UP_MARGIN
-    }
-
-    /** 중심 무너짐 — 어깨 중심이 골반 중심보다 좌우로 크게 벗어남(상체가 한쪽으로 기욺). */
-    private fun isBalanceLost(frame: PoseFrame, shoulderW: Float): Boolean {
-        val ls = frame.point(PoseLandmarks.LEFT_SHOULDER) ?: return false
-        val rs = frame.point(PoseLandmarks.RIGHT_SHOULDER) ?: return false
-        val lh = frame.point(PoseLandmarks.LEFT_HIP) ?: return false
-        val rh = frame.point(PoseLandmarks.RIGHT_HIP) ?: return false
-        if (minOf(ls.visibility, rs.visibility, lh.visibility, rh.visibility) < Thresholds.MIN_VIS) return false
-        val shoulderMidX = (ls.x + rs.x) / 2f
-        val hipMidX = (lh.x + rh.x) / 2f
-        return abs(shoulderMidX - hipMidX) / shoulderW > Thresholds.BALANCE_LEAN
-    }
-
-    /** 손목이 어깨선보다 아래로 내려갔는지 (반대손 가드 다운 판정용). */
-    private fun isWristDropped(frame: PoseFrame, wrist: Int): Boolean {
-        val ls = frame.point(PoseLandmarks.LEFT_SHOULDER) ?: return false
-        val rs = frame.point(PoseLandmarks.RIGHT_SHOULDER) ?: return false
-        val w = frame.point(wrist) ?: return false
-        if (minOf(ls.visibility, rs.visibility, w.visibility) < Thresholds.MIN_VIS) return false
-        val shoulderY = (ls.y + rs.y) / 2f
-        return w.y > shoulderY + Thresholds.OFF_HAND_MARGIN
+        return (earY - nose.y) / shoulderW > Thresholds.CHIN_UP_MARGIN
     }
 
     /**
-     * 팔꿈치 벌어짐 — 손이 가드(어깨 높이 위)인데 팔꿈치가 어깨에서 좌우로 크게 벌어짐.
+     * (3D) 중심 무너짐 — 어깨 중심이 골반 중심에서 **몸 기준 좌우**로 크게 벗어남(옆으로 기욺).
+     * 전후(앞으로 숙임)는 정상 복싱 자세라 좌우 성분만 평가.
+     */
+    private fun isBalanceLost(frame: PoseFrame, shoulderW: Float): Boolean {
+        val ls = frame.worldPoint(PoseLandmarks.LEFT_SHOULDER) ?: return false
+        val rs = frame.worldPoint(PoseLandmarks.RIGHT_SHOULDER) ?: return false
+        val lh = frame.worldPoint(PoseLandmarks.LEFT_HIP) ?: return false
+        val rh = frame.worldPoint(PoseLandmarks.RIGHT_HIP) ?: return false
+        if (minOf(ls.visibility, rs.visibility, lh.visibility, rh.visibility) < Thresholds.MIN_VIS) return false
+        val axis = bodyLateralAxis(frame) ?: return false
+        val dx = (ls.x + rs.x) / 2f - (lh.x + rh.x) / 2f
+        val dz = (ls.z + rs.z) / 2f - (lh.z + rh.z) / 2f
+        return lateralComp(dx, dz, axis) / shoulderW > Thresholds.BALANCE_LEAN
+    }
+
+    /** (3D) 손목이 어깨선보다 world y 로 아래로 내려갔는지 (반대손 가드 다운 판정용). */
+    private fun isWristDropped(frame: PoseFrame, shoulderW: Float, wrist: Int): Boolean {
+        val ls = frame.worldPoint(PoseLandmarks.LEFT_SHOULDER) ?: return false
+        val rs = frame.worldPoint(PoseLandmarks.RIGHT_SHOULDER) ?: return false
+        val w = frame.worldPoint(wrist) ?: return false
+        if (minOf(ls.visibility, rs.visibility, w.visibility) < Thresholds.MIN_VIS) return false
+        val shoulderY = (ls.y + rs.y) / 2f
+        return (w.y - shoulderY) / shoulderW > Thresholds.OFF_HAND_MARGIN
+    }
+
+    /**
+     * (3D) 팔꿈치 벌어짐 — 손이 가드(어깨 위)인데 팔꿈치가 어깨에서 수평(xz)으로 크게 벌어짐.
      * **펀치 진행 중인 팔은 제외** — 어퍼/훅은 팔꿈치가 정상적으로 벌어지므로 오탐 방지(가드 흐트러짐만 잡음).
      */
     private fun isElbowFlared(frame: PoseFrame, shoulderW: Float): Boolean {
         fun flared(arm: Arm, shoulder: Int, elbow: Int, wrist: Int): Boolean {
             if (isArmStriking(arm)) return false // 펀치 동작 중엔 평가 안 함
-            val s = frame.point(shoulder) ?: return false
-            val el = frame.point(elbow) ?: return false
-            val w = frame.point(wrist) ?: return false
+            val s = frame.worldPoint(shoulder) ?: return false
+            val el = frame.worldPoint(elbow) ?: return false
+            val w = frame.worldPoint(wrist) ?: return false
             if (minOf(s.visibility, el.visibility, w.visibility) < Thresholds.MIN_VIS) return false
-            // 손이 가드(어깨선 위)일 때만 평가.
+            // 손이 가드(어깨선 위 = world y 가 더 작음)일 때만 평가.
             if (w.y > s.y) return false
-            return abs(el.x - s.x) / shoulderW > Thresholds.ELBOW_FLARE
+            return hypot(el.x - s.x, el.z - s.z) / shoulderW > Thresholds.ELBOW_FLARE
         }
         return flared(Arm.LEFT, PoseLandmarks.LEFT_SHOULDER, PoseLandmarks.LEFT_ELBOW, PoseLandmarks.LEFT_WRIST) ||
             flared(Arm.RIGHT, PoseLandmarks.RIGHT_SHOULDER, PoseLandmarks.RIGHT_ELBOW, PoseLandmarks.RIGHT_WRIST)
     }
 
-    /** 어깨 긴장(으쓱) — 어깨–귀 세로 간격이 좁음(어깨가 귀 쪽으로 올라옴). */
+    /** (3D) 어깨 긴장(으쓱) — 어깨–귀 world y 간격이 좁음(어깨가 귀 쪽으로 올라옴). */
     private fun isShoulderShrug(frame: PoseFrame, shoulderW: Float): Boolean {
-        val ls = frame.point(PoseLandmarks.LEFT_SHOULDER) ?: return false
-        val rs = frame.point(PoseLandmarks.RIGHT_SHOULDER) ?: return false
-        val le = frame.point(PoseLandmarks.LEFT_EAR) ?: return false
-        val re = frame.point(PoseLandmarks.RIGHT_EAR) ?: return false
+        val ls = frame.worldPoint(PoseLandmarks.LEFT_SHOULDER) ?: return false
+        val rs = frame.worldPoint(PoseLandmarks.RIGHT_SHOULDER) ?: return false
+        val le = frame.worldPoint(PoseLandmarks.LEFT_EAR) ?: return false
+        val re = frame.worldPoint(PoseLandmarks.RIGHT_EAR) ?: return false
         if (minOf(ls.visibility, rs.visibility, le.visibility, re.visibility) < Thresholds.MIN_VIS) return false
         val shoulderY = (ls.y + rs.y) / 2f
         val earY = (le.y + re.y) / 2f
-        // 어깨가 귀보다 아래(정상). 간격이 작아지면 어깨가 올라온 것.
+        // 어깨가 귀보다 아래(정상, world y 큼). 간격이 작아지면 어깨가 올라온 것.
         return (shoulderY - earY) / shoulderW < Thresholds.SHOULDER_GAP_MIN
     }
 
-    /** 머리 중심 이탈 — 코가 몸통(어깨·골반) 중심선에서 좌우로 크게 벗어남. */
+    /** (3D) 머리 중심 이탈 — 코가 어깨 중심에서 **몸 기준 좌우**로 크게 벗어남. */
     private fun isHeadOffline(frame: PoseFrame, shoulderW: Float): Boolean {
-        val nose = frame.point(PoseLandmarks.NOSE) ?: return false
-        val ls = frame.point(PoseLandmarks.LEFT_SHOULDER) ?: return false
-        val rs = frame.point(PoseLandmarks.RIGHT_SHOULDER) ?: return false
+        val nose = frame.worldPoint(PoseLandmarks.NOSE) ?: return false
+        val ls = frame.worldPoint(PoseLandmarks.LEFT_SHOULDER) ?: return false
+        val rs = frame.worldPoint(PoseLandmarks.RIGHT_SHOULDER) ?: return false
         if (minOf(nose.visibility, ls.visibility, rs.visibility) < Thresholds.MIN_VIS) return false
-        val midX = (ls.x + rs.x) / 2f
-        return abs(nose.x - midX) / shoulderW > Thresholds.HEAD_OFFLINE
+        val axis = bodyLateralAxis(frame) ?: return false
+        val dx = nose.x - (ls.x + rs.x) / 2f
+        val dz = nose.z - (ls.z + rs.z) / 2f
+        return lateralComp(dx, dz, axis) / shoulderW > Thresholds.HEAD_OFFLINE
     }
 
-    /** 스탠스 좁음 — 발목 간격이 어깨폭 대비 좁음. (발목 안 보이면 스킵) */
+    /** (3D) 스탠스 좁음 — 발목 수평(xz) 간격이 어깨폭 대비 좁음. (발목 안 보이면 스킵) */
     private fun isStanceNarrow(frame: PoseFrame, shoulderW: Float): Boolean {
-        val la = frame.point(PoseLandmarks.LEFT_ANKLE) ?: return false
-        val ra = frame.point(PoseLandmarks.RIGHT_ANKLE) ?: return false
+        val la = frame.worldPoint(PoseLandmarks.LEFT_ANKLE) ?: return false
+        val ra = frame.worldPoint(PoseLandmarks.RIGHT_ANKLE) ?: return false
         if (minOf(la.visibility, ra.visibility) < Thresholds.MIN_VIS) return false
-        return abs(la.x - ra.x) / shoulderW < Thresholds.STANCE_NARROW
+        return hypot(la.x - ra.x, la.z - ra.z) / shoulderW < Thresholds.STANCE_NARROW
     }
 
-    /** 무릎 뻣뻣 — 양 무릎 각도(엉덩이-무릎-발목)가 거의 직선. (다리 안 보이면 스킵) */
+    /** (3D) 무릎 뻣뻣 — 양 무릎 3D 각도(엉덩이-무릎-발목)가 거의 직선. (다리 안 보이면 스킵) */
     private fun areKneesStraight(frame: PoseFrame): Boolean {
-        val l = frame.angleDeg(PoseLandmarks.LEFT_HIP, PoseLandmarks.LEFT_KNEE, PoseLandmarks.LEFT_ANKLE)
-        val r = frame.angleDeg(PoseLandmarks.RIGHT_HIP, PoseLandmarks.RIGHT_KNEE, PoseLandmarks.RIGHT_ANKLE)
+        val l = frame.angle3Deg(PoseLandmarks.LEFT_HIP, PoseLandmarks.LEFT_KNEE, PoseLandmarks.LEFT_ANKLE)
+        val r = frame.angle3Deg(PoseLandmarks.RIGHT_HIP, PoseLandmarks.RIGHT_KNEE, PoseLandmarks.RIGHT_ANKLE)
         if (l == null || r == null) return false
-        // 무릎/발목 신뢰도 확인.
-        val lk = frame.point(PoseLandmarks.LEFT_KNEE)?.visibility ?: 0f
-        val rk = frame.point(PoseLandmarks.RIGHT_KNEE)?.visibility ?: 0f
+        // 무릎 신뢰도 확인.
+        val lk = frame.worldPoint(PoseLandmarks.LEFT_KNEE)?.visibility ?: 0f
+        val rk = frame.worldPoint(PoseLandmarks.RIGHT_KNEE)?.visibility ?: 0f
         if (minOf(lk, rk) < Thresholds.MIN_VIS) return false
         return l >= Thresholds.KNEE_STRAIGHT && r >= Thresholds.KNEE_STRAIGHT
     }
