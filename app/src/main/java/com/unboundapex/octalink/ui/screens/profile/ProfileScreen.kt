@@ -41,7 +41,7 @@ import com.unboundapex.octalink.ui.components.HexagonSkillChart
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import java.time.LocalDate
-import java.time.Period
+import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 
 /**
@@ -82,12 +82,15 @@ private fun AllCommentsDialog(
 }
 
 private fun membershipLabel(joinDate: LocalDate, today: LocalDate = LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))): String {
-    val period = Period.between(joinDate, today)
+    // "N개월차"는 입관한 달을 1개월차로 세는 순번(ordinal) — 만 경과 개월 + 1.
+    // 예: 4/13 입관 → 7/2 은 만 2개월 19일이라 3개월 차. (만수 그대로 쓰면 2개월로 나와 off-by-one)
+    val years = ChronoUnit.YEARS.between(joinDate, today).toInt()
+    val monthsThisYear = ChronoUnit.MONTHS.between(joinDate.plusYears(years.toLong()), today).toInt() // 0~11 (만)
+    val nthMonth = monthsThisYear + 1 // 현재 진행 중인 달 = N개월차
     return when {
-        period.years > 0 && period.months > 0 -> "${period.years}년 ${period.months}개월 차"
-        period.years > 0 -> "${period.years}년 차"
-        period.months > 0 -> "${period.months}개월 차"
-        else -> "이번 달 입관"
+        years > 0 && monthsThisYear == 0 -> "${years}년 차"
+        years > 0 -> "${years}년 ${nthMonth}개월 차"
+        else -> "${nthMonth}개월 차"
     }
 }
 
