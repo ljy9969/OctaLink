@@ -35,8 +35,11 @@ import java.time.temporal.TemporalAdjusters
  * 권한: AdminScreen / AttendanceScreen 운영진 모드 카드에서만 진입하므로 호출자 책임.
  * Firestore Rules 가 collectionGroup + 직접 path 모두 isStaff/isApproved 로 더블 검증.
  */
-/** 도장 정기 운영 일수 (월~토, 일요일 휴무). 주간 출석률 분모. */
-const val GYM_DAYS_PER_WEEK: Int = 6
+/**
+ * 주간 출석률 기준(목표) 일수 — 이만큼 출석하면 100%. 홈 "내 주간 출석률" 카드와 회원별
+ * 리뷰 화면 공용 분모. (도장 실제 운영은 월~토지만, 출석률 기준은 주 5일로 둠.)
+ */
+const val WEEKLY_ATTENDANCE_TARGET: Int = 5
 
 class AttendanceReviewViewModel : ViewModel() {
     private val attendance = RepositoryProvider.attendance
@@ -63,7 +66,7 @@ class AttendanceReviewViewModel : ViewModel() {
      * 쿼리 시작점 = min(weekStart, yearStart) — 주가 연도를 가로질러도(예: 1월 첫 주가 전년 12월)
      * 모든 derivation 누락 없이 커버.
      *
-     * 도장 운영 6일/주 (월~토, 일요일 휴무) — 출석률 분모 [GYM_DAYS_PER_WEEK].
+     * 주간 출석률 분모 = [WEEKLY_ATTENDANCE_TARGET] (목표 일수).
      */
     private val seoul = ZoneId.of("Asia/Seoul")
     private val today: LocalDate = LocalDate.now(seoul)

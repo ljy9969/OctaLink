@@ -407,8 +407,8 @@ private fun PagingButton(
  */
 @Composable
 private fun WeeklyRateBadge(count: Int) {
-    val capped = count.coerceAtMost(GYM_DAYS_PER_WEEK)
-    val pct = (capped * 100 / GYM_DAYS_PER_WEEK)
+    val capped = count.coerceAtMost(WEEKLY_ATTENDANCE_TARGET)
+    val pct = (capped * 100 / WEEKLY_ATTENDANCE_TARGET)
     val active = count > 0
     val bg = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
     else MaterialTheme.colorScheme.surfaceVariant
@@ -428,7 +428,7 @@ private fun WeeklyRateBadge(count: Int) {
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "$capped / $GYM_DAYS_PER_WEEK",
+            text = "$capped / $WEEKLY_ATTENDANCE_TARGET",
             style = MaterialTheme.typography.labelSmall,
             color = fg,
         )

@@ -18,17 +18,12 @@ import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
 /**
- * 홈 "내 주간 출석률" 카드의 목표 일수(분모). 도장 운영일
- * ([com.unboundapex.octalink.ui.screens.attendance.GYM_DAYS_PER_WEEK], 6일)과는 별개로,
- * 개인 주간 출석 목표를 5일로 둔다 — 주 5일 출석 시 100%. (REVIEW 화면 직원용 카드는 운영일 6 유지)
- */
-const val HOME_WEEKLY_ATTENDANCE_TARGET: Int = 5
-
-/**
  * 홈 화면 "내 주간 출석률" 카드용 — 현재 사용자 본인의 이번 주(월~토) 출석 일수.
  *
+ * REVIEW 화면 회원별 카드와 동일 공식·분모 사용
+ * ([com.unboundapex.octalink.ui.screens.attendance.WEEKLY_ATTENDANCE_TARGET], 5일 목표):
  *  - 분자: 본인 attendance 중 classDate >= weekStart 인 distinct 날짜 수
- *  - 분모: [HOME_WEEKLY_ATTENDANCE_TARGET] (5일 목표)
+ *  - 분모: WEEKLY_ATTENDANCE_TARGET (5)
  *  - 백분율: capped * 100 / 5
  *
  * Firestore snapshot listener 기반이라 본인 체크인 시 즉시 갱신.
