@@ -53,6 +53,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.BuildConfig
+import com.unboundapex.octalink.data.shadowcoach.Combo
+import com.unboundapex.octalink.data.shadowcoach.ComboLevel
+import com.unboundapex.octalink.data.shadowcoach.Combinations
 import com.unboundapex.octalink.data.shadowcoach.PoseFrame
 import com.unboundapex.octalink.data.shadowcoach.PoseLandmarkerHelper
 import com.unboundapex.octalink.data.shadowcoach.PoseLandmarks
@@ -222,6 +225,14 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
         if (ui.running && n > 0 && n % 10 == 0) tts.encourage()
     }
 
+    // 콤비네이션 추천 — 난이도 버튼 누르면 해당 난이도 콤비 1개 뽑아 TTS 발화 + 화면 표시.
+    var recommendedCombo by remember { mutableStateOf<Combo?>(null) }
+    fun recommendCombo(level: ComboLevel) {
+        val combo = Combinations.random(level, exclude = recommendedCombo)
+        recommendedCombo = combo
+        tts.callCombo(level.displayName, combo.spoken())
+    }
+
     DisposableEffect(Unit) {
         helper.setup()
         val future = ProcessCameraProvider.getInstance(context)
@@ -257,6 +268,8 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
             ui = ui,
             onStart = vm::start,
             onStop = vm::stop,
+            comboLabel = recommendedCombo?.label(),
+            onRecommendCombo = { recommendCombo(it) },
             // 개발용 녹화 — DEBUG 빌드에서만 하단 우측에 노출. release 엔 미노출.
             showRecord = BuildConfig.DEBUG,
             isRecording = isRecording,
@@ -303,12 +316,14 @@ private fun PoseOverlay(frame: PoseFrame?, mirrorX: Boolean, modifier: Modifier 
     }
 }
 
-/** 상단 카운터/코칭 칩 + 하단 시작/정지 버튼. */
+/** 상단 카운터/코칭 칩 + 콤비 추천 + 하단 시작/정지 버튼. */
 @Composable
 private fun ShadowHud(
     ui: ShadowUiState,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    comboLabel: String? = null,
+    onRecommendCombo: (ComboLevel) -> Unit = {},
     showRecord: Boolean = false,
     isRecording: Boolean = false,
     onToggleRecord: () -> Unit = {},
@@ -345,6 +360,35 @@ private fun ShadowHud(
         }
 
         Spacer(Modifier.weight(1f))
+
+        // 콤비네이션 추천 — 추천된 콤비 표시(있으면) + 난이도별 버튼 한 줄.
+        comboLabel?.let {
+            Text(
+                text = "🥊 $it",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xAA000000))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ComboLevel.entries.forEach { level ->
+                ComboLevelButton(
+                    level = level,
+                    onClick = { onRecommendCombo(level) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
 
         // 하단 한 줄 — 시작/정지 버튼(그라데이션) + (DEBUG) 녹화 버튼 우측.
         Row(
@@ -383,6 +427,35 @@ private fun ShadowHud(
                 )
             }
         }
+    }
+}
+
+/** 난이도별 콤비네이션 추천 버튼 — 탭 시 해당 난이도 콤비를 음성으로 불러줌. */
+@Composable
+private fun ComboLevelButton(
+    level: ComboLevel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bg = when (level) {
+        ComboLevel.BEGINNER -> Color(0xE60F9D58)      // 그린 (초급)
+        ComboLevel.INTERMEDIATE -> Color(0xE6F4B400)  // 앰버 (중급)
+        ComboLevel.ADVANCED -> Color(0xE6DB4437)      // 레드 (고급)
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .clickable { onClick() }
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = level.displayName,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleSmall,
+        )
     }
 }
 

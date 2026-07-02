@@ -45,6 +45,15 @@ class ShadowTts(context: Context) {
         }
     }
 
+    /**
+     * 콤비네이션 추천 발화 — 사용자가 버튼을 눌러 요청한 것이라 쿨다운 무시, 진행 중 코칭을
+     * 끊고(QUEUE_FLUSH) 바로 읽음. 예: "중급 콤비네이션. 잽, 라이트, 훅."
+     */
+    fun callCombo(levelName: String, spokenSteps: String) {
+        if (!ready) return
+        runCatching { tts.speak("$levelName 콤비네이션. $spokenSteps", TextToSpeech.QUEUE_FLUSH, null, "combo") }
+    }
+
     private var lastEncourageAt = 0L
     private var encourageIdx = 0
 
