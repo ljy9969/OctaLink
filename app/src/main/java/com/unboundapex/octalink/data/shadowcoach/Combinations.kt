@@ -14,11 +14,11 @@ enum class ComboLevel(val displayName: String) {
  * TTS 로 읽어줄 때는 각 스텝의 [Technique.displayName] 을 순서대로 나열.
  */
 data class Combo(val steps: List<Technique>) {
-    /** 화면 표시·음성용 — "잽 · 라이트 · 훅". */
-    fun label(): String = steps.joinToString(" · ") { it.displayName }
+    /** 화면 표시용 — 넘버링 콜 그대로 "원 · 투 · 훅". */
+    fun label(): String = steps.joinToString(" · ") { it.callName }
 
-    /** TTS 발화용 — "잽, 라이트, 훅" (쉼표로 끊어 또박또박). */
-    fun spoken(): String = steps.joinToString(", ") { it.displayName }
+    /** TTS 발화용 — "원, 투, 훅" (쉼표로 끊어 또박또박). */
+    fun spoken(): String = steps.joinToString(", ") { it.callName }
 }
 
 /**

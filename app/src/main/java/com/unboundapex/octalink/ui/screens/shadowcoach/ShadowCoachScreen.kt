@@ -11,6 +11,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -63,6 +64,7 @@ import com.unboundapex.octalink.data.shadowcoach.PostureCheck
 import com.unboundapex.octalink.data.shadowcoach.ShadowSession
 import com.unboundapex.octalink.data.shadowcoach.Technique
 import java.util.concurrent.Executors
+import kotlinx.coroutines.isActive
 
 /**
  * AI 쉐도우 코치 — 카메라 기반 실시간 자세 분석 화면.
@@ -225,12 +227,25 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
         if (ui.running && n > 0 && n % 10 == 0) tts.encourage()
     }
 
-    // 콤비네이션 추천 — 난이도 버튼 누르면 해당 난이도 콤비 1개 뽑아 TTS 발화 + 화면 표시.
+    // 콤비네이션 추천 — 난이도 버튼 누르면 해당 난이도 콤비 1개 뽑아 넘버링 콜(TTS) + 화면 표시.
     var recommendedCombo by remember { mutableStateOf<Combo?>(null) }
+    var selectedLevel by remember { mutableStateOf(ComboLevel.BEGINNER) }
+    var autoMode by remember { mutableStateOf(false) }
     fun recommendCombo(level: ComboLevel) {
+        selectedLevel = level
         val combo = Combinations.random(level, exclude = recommendedCombo)
         recommendedCombo = combo
         tts.callCombo(level.displayName, combo.spoken())
+    }
+    // 자동 콜 — 켜져 있는 동안 선택 난이도 콤비를 간격(콤비 길이에 비례)을 두고 반복 발화.
+    LaunchedEffect(autoMode, selectedLevel) {
+        if (!autoMode) return@LaunchedEffect
+        while (isActive) {
+            val combo = Combinations.random(selectedLevel, exclude = recommendedCombo)
+            recommendedCombo = combo
+            tts.callCombo(selectedLevel.displayName, combo.spoken())
+            kotlinx.coroutines.delay(3000L + combo.steps.size * 1200L)
+        }
     }
 
     DisposableEffect(Unit) {
@@ -269,7 +284,10 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
             onStart = vm::start,
             onStop = vm::stop,
             comboLabel = recommendedCombo?.label(),
+            selectedLevel = selectedLevel,
+            autoMode = autoMode,
             onRecommendCombo = { recommendCombo(it) },
+            onToggleAuto = { autoMode = !autoMode },
             // 개발용 녹화 — DEBUG 빌드에서만 하단 우측에 노출. release 엔 미노출.
             showRecord = BuildConfig.DEBUG,
             isRecording = isRecording,
@@ -323,7 +341,10 @@ private fun ShadowHud(
     onStart: () -> Unit,
     onStop: () -> Unit,
     comboLabel: String? = null,
+    selectedLevel: ComboLevel = ComboLevel.BEGINNER,
+    autoMode: Boolean = false,
     onRecommendCombo: (ComboLevel) -> Unit = {},
+    onToggleAuto: () -> Unit = {},
     showRecord: Boolean = false,
     isRecording: Boolean = false,
     onToggleRecord: () -> Unit = {},
@@ -361,7 +382,7 @@ private fun ShadowHud(
 
         Spacer(Modifier.weight(1f))
 
-        // 콤비네이션 추천 — 추천된 콤비 표시(있으면) + 난이도별 버튼 한 줄.
+        // 콤비네이션 추천 — 추천된 콤비 표시(있으면) + 난이도별 버튼 + 자동 콜 토글.
         comboLabel?.let {
             Text(
                 text = "🥊 $it",
@@ -383,11 +404,27 @@ private fun ShadowHud(
             ComboLevel.entries.forEach { level ->
                 ComboLevelButton(
                     level = level,
+                    selected = level == selectedLevel,
                     onClick = { onRecommendCombo(level) },
                     modifier = Modifier.weight(1f),
                 )
             }
         }
+        Spacer(Modifier.height(8.dp))
+        // 자동 콜 토글 — 켜면 선택 난이도 콤비를 간격 두고 계속 불러줌.
+        Text(
+            text = if (autoMode) "⏸ 자동 콜 중지" else "▶ 자동 콜 (${selectedLevel.displayName})",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(50))
+                .background(if (autoMode) Color(0xE6C8102E) else Color(0xE61F2937))
+                .clickable { onToggleAuto() }
+                .padding(vertical = 10.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
         Spacer(Modifier.height(8.dp))
 
         // 하단 한 줄 — 시작/정지 버튼(그라데이션) + (DEBUG) 녹화 버튼 우측.
@@ -430,10 +467,11 @@ private fun ShadowHud(
     }
 }
 
-/** 난이도별 콤비네이션 추천 버튼 — 탭 시 해당 난이도 콤비를 음성으로 불러줌. */
+/** 난이도별 콤비네이션 추천 버튼 — 탭 시 해당 난이도 콤비를 음성으로 불러줌. 선택 시 흰 테두리. */
 @Composable
 private fun ComboLevelButton(
     level: ComboLevel,
+    selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -446,6 +484,10 @@ private fun ComboLevelButton(
         modifier = modifier
             .clip(RoundedCornerShape(50))
             .background(bg)
+            .then(
+                if (selected) Modifier.border(2.dp, Color.White, RoundedCornerShape(50))
+                else Modifier
+            )
             .clickable { onClick() }
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,

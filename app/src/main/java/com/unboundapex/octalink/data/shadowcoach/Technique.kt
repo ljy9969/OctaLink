@@ -16,9 +16,14 @@ enum class Technique(
     val enabledInMvp: Boolean,
     /** 펀치 계열인지 (방어 회피 동작과 구분 — 신전/반대손 가드 등 펀치 전용 판정에 사용). */
     val isPunch: Boolean = true,
+    /**
+     * 콤비네이션 콜(넘버링 콜) 시 부르는 이름. 체육관 방식으로 잽=원, 라이트=투,
+     * 훅·어퍼·회피는 이름 그대로. 예: 잽·라이트·훅 → "원, 투, 훅". 기본값은 [displayName].
+     */
+    val callName: String = displayName,
 ) {
-    JAB("잽", enabledInMvp = true),
-    STRAIGHT("라이트", enabledInMvp = true),
+    JAB("잽", enabledInMvp = true, callName = "원"),
+    STRAIGHT("라이트", enabledInMvp = true, callName = "투"),
     HOOK("훅", enabledInMvp = true),
     UPPERCUT("어퍼", enabledInMvp = true),
     // 방어 회피 동작 — 머리 궤적으로 감지, 펀치처럼 카운트(잘한 동작). 교정 대상 아님.
