@@ -403,18 +403,18 @@ private fun ShadowHud(
                 text = "🥊 $it" + (comboProgress?.let { p -> "   ($p)" } ?: ""),
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(Color(0xAA000000))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(5.dp))
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             ComboLevel.entries.forEach { level ->
                 ComboLevelButton(
@@ -425,22 +425,22 @@ private fun ShadowHud(
                 )
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(5.dp))
         // 자동 콜 토글 — 켜면 선택 난이도 콤비를 간격 두고 계속 불러줌.
         Text(
             text = if (autoMode) "⏸ 자동 콜 중지" else "▶ 자동 콜 (${selectedLevel.displayName})",
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelLarge,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(50))
                 .background(if (autoMode) Color(0xE6C8102E) else Color(0xE61F2937))
                 .clickable { onToggleAuto() }
-                .padding(vertical = 10.dp),
+                .padding(vertical = 7.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(5.dp))
 
         // 하단 한 줄 — 시작/정지 버튼(그라데이션) + (DEBUG) 녹화 버튼 우측.
         Row(
@@ -475,7 +475,7 @@ private fun ShadowHud(
                         .clip(RoundedCornerShape(50))
                         .background(if (isRecording) Color(0xE6C8102E) else Color(0xAA000000))
                         .clickable { onToggleRecord() }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 )
             }
         }
@@ -504,14 +504,14 @@ private fun ComboLevelButton(
                 else Modifier
             )
             .clickable { onClick() }
-            .padding(vertical = 10.dp),
+            .padding(vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = level.displayName,
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelLarge,
         )
     }
 }
@@ -529,14 +529,14 @@ private fun GradientPillButton(
             .clip(RoundedCornerShape(50))
             .background(brush)
             .clickable { onClick() }
-            .padding(vertical = 14.dp),
+            .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
         )
     }
 }

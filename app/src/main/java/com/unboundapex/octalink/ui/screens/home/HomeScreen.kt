@@ -60,7 +60,6 @@ import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.components.TagChip
 import com.unboundapex.octalink.data.canUseAiRoutine
-import com.unboundapex.octalink.ui.screens.attendance.GYM_DAYS_PER_WEEK
 import com.unboundapex.octalink.ui.screens.profile.MyCommentsViewModel
 import com.unboundapex.octalink.ui.screens.routine.WeeklyRoutineViewModel
 import kotlinx.coroutines.launch
@@ -137,9 +136,9 @@ fun HomeScreen(
     val aiRoutine by weeklyRoutineVm.routine.collectAsState()
     val myComments by myCommentsVm.myComments.collectAsState()
     val weeklyAttendCount by weeklyAttendanceVm.weeklyCount.collectAsState()
-    // REVIEW 화면 WeeklyRateBadge 와 동일 공식: count 는 6 으로 cap, % = capped*100/6
-    val weeklyCapped = weeklyAttendCount.coerceAtMost(GYM_DAYS_PER_WEEK)
-    val weeklyPct = weeklyCapped * 100 / GYM_DAYS_PER_WEEK
+    // 홈 개인 주간 출석 목표 5일: count 는 5 로 cap, % = capped*100/5 (운영일 6과 별개).
+    val weeklyCapped = weeklyAttendCount.coerceAtMost(HOME_WEEKLY_ATTENDANCE_TARGET)
+    val weeklyPct = weeklyCapped * 100 / HOME_WEEKLY_ATTENDANCE_TARGET
     val weeklyMission by weeklyMissionVm.mission.collectAsState()
     val weeklyMissionText = weeklyMission?.text ?: "이번 주 미션이 아직 설정되지 않았습니다."
     val gymActivity by gymActivityVm.state.collectAsState()
@@ -260,7 +259,7 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            "$weeklyCapped / $GYM_DAYS_PER_WEEK 일",
+                            "$weeklyCapped / $HOME_WEEKLY_ATTENDANCE_TARGET 일",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,

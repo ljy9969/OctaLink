@@ -33,8 +33,8 @@ android {
         applicationId = "com.unboundapex.octalink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.9.3"
+        versionCode = 13
+        versionName = "0.9.4"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")
@@ -138,7 +138,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.4.1")
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
-    implementation("com.google.mediapipe:tasks-vision:0.10.20")
+    // 0.10.35: 16KB 페이지 정렬 .so 포함 (Android 15+ / Play 16KB 요구 대응). 0.10.20 은 미정렬.
+    implementation("com.google.mediapipe:tasks-vision:0.10.35")
 
     // 카카오 로그인 SDK (v2-user) — Kakao OAuth → Firebase Custom Token 교환 진입점
     implementation("com.kakao.sdk:v2-user:2.20.6")
