@@ -400,15 +400,23 @@ class ShadowMotionAnalyzer {
 
     /**
      * (3D) 펀치 분류 — 성분은 **몸 기준 좌표**(어깨폭 배수). [forward] 어깨선 수직(앞으로 뻗음),
-     * [lateral] 어깨선 방향(좌우 스윙), [rise] 상방. 블레이드 스탠스에서도 스탠스 각도와 무관.
-     *  - 팔꿈치 펴짐 + 전방 우세 → 스트레이트(왼팔=잽 / 오른팔=라이트)
-     *  - 상방 우세 → 어퍼, 좌우 우세 → 훅.
+     * [lateral] 어깨선 방향(좌우 스윙), [rise] 상방.
+     *
+     * **신전각(팔 펴짐)을 최우선**으로 스트레이트 판정 — 훅/어퍼는 팔을 안 펴므로 가장 확실한 구분자.
+     * 방향 성분(forward/lateral)은 노이즈가 있어 보조로만: 곧게 안 뻗어도 앞으로 확실히 나가면 스트레이트.
+     *  - 팔 폄 or 전방 우세 → 스트레이트(왼팔=잽 / 오른팔=라이트)
+     *  - (팔 굽힌 채) 상방 우세 → 어퍼, 좌우 우세 → 훅.
      */
     private fun classify(arm: Arm, elbowAngle: Float, forward: Float, lateral: Float, rise: Float): Technique {
         val straight = if (arm == Arm.LEFT) Technique.JAB else Technique.STRAIGHT
         return when {
-            elbowAngle >= Thresholds.STRAIGHT_ELBOW && forward >= lateral && forward >= rise -> straight
-            rise >= Thresholds.UPPERCUT_RISE && rise >= lateral && rise >= forward -> Technique.UPPERCUT
+            // 팔을 곧게 뻗음 = 스트레이트. 방향 성분과 무관(정면·블레이드 무관) — 잽 오분류 방지 핵심.
+            elbowAngle >= Thresholds.STRAIGHT_ELBOW -> straight
+            // 덜 폈어도 옆·위보다 앞으로 확실히 뻗음 = 스트레이트(빠른 잽 포착).
+            forward >= lateral * 1.3f && forward >= rise -> straight
+            // 굽힌 채 위로 솟음 = 어퍼.
+            rise >= Thresholds.UPPERCUT_RISE && rise >= lateral -> Technique.UPPERCUT
+            // 굽힌 채 옆으로 스윙 = 훅.
             lateral >= Thresholds.HOOK_LATERAL -> Technique.HOOK
             else -> straight
         }
