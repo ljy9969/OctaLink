@@ -54,6 +54,12 @@ class ShadowTts(context: Context) {
         runCatching { tts.speak("$levelName 콤비네이션. $spokenSteps", TextToSpeech.QUEUE_FLUSH, null, "combo") }
     }
 
+    /** 같은 콤비 반복 콜 — 난이도 접두 없이 스텝만 ("원, 투, 훅"). 자동 콜 2~4번째 반복용. */
+    fun callComboRepeat(spokenSteps: String) {
+        if (!ready) return
+        runCatching { tts.speak(spokenSteps, TextToSpeech.QUEUE_FLUSH, null, "combo") }
+    }
+
     private var lastEncourageAt = 0L
     private var encourageIdx = 0
 

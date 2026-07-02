@@ -66,6 +66,9 @@ import com.unboundapex.octalink.data.shadowcoach.Technique
 import java.util.concurrent.Executors
 import kotlinx.coroutines.isActive
 
+/** 자동 콜 시 같은 콤비를 몇 번 반복하고 다음 콤비로 넘어갈지 (연습 반복 횟수). */
+private const val COMBO_REPS = 4
+
 /**
  * AI 쉐도우 코치 — 카메라 기반 실시간 자세 분석 화면.
  *
@@ -231,20 +234,30 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
     var recommendedCombo by remember { mutableStateOf<Combo?>(null) }
     var selectedLevel by remember { mutableStateOf(ComboLevel.BEGINNER) }
     var autoMode by remember { mutableStateOf(false) }
+    var comboProgress by remember { mutableStateOf<String?>(null) } // 자동 콜 반복 진행 "2 / 4"
     fun recommendCombo(level: ComboLevel) {
         selectedLevel = level
+        // 자동 콜 중이면 난이도만 바꿔 루프가 이어받음(중복 발화 방지). 수동일 때만 즉시 1회 콜.
+        if (autoMode) return
         val combo = Combinations.random(level, exclude = recommendedCombo)
         recommendedCombo = combo
+        comboProgress = null
         tts.callCombo(level.displayName, combo.spoken())
     }
-    // 자동 콜 — 켜져 있는 동안 선택 난이도 콤비를 간격(콤비 길이에 비례)을 두고 반복 발화.
+    // 자동 콜 — 한 콤비를 [COMBO_REPS]번 반복해 부른 뒤 다음(다른) 콤비로. 반복 사이 간격은 콤비 길이 비례.
     LaunchedEffect(autoMode, selectedLevel) {
-        if (!autoMode) return@LaunchedEffect
+        if (!autoMode) { comboProgress = null; return@LaunchedEffect }
         while (isActive) {
             val combo = Combinations.random(selectedLevel, exclude = recommendedCombo)
             recommendedCombo = combo
-            tts.callCombo(selectedLevel.displayName, combo.spoken())
-            kotlinx.coroutines.delay(3000L + combo.steps.size * 1200L)
+            val gapMs = 3000L + combo.steps.size * 1200L
+            for (rep in 1..COMBO_REPS) {
+                if (!isActive) break
+                comboProgress = "$rep / $COMBO_REPS"
+                if (rep == 1) tts.callCombo(selectedLevel.displayName, combo.spoken())
+                else tts.callComboRepeat(combo.spoken())
+                kotlinx.coroutines.delay(gapMs)
+            }
         }
     }
 
@@ -284,6 +297,7 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
             onStart = vm::start,
             onStop = vm::stop,
             comboLabel = recommendedCombo?.label(),
+            comboProgress = comboProgress,
             selectedLevel = selectedLevel,
             autoMode = autoMode,
             onRecommendCombo = { recommendCombo(it) },
@@ -341,6 +355,7 @@ private fun ShadowHud(
     onStart: () -> Unit,
     onStop: () -> Unit,
     comboLabel: String? = null,
+    comboProgress: String? = null,
     selectedLevel: ComboLevel = ComboLevel.BEGINNER,
     autoMode: Boolean = false,
     onRecommendCombo: (ComboLevel) -> Unit = {},
@@ -385,7 +400,7 @@ private fun ShadowHud(
         // 콤비네이션 추천 — 추천된 콤비 표시(있으면) + 난이도별 버튼 + 자동 콜 토글.
         comboLabel?.let {
             Text(
-                text = "🥊 $it",
+                text = "🥊 $it" + (comboProgress?.let { p -> "   ($p)" } ?: ""),
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,

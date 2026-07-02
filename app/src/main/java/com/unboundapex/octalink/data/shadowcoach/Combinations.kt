@@ -38,25 +38,31 @@ object Combinations {
 
     private val sets: Map<ComboLevel, List<Combo>> = mapOf(
         ComboLevel.BEGINNER to listOf(
-            Combo(listOf(J, R)),
-            Combo(listOf(J, J)),
-            Combo(listOf(J, R, J)),
-            Combo(listOf(R, H)),
-            Combo(listOf(J, R, H)),
+            Combo(listOf(J, R)),          // 원·투
+            Combo(listOf(J, J)),          // 원·원
+            Combo(listOf(J, H)),          // 원·훅
+            Combo(listOf(R, H)),          // 투·훅
+            Combo(listOf(J, R, J)),       // 원·투·원
+            Combo(listOf(J, J, R)),       // 원·원·투
+            Combo(listOf(J, R, H)),       // 원·투·훅
         ),
         ComboLevel.INTERMEDIATE to listOf(
-            Combo(listOf(J, R, H)),
-            Combo(listOf(J, R, U)),
-            Combo(listOf(R, H, R)),
-            Combo(listOf(J, J, R, H)),
-            Combo(listOf(J, U, H, R)),
+            Combo(listOf(J, R, H)),       // 원·투·훅
+            Combo(listOf(J, R, U)),       // 원·투·어퍼
+            Combo(listOf(R, H, R)),       // 투·훅·투
+            Combo(listOf(R, U, H)),       // 투·어퍼·훅
+            Combo(listOf(J, J, R, H)),    // 원·원·투·훅
+            Combo(listOf(J, U, H, R)),    // 원·어퍼·훅·투
+            Combo(listOf(J, R, H, U)),    // 원·투·훅·어퍼
         ),
         ComboLevel.ADVANCED to listOf(
-            Combo(listOf(J, R, H, R)),
-            Combo(listOf(S, R, H)),
-            Combo(listOf(D, H, R, H)),
-            Combo(listOf(J, R, S, R, H)),
-            Combo(listOf(W, H, U, R)),
+            Combo(listOf(J, R, H, R)),        // 원·투·훅·투
+            Combo(listOf(S, R, H)),           // 슬립·투·훅
+            Combo(listOf(J, R, D, H)),        // 원·투·더킹·훅
+            Combo(listOf(D, H, R, H)),        // 더킹·훅·투·훅
+            Combo(listOf(S, R, H, U)),        // 슬립·투·훅·어퍼
+            Combo(listOf(W, H, U, R)),        // 위빙·훅·어퍼·투
+            Combo(listOf(J, R, S, R, H)),     // 원·투·슬립·투·훅
         ),
     )
 
