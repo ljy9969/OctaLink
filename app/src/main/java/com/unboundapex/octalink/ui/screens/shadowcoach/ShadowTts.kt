@@ -28,16 +28,23 @@ class ShadowTts(context: Context) {
         }
     }
 
-    /** 현재 위반 중인 자세 항목 집합을 받아, 쿨다운 지난 것 하나를 음성 안내. */
-    fun announce(cues: Set<PostureCheck>) {
+    /**
+     * 현재 위반 중인 자세 항목 집합을 받아, 쿨다운 지난 것 하나를 음성 안내.
+     *
+     * [criticalOnly] = 자동 콜 중 모드: 가드·턱 등 **핵심 항목만** + **긴 쿨다운**([AUTO_COOLDOWN_MS])
+     * 으로 발화해 콤비 콜 흐름을 덜 끊음. (콤비가 말하는 중이면 어차피 스킵 — 콤비 우선)
+     */
+    fun announce(cues: Set<PostureCheck>, criticalOnly: Boolean = false) {
         if (!ready || cues.isEmpty()) return
         if (tts.isSpeaking) return
         val now = SystemClock.elapsedRealtime()
-        // PostureCheck.mvpEnabled 순서대로(우선순위) 첫 발화 가능 항목 1개.
-        for (cue in PostureCheck.mvpEnabled) {
+        val order = if (criticalOnly) CRITICAL_CHECKS else PostureCheck.mvpEnabled
+        val cooldown = if (criticalOnly) AUTO_COOLDOWN_MS else COOLDOWN_MS
+        // 우선순위 순서대로 첫 발화 가능 항목 1개.
+        for (cue in order) {
             if (cue !in cues) continue
             val last = lastSpokenAt[cue.name] ?: 0L
-            if (now - last >= COOLDOWN_MS) {
+            if (now - last >= cooldown) {
                 tts.speak(cue.cue, TextToSpeech.QUEUE_FLUSH, null, cue.name)
                 lastSpokenAt[cue.name] = now
                 return
@@ -81,6 +88,10 @@ class ShadowTts(context: Context) {
 
     companion object {
         private const val COOLDOWN_MS = 4500L
+        /** 자동 콜 중 자세 피드백 쿨다운 — 길게 잡아 콤비 흐름을 덜 끊음. */
+        private const val AUTO_COOLDOWN_MS = 9000L
+        /** 자동 콜 중 발화할 핵심 자세 항목 (가드·턱). 우선순위 순서. */
+        private val CRITICAL_CHECKS = listOf(PostureCheck.GUARD_DOWN, PostureCheck.CHIN_UP)
         private const val ENCOURAGE_COOLDOWN = 6000L
         private val ENCOURAGEMENTS = listOf(
             "좋아요 계속 가요",

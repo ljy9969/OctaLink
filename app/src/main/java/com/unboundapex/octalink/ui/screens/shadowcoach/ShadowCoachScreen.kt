@@ -218,11 +218,19 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
         onDispose { view.keepScreenOn = false }
     }
 
-    // 자세 코칭 음성(TTS) — liveCues 변할 때 쿨다운 두고 발화.
+    // 자세 코칭 음성(TTS).
     val tts = remember { ShadowTts(context) }
     DisposableEffect(Unit) { onDispose { tts.shutdown() } }
-    LaunchedEffect(ui.liveCues, ui.running) {
-        if (ui.running) tts.announce(ui.liveCues)
+
+    // 콤비네이션 상태 — 자세 피드백이 autoMode 를 참조하므로 먼저 선언.
+    var recommendedCombo by remember { mutableStateOf<Combo?>(null) }
+    var selectedLevel by remember { mutableStateOf(ComboLevel.BEGINNER) }
+    var autoMode by remember { mutableStateOf(false) }
+    var comboProgress by remember { mutableStateOf<String?>(null) } // 자동 콜 반복 진행 "2 / 4"
+
+    // 자세 코칭 발화 — liveCues 변할 때. 자동 콜 중엔 핵심(가드/턱)만 낮은 빈도로 → 콤비 흐름 덜 끊음.
+    LaunchedEffect(ui.liveCues, ui.running, autoMode) {
+        if (ui.running) tts.announce(ui.liveCues, criticalOnly = autoMode)
     }
     // 격려 음성 — 10회마다 마일스톤. (교정 발화 우선, 자체 쿨다운으로 남발 방지.)
     LaunchedEffect(ui.totalStrikes) {
@@ -230,11 +238,6 @@ private fun ShadowCameraExperience(vm: ShadowCoachViewModel) {
         if (ui.running && n > 0 && n % 10 == 0) tts.encourage()
     }
 
-    // 콤비네이션 추천 — 난이도 버튼 누르면 해당 난이도 콤비 1개 뽑아 넘버링 콜(TTS) + 화면 표시.
-    var recommendedCombo by remember { mutableStateOf<Combo?>(null) }
-    var selectedLevel by remember { mutableStateOf(ComboLevel.BEGINNER) }
-    var autoMode by remember { mutableStateOf(false) }
-    var comboProgress by remember { mutableStateOf<String?>(null) } // 자동 콜 반복 진행 "2 / 4"
     fun recommendCombo(level: ComboLevel) {
         selectedLevel = level
         // 자동 콜 중이면 난이도만 바꿔 루프가 이어받음(중복 발화 방지). 수동일 때만 즉시 1회 콜.
@@ -547,19 +550,24 @@ private fun HudChip(text: String, warn: Boolean = false) {
     ColorChip(text = text, bg = if (warn) Color(0xCCC8102E) else Color(0xAA000000))
 }
 
-/** 동작 종류·자세 힌트 칩 — 색상 구분 + 컴팩트 사이즈. */
+/** 동작 종류·자세 힌트·총/시간 칩 — 색상 구분 + 상단 칩 전부 동일 높이(28dp)로 통일. */
 @Composable
 private fun ColorChip(text: String, bg: Color) {
-    Text(
-        text = text,
-        color = Color.White,
-        fontWeight = FontWeight.Bold,
-        style = MaterialTheme.typography.labelMedium,
+    Box(
         modifier = Modifier
+            .height(28.dp)
             .clip(RoundedCornerShape(50))
             .background(bg)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-    )
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
 }
 
 /** 동작 종류별 칩 색 — TagChip 팔레트 톤과 통일. 알파 0xE6 으로 카메라 위 가독 확보. */
