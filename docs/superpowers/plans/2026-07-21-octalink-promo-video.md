@@ -388,15 +388,16 @@ W=1080; H=1920; FPS=30
 S="$WORK/seg"; mkdir -p "$S"
 enc="-r $FPS -pix_fmt yuv420p -c:v libx264 -crf 18 -preset veryfast -an"
 
-# norm: infile start dur outfile  (증가스케일+크롭으로 9:16 꽉 채움)
-norm(){ ffmpeg -y -ss "$2" -t "$3" -i "$1" \
-  -vf "scale=$W:$H:force_original_aspect_ratio=increase,crop=$W:$H,fps=$FPS,setsar=1" \
-  $enc "$4" -loglevel error; }
+# norm: infile start dur outfile [extra_vf]  (증가스케일+크롭으로 9:16 꽉 채움)
+norm(){
+  local vf="scale=$W:$H:force_original_aspect_ratio=increase,crop=$W:$H,fps=$FPS,setsar=1"
+  [ -n "${5:-}" ] && vf="$vf,$5"
+  ffmpeg -y -ss "$2" -t "$3" -i "$1" -vf "$vf" $enc "$4" -loglevel error; }
 
-# 1) 세그먼트 정규화
-norm "$CAP/$F_SHADOW_RAW" "$HOOK_SS" 3.0 "$S/hook.mp4"
-if [ "$VAR" = v1 ]; then norm "$CAP/$F_SHADOW_V1" "$SHADOW_V1_SS" 8.0 "$S/shadow.mp4"
-else                    norm "$CAP/$F_SHADOW_RAW" "$SHADOW_V2_SS" 8.0 "$S/shadow.mp4"; fi
+# 1) 세그먼트 정규화 (화이트 플래시는 훅 끝·쉐도우 시작에만 — 전체 타임라인 fade 금지: fade=out은 이후 프레임을 흰색으로 고정함)
+norm "$CAP/$F_SHADOW_RAW" "$HOOK_SS" 3.0 "$S/hook.mp4" "fade=t=out:st=2.82:d=0.18:c=white"
+if [ "$VAR" = v1 ]; then norm "$CAP/$F_SHADOW_V1" "$SHADOW_V1_SS" 8.0 "$S/shadow.mp4" "fade=t=in:st=0:d=0.18:c=white"
+else                    norm "$CAP/$F_SHADOW_RAW" "$SHADOW_V2_SS" 8.0 "$S/shadow.mp4" "fade=t=in:st=0:d=0.18:c=white"; fi
 norm "$CAP/$F_ROUTINE"  "$ROUTINE_SS"   5.0 "$S/routine.mp4"
 norm "$CAP/$F_PROFILE"  "$PROFILE_SS"   4.0 "$S/growth.mp4"
 # 몽타주: 3컷 x 1.334/1.333/1.333 = 4.0
@@ -406,20 +407,20 @@ norm "$CAP/$F_TOURN"     "$TOURN_SS"     1.333 "$S/m3.mp4"
 printf "file 'm1.mp4'\nfile 'm2.mp4'\nfile 'm3.mp4'\n" > "$S/montage.txt"
 ffmpeg -y -f concat -safe 0 -i "$S/montage.txt" -c copy "$S/montage.mp4" -loglevel error
 
-# 2) 로고/CTA 카드 (Ink 배경 + 로고)
+# 2) 로고/CTA 카드 (Ink 배경 + 마크) — 다크 카드용 마크 반전(negate)으로 밝게
 ffmpeg -y -f lavfi -i "color=c=0x0B0B0F:s=${W}x${H}:d=3.0:r=$FPS" -i "$WORK/assets/mark.png" \
-  -filter_complex "[1]scale=560:-1[m];[0][m]overlay=(W-w)/2:(H-h)/2" $enc "$S/logo.mp4" -loglevel error
+  -filter_complex "[1]scale=560:-1,negate[m];[0][m]overlay=(W-w)/2:(H-h)/2" $enc "$S/logo.mp4" -loglevel error
 ffmpeg -y -f lavfi -i "color=c=0x0B0B0F:s=${W}x${H}:d=3.0:r=$FPS" -i "$WORK/assets/mark.png" \
-  -filter_complex "[1]scale=300:-1[m];[0][m]overlay=(W-w)/2:360" $enc "$S/cta.mp4" -loglevel error
+  -filter_complex "[1]scale=300:-1,negate[m];[0][m]overlay=(W-w)/2:360" $enc "$S/cta.mp4" -loglevel error
 # (CTA 텍스트는 자막 ASS가 27.2~29.8에 올림)
 
 # 3) concat (동일 코덱/해상도/fps)
 printf "file 'hook.mp4'\nfile 'shadow.mp4'\nfile 'routine.mp4'\nfile 'growth.mp4'\nfile 'montage.mp4'\nfile 'logo.mp4'\nfile 'cta.mp4'\n" > "$S/all.txt"
 ffmpeg -y -f concat -safe 0 -i "$S/all.txt" -c copy "$S/video_concat.mp4" -loglevel error
 
-# 4) 화이트 플래시(훅→쉐도우, t≈3.0) + 자막 번인
+# 4) 자막 번인 (화이트 플래시는 세그먼트 단계에서 이미 적용됨)
 ffmpeg -y -i "$S/video_concat.mp4" \
-  -vf "fade=t=out:st=2.82:d=0.18:c=white,fade=t=in:st=3.0:d=0.18:c=white,subtitles=scripts/30_captions.ass:fontsdir=$WORK/fonts" \
+  -vf "subtitles=scripts/30_captions.ass:fontsdir=$WORK/fonts" \
   $enc "$S/video_final.mp4" -loglevel error
 
 # 5) BGM mux (30초로 자름)
@@ -438,9 +439,10 @@ cd "$(dirname "$0")/.."
 source manifest.sh
 chk(){ # file
   local f="$1"; [ -f "$f" ] || { echo "FAIL 없음: $f"; exit 1; }
-  read dur < <(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f")
-  read w h < <(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$f" | tr ',' ' ')
-  local acodec; acodec=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "$f")
+  local dur w h acodec   # Windows ffprobe 출력의 \r 제거 필수
+  dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f" | tr -d '\r')
+  read w h < <(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$f" | tr ',' ' ' | tr -d '\r')
+  acodec=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "$f" | tr -d '\r')
   local ok=1
   awk "BEGIN{exit !($dur>29.85 && $dur<30.15)}" || { echo "  dur=$dur (기대 30.0)"; ok=0; }
   [ "$w" = 1080 ] && [ "$h" = 1920 ] || { echo "  res=${w}x${h} (기대 1080x1920)"; ok=0; }
