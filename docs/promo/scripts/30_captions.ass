@@ -1,0 +1,25 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Head,Malgun Gothic,96,&H00ECF2F5,&H000000FF,&H000F0B0B,&H00000000,-1,0,0,0,100,100,0,0,1,6,3,5,80,80,0,1
+Style: Line,Malgun Gothic,72,&H00ECF2F5,&H000000FF,&H000F0B0B,&H00000000,-1,0,0,0,100,100,0,0,1,5,2,8,80,80,240,1
+Style: Pop,Malgun Gothic,64,&H00FFFFFF,&H000000FF,&H00000000,&H002E10C8,-1,0,0,0,100,100,0,0,3,0,0,2,80,80,470,1
+Style: Cta,Malgun Gothic,70,&H00ECF2F5,&H000000FF,&H000F0B0B,&H00000000,-1,0,0,0,100,100,0,0,1,5,2,2,80,80,470,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.20,0:00:02.80,Head,,0,0,0,,내 자세가 맞는 걸까?
+Dialogue: 0,0:00:03.30,0:00:10.80,Line,,0,0,0,,AI가 실시간으로 자세 교정
+Dialogue: 0,0:00:04.20,0:00:05.60,Pop,,0,0,0,,가드 올려!
+Dialogue: 0,0:00:06.40,0:00:07.80,Pop,,0,0,0,,턱 내려
+Dialogue: 0,0:00:08.60,0:00:10.20,Pop,,0,0,0,,회전 부족
+Dialogue: 0,0:00:11.20,0:00:15.80,Head,,0,0,0,,오늘 뭐 할지\NAI가 짜줌
+Dialogue: 0,0:00:16.20,0:00:19.80,Head,,0,0,0,,내 성장이\N데이터로
+Dialogue: 0,0:00:20.20,0:00:23.80,Line,,0,0,0,,출석·커뮤니티·토너먼트 한 곳에
+Dialogue: 0,0:00:27.20,0:00:29.80,Cta,,0,0,0,,{\b1}비공개 테스터 모집 中{\b0}\N프로필 링크로 참여
