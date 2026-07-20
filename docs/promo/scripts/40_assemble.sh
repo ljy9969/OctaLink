@@ -11,7 +11,8 @@ enc="-r $FPS -pix_fmt yuv420p -c:v libx264 -crf 18 -preset veryfast -an"
 norm(){
   local vf="scale=$W:$H:force_original_aspect_ratio=increase,crop=$W:$H,fps=$FPS,setsar=1"
   [ -n "${5:-}" ] && vf="$vf,$5"
-  ffmpeg -y -ss "$2" -t "$3" -i "$1" -vf "$vf" $enc "$4" -loglevel error; }
+  # -t 를 출력 옵션(-i 뒤)으로: VFR 스크린레코딩도 CFR 30fps로 정확히 트리밍
+  ffmpeg -y -ss "$2" -i "$1" -t "$3" -vf "$vf" $enc "$4" -loglevel error; }
 
 # 1) 세그먼트 정규화 (화이트 플래시는 훅 끝·쉐도우 시작에만 — 전체 타임라인 fade 금지)
 norm "$CAP/$F_SHADOW_RAW" "$HOOK_SS" 3.0 "$S/hook.mp4" "fade=t=out:st=2.82:d=0.18:c=white"
@@ -37,10 +38,14 @@ ffmpeg -y -f lavfi -i "color=c=0x0B0B0F:s=${W}x${H}:d=3.0:r=$FPS" -i "$WORK/asse
 printf "file 'hook.mp4'\nfile 'shadow.mp4'\nfile 'routine.mp4'\nfile 'growth.mp4'\nfile 'montage.mp4'\nfile 'logo.mp4'\nfile 'cta.mp4'\n" > "$S/all.txt"
 ffmpeg -y -f concat -safe 0 -i "$S/all.txt" -c copy "$S/video_concat.mp4" -loglevel error
 
-# 4) 자막 번인 (화이트 플래시는 세그먼트 단계에서 이미 적용됨)
-ffmpeg -y -i "$S/video_concat.mp4" \
-  -vf "subtitles=scripts/30_captions.ass:fontsdir=$WORK/fonts" \
-  $enc "$S/video_final.mp4" -loglevel error
+# 4) 하단 스크림(자막 가독성 — 라이트/다크 화면 공통) + 자막 번인
+#    스크림: Y=1180부터 아래로 갈수록 진해지는 60% 검정 그라데이션
+ffmpeg -y -f lavfi -i "color=black:s=${W}x${H}" \
+  -vf "format=rgba,geq=r=0:g=0:b=0:a='255*0.6*clip((Y-1180)/560,0,1)'" \
+  -frames:v 1 "$WORK/assets/scrim.png" -loglevel error
+ffmpeg -y -i "$S/video_concat.mp4" -i "$WORK/assets/scrim.png" \
+  -filter_complex "[0:v][1:v]overlay=0:0[bg];[bg]subtitles=scripts/30_captions.ass:fontsdir=$WORK/fonts[v]" \
+  -map "[v]" $enc "$S/video_final.mp4" -loglevel error
 
 # 5) BGM mux (30초로 자름)
 [ "$VAR" = v1 ] && name="octalink_promo_v1_overlay" || name="octalink_promo_v2_raw"
