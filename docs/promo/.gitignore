@@ -1,0 +1,4 @@
+# docs/promo/.gitignore — 대용량 산출물 미추적
+captures/
+work/
+out/
