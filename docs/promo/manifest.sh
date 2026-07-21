@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # docs/promo/manifest.sh — 소스 계약 + 세그먼트 인점(단일 진실)
-export RAW_CLIP="/g/내 드라이브/작업/개발/OctaLink/promo_shadow_clip/shadowbox_asian_7987304.mp4"  # Pexels 7987304 (아시아인 정면, CC0, 세로4K)
+export RAW_CLIP="/g/내 드라이브/작업/개발/OctaLink/promo_shadow_clip/shadowbox_asian_7987304.mp4"  # Pexels 7987304 (아시아인 정면, 체육관, CC0, 세로4K)
 export CAP="captures"; export WORK="work"; export OUT="out"
 export FONT="/c/Windows/Fonts/malgunbd.ttf"
 
@@ -14,9 +14,9 @@ export F_COMMUNITY="community.mp4"
 export F_TOURN="tournament.mp4"
 
 # 세그먼트 인점(초) — 캡처 후 베스트 구간에 맞춰 조정 가능
-export HOOK_SS=0.5        # 새 클립(10s)에서 훅용 3초 시작점
+export HOOK_SS=0.5        # 7987304(10.1s) 훅용 3초 시작점
 export SHADOW_V1_SS=2     # OBS 오버레이 캡처에서 8초 시작점
-export SHADOW_V2_SS=1.5   # 새 클립에서 v2용 8초 시작점(1.5~9.5s)
+export SHADOW_V2_SS=1.5   # 7987304 v2용 8초(1.5~9.5s) — 팝업이 잽/가드/크로스와 일치
 export ROUTINE_SS=0
 export PROFILE_SS=0
 export ATTEND_SS=0
