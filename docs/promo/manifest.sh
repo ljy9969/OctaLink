@@ -21,4 +21,4 @@ export ROUTINE_SS=0
 export PROFILE_SS=0
 export ATTEND_SS=0
 export COMMUNITY_SS=0
-export TOURN_SS=0
+export TOURN_SS=2.2   # tournament.mp4 앞부분(홈→대진표 전환) 건너뛰고 챔피언+컨페티 구간
