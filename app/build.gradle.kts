@@ -27,14 +27,14 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.unboundapex.octalink"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.unboundapex.octalink"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 13
-        versionName = "0.9.4"
+        targetSdk = 36
+        versionCode = 14
+        versionName = "0.9.5"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")
