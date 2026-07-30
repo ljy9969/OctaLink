@@ -6,7 +6,7 @@ import {
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
-import { VertexAI } from "@google-cloud/vertexai";
+import { GoogleGenAI } from "@google/genai";
 
 /**
  * YouTube Data API v3 key — `search.list` 호출용. Secret Manager 에 미리 저장 필요:
@@ -18,33 +18,30 @@ const YOUTUBE_API_KEY = defineSecret("YOUTUBE_API_KEY");
 admin.initializeApp();
 
 /**
- * Vertex AI 클라이언트 — Gemini 3.5 Flash Lite 로 주간 보강 루틴 생성.
+ * Google Gen AI SDK (Vertex 모드) — Gemini 3.5 Flash Lite 로 주간 보강 루틴 생성.
  *
  * 권역 us-central1 (Vertex AI 의 generative 모델은 asia-northeast3 미지원 — 2026-05 기준).
  * Firebase 프로젝트 ID 는 GCLOUD_PROJECT 환경변수에서 자동 주입.
+ *
+ * 2026-07: 폐기된 @google-cloud/vertexai(VertexAI) 를 @google/genai 로 이관.
+ * 모델 gemini-3.5-flash-lite (GA 경량 등급, 비용 최적). 단발(single-turn) generateContent
+ * 호출이라 Gemini 3 의 thought-signature 순환은 불필요.
  */
-const vertex = new VertexAI({
+const ai = new GoogleGenAI({
+  vertexai: true,
   project: process.env.GCLOUD_PROJECT ?? "",
   location: "us-central1",
 });
-// 2026-07: gemini-2.5-flash 는 Vertex AI preview 종료(deprecation) 예정 → GA 모델
-// gemini-3.5-flash-lite 로 마이그레이션 (Google Cloud 권고 대상 중 경량 등급, 비용 최적).
-// 루틴 생성은 무겁지 않아 Lite 로 충분. structured JSON 출력 지원.
-// 단발성(single-turn) generateContent 호출이라 Gemini 3 의 thought-signature 순환은 불필요.
-//
-// thinkingConfig.thinkingBudget=0 : thinking 토큰이 maxOutputTokens 를 먼저 소비해 응답이
-// 잘리는 것 방지. 짧은 structured routine 생성엔 thinking 불필요.
+
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
+// thinkingBudget=0 : thinking 토큰이 maxOutputTokens 를 먼저 소비해 응답이 잘리는 것 방지.
 // maxOutputTokens=8192 : 한국어 6일×3드릴 + feedback ≒ 4~5k 토큰 예상, 여유 잡음.
-const gemini = vertex.getGenerativeModel({
-  model: "gemini-3.5-flash-lite",
-  generationConfig: {
-    temperature: 0.7,
-    maxOutputTokens: 8192,
-    responseMimeType: "application/json",
-    // @ts-expect-error thinkingConfig — vertexai SDK 타입 정의에 아직 미반영
-    thinkingConfig: { thinkingBudget: 0 },
-  },
-});
+const GEMINI_CONFIG = {
+  temperature: 0.7,
+  maxOutputTokens: 8192,
+  responseMimeType: "application/json",
+  thinkingConfig: { thinkingBudget: 0 },
+};
 
 /**
  * Kakao 사용자 정보 응답 타입 (Kakao API v2 /v2/user/me).
@@ -1454,8 +1451,12 @@ export const generateWeeklyRoutine = onCall(
     // 4) Gemini 호출.
     let llmText: string;
     try {
-      const result = await gemini.generateContent(prompt);
-      llmText = result.response.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      const result = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: GEMINI_CONFIG,
+      });
+      llmText = result.text ?? "";
     } catch (e) {
       logger.error("[generateWeeklyRoutine] Gemini failed", e);
       throw new HttpsError("internal", "AI 호출 실패 — 잠시 후 다시 시도해주세요");
