@@ -18,7 +18,7 @@ const YOUTUBE_API_KEY = defineSecret("YOUTUBE_API_KEY");
 admin.initializeApp();
 
 /**
- * Vertex AI 클라이언트 — Gemini 3.5 Flash 로 주간 보강 루틴 생성.
+ * Vertex AI 클라이언트 — Gemini 3.5 Flash Lite 로 주간 보강 루틴 생성.
  *
  * 권역 us-central1 (Vertex AI 의 generative 모델은 asia-northeast3 미지원 — 2026-05 기준).
  * Firebase 프로젝트 ID 는 GCLOUD_PROJECT 환경변수에서 자동 주입.
@@ -28,14 +28,15 @@ const vertex = new VertexAI({
   location: "us-central1",
 });
 // 2026-07: gemini-2.5-flash 는 Vertex AI preview 종료(deprecation) 예정 → GA 모델
-// gemini-3.5-flash 로 마이그레이션 (Google Cloud 권고 대상). structured JSON 출력 지원.
+// gemini-3.5-flash-lite 로 마이그레이션 (Google Cloud 권고 대상 중 경량 등급, 비용 최적).
+// 루틴 생성은 무겁지 않아 Lite 로 충분. structured JSON 출력 지원.
 // 단발성(single-turn) generateContent 호출이라 Gemini 3 의 thought-signature 순환은 불필요.
 //
 // thinkingConfig.thinkingBudget=0 : thinking 토큰이 maxOutputTokens 를 먼저 소비해 응답이
 // 잘리는 것 방지. 짧은 structured routine 생성엔 thinking 불필요.
 // maxOutputTokens=8192 : 한국어 6일×3드릴 + feedback ≒ 4~5k 토큰 예상, 여유 잡음.
 const gemini = vertex.getGenerativeModel({
-  model: "gemini-3.5-flash",
+  model: "gemini-3.5-flash-lite",
   generationConfig: {
     temperature: 0.7,
     maxOutputTokens: 8192,
