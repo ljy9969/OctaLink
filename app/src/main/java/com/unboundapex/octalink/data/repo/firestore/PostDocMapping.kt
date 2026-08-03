@@ -37,6 +37,7 @@ internal fun DocumentSnapshot.toPostDoc(): PostDoc? {
     val tagName = getString("tag") ?: return null
     return PostDoc(
         id = id,
+        gymId = getString("gymId") ?: "",
         authorId = authorId,
         authorName = authorName,
         authorBelt = runCatching { Belt.valueOf(getString("authorBelt") ?: "") }.getOrDefault(Belt.UNKNOWN),

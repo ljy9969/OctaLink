@@ -34,6 +34,7 @@ class FirestoreTournamentRepository : TournamentRepository {
 
     override fun observeAll(): Flow<List<TournamentDoc>> = callbackFlow {
         val sub = tournamentsCol
+            .whereEqualTo("gymId", com.unboundapex.octalink.data.SessionGym.gymId ?: "")
             .orderBy("drawAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
                 if (err != null) {
@@ -88,6 +89,7 @@ class FirestoreTournamentRepository : TournamentRepository {
         // 토너먼트 doc — drawAt 은 서버 timestamp
         batch.set(tRef, mapOf(
             "id" to tournamentId,
+            "gymId" to (com.unboundapex.octalink.data.SessionGym.gymId ?: ""),
             "title" to title,
             "weightClass" to weightClass?.name,
             "beltGroup" to beltGroup?.name,

@@ -286,6 +286,8 @@ enum class PostVisibility { PUBLIC, PENDING_APPROVAL, REJECTED }
  */
 data class PostDoc(
     val id: String,
+    /** 소속 체육관 id (멀티테넌트). 작성 시 작성자 gymId 로 stamp. */
+    val gymId: String = "",
     val authorId: String,
     /** 비정규화 — 회원 이름. createdAt 시점 스냅샷 */
     val authorName: String,
@@ -339,6 +341,8 @@ enum class TournamentRound { EIGHT, FOUR, FINAL }
 /** 토너먼트 상위 컨테이너. 추첨 시점 + 체급/벨트 그룹 메타 보관 */
 data class TournamentDoc(
     val id: String,
+    /** 소속 체육관 id (멀티테넌트). 추첨 생성 시 stamp. */
+    val gymId: String = "",
     val title: String,
     val weightClass: WeightClass?,
     val beltGroup: Belt?,

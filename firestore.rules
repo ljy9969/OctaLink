@@ -283,8 +283,9 @@ service cloud.firestore {
     // tournaments — 토너먼트
     // ════════════════════════════════════════════════════════
     match /tournaments/{tournamentId} {
-      allow read: if isApproved();
-      allow create, update, delete: if isStaff();
+      allow read: if isApproved() && sameGymDoc();
+      allow create: if isStaff() && request.resource.data.gymId == callerGym();
+      allow update, delete: if isStaff() && sameGymDoc();
 
       // ─────────────────────────────────────
       // matches 서브컬렉션
@@ -304,17 +305,18 @@ service cloud.firestore {
       //   PENDING_APPROVAL: 작성자 본인 + 멘션된 회원만
       //   REJECTED: 작성자 본인 + 멘션된 회원만 (정리/재게시 결정 위해)
       //   (기존 doc 호환: visibility 필드 없으면 PUBLIC 으로 간주)
-      allow read: if isApproved() && (
+      allow read: if sameGymDoc() && (
         !('visibility' in resource.data)
         || resource.data.visibility == 'PUBLIC'
         || resource.data.authorId == request.auth.uid
         || request.auth.uid in resource.data.get('mentionedMemberIds', [])
       );
 
-      // 작성: 모든 APPROVED. NOTICE 태그는 운영진만. authorId 위조 차단.
+      // 작성: 모든 APPROVED. NOTICE 태그는 운영진만. authorId 위조 차단. gymId 는 본인 체육관.
       // 미디어+멘션 조합 → PENDING_APPROVAL 초기 상태로 작성됨 (클라가 set).
       allow create: if isApproved()
         && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.gymId == callerGym()
         && (request.resource.data.tag != 'NOTICE' || isStaff());
 
       // 수정 — 세 케이스:

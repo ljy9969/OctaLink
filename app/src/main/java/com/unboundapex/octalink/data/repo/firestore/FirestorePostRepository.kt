@@ -29,6 +29,7 @@ class FirestorePostRepository : PostRepository {
 
     override fun observeAll(): Flow<List<PostDoc>> = callbackFlow {
         val sub = col
+            .whereEqualTo("gymId", com.unboundapex.octalink.data.SessionGym.gymId ?: "")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
                 if (err != null) {
@@ -61,6 +62,7 @@ class FirestorePostRepository : PostRepository {
         val isPending = hasMedia && effectiveMentions.isNotEmpty()
         val data = mapOf(
             "id" to ref.id,
+            "gymId" to (com.unboundapex.octalink.data.SessionGym.gymId ?: ""),
             "authorId" to authorId,
             "authorName" to authorName,
             "authorBelt" to authorBelt.name,

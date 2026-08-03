@@ -30,6 +30,7 @@ internal fun DocumentSnapshot.toTournamentDoc(): TournamentDoc? {
     }
     return TournamentDoc(
         id = id,
+        gymId = getString("gymId") ?: "",
         title = title,
         weightClass = weightClass,
         beltGroup = beltGroup,
@@ -43,6 +44,7 @@ internal fun DocumentSnapshot.toTournamentDoc(): TournamentDoc? {
 
 internal fun TournamentDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "id" to id,
+    "gymId" to gymId,
     "title" to title,
     "weightClass" to weightClass?.name,
     "beltGroup" to beltGroup?.name,
