@@ -3,6 +3,7 @@ package com.unboundapex.octalink.data.repo
 import android.content.Context
 import com.unboundapex.octalink.data.repo.firestore.FirestoreAttendanceRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreCommentRepository
+import com.unboundapex.octalink.data.repo.firestore.FirestoreGymRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreMemberRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestorePostCommentRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestorePostRepository
@@ -29,6 +30,8 @@ object RepositoryProvider {
     lateinit var auth: AuthRepository
         private set
     lateinit var members: MemberRepository
+        private set
+    lateinit var gyms: GymRepository
         private set
     lateinit var attendance: AttendanceRepository
         private set
@@ -57,6 +60,7 @@ object RepositoryProvider {
 
             auth = KakaoAuthRepository(context.applicationContext)
             members = FirestoreMemberRepository()
+            gyms = FirestoreGymRepository()
             attendance = FirestoreAttendanceRepository()
             posts = FirestorePostRepository()
             postComments = FirestorePostCommentRepository()

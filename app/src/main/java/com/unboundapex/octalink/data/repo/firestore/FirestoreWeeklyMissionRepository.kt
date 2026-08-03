@@ -5,6 +5,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
+import com.unboundapex.octalink.data.SessionGym
 import com.unboundapex.octalink.data.repo.WeeklyMissionRepository
 import com.unboundapex.octalink.data.schema.Collections
 import com.unboundapex.octalink.data.schema.WeeklyMissionDoc
@@ -22,11 +23,20 @@ import java.time.Instant
  */
 class FirestoreWeeklyMissionRepository : WeeklyMissionRepository {
     private val db = Firebase.firestore
-    private val ref = db.collection(Collections.GYM_SETTINGS)
-        .document(Collections.WEEKLY_MISSION_DOC_ID)
+
+    /**
+     * 체육관별 주간 미션 doc 참조를 호출 시점의 [SessionGym.gymId] 로 구성.
+     * gymId 가 설정돼 있으면 `gyms/{gymId}/settings/weeklyMission`, 비어 있으면(마이그레이션 전)
+     * 기존 전역 경로 `gymSettings/weeklyMission` 로 폴백해 현재 동작을 보존한다.
+     */
+    private fun ref() = SessionGym.gymId?.takeIf { it.isNotBlank() }?.let { gid ->
+        db.collection(Collections.GYMS).document(gid)
+            .collection(Collections.GYM_SETTINGS_SUB)
+            .document(Collections.WEEKLY_MISSION_DOC_ID)
+    } ?: db.collection(Collections.GYM_SETTINGS).document(Collections.WEEKLY_MISSION_DOC_ID)
 
     override fun observe(): Flow<WeeklyMissionDoc?> = callbackFlow {
-        val sub = ref.addSnapshotListener { snap, err ->
+        val sub = ref().addSnapshotListener { snap, err ->
             if (err != null) {
                 android.util.Log.e("OctaLink.WeeklyMission", "observe error", err)
                 close(err)
@@ -44,7 +54,7 @@ class FirestoreWeeklyMissionRepository : WeeklyMissionRepository {
             "updatedByName" to byMemberName,
         )
         // upsert. 첫 호출 시 doc 생성, 이후 호출은 동일 doc 갱신.
-        ref.set(data).await()
+        ref().set(data).await()
     }
 }
 

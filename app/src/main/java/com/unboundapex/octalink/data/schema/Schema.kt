@@ -56,6 +56,11 @@ enum class MembershipStatus { PENDING, APPROVED, REJECTED, SUSPENDED, LEFT }
 /** 회원 마스터 레코드 */
 data class MemberDoc(
     val id: String,
+    /**
+     * 소속 체육관 id (멀티테넌트 분할 키). 서버 [completeSignup] 이 가입코드로 확정해 stamp.
+     * 기존/마이그레이션 전 doc 은 빈 문자열일 수 있음 — 쿼리는 세션 사용자의 gymId 로 필터.
+     */
+    val gymId: String = "",
     val name: String,
     val belt: Belt,
     val weightClass: WeightClass,
@@ -356,6 +361,23 @@ data class MatchDoc(
 )
 
 /**
+ * 체육관(테넌트) 마스터 레코드. CREATOR 가 생성/관리 (`gyms/{gymId}`).
+ *
+ * 가입 시 회원이 [joinCode] 를 입력하면 서버 [completeSignup] 이 이 doc 을 찾아
+ * 회원의 gymId 로 확정한다. 운영진(MASTER/COACH)은 [staffMemberIds] 로 지정.
+ */
+data class GymDoc(
+    val id: String,
+    val name: String,
+    val branch: String? = null,
+    /** 가입코드 — 신규 회원이 소속 확정에 입력. 서버에서 대소문자 정규화 후 비교. */
+    val joinCode: String,
+    /** 이 체육관의 운영진(MASTER/COACH) member id 목록. CREATOR 가 지정. */
+    val staffMemberIds: List<String> = emptyList(),
+    val createdAt: Instant,
+)
+
+/**
  * Firestore 컬렉션 경로 규약. 백엔드 선택 후 Repository 구현체에서 참조.
  *
  * 멤버 종속 데이터 (출석/코멘트/스킬)는 서브컬렉션으로 두면 권한 룰이 단순해진다.
@@ -366,9 +388,16 @@ data class MatchDoc(
  * 토너먼트는 단독 컬렉션 + matches 서브컬렉션:
  *   tournaments/{tournamentId}
  *   tournaments/{tournamentId}/matches/{matchId}
+ *
+ * 멀티테넌트: 회원/게시글/출석/토너먼트는 [MemberDoc.gymId] 로 체육관 구분.
+ * 체육관 설정(주간 미션 등)은 gyms/{gymId}/settings/{docId} 로 체육관별 격리.
  */
 object Collections {
     const val MEMBERS = "members"
+    /** 체육관(테넌트) 컬렉션 — gyms/{gymId}. CREATOR 가 생성/관리. */
+    const val GYMS = "gyms"
+    /** 체육관별 설정 서브컬렉션 — gyms/{gymId}/settings/{docId} (예: weeklyMission). */
+    const val GYM_SETTINGS_SUB = "settings"
     const val CLASS_DEFS = "classDefs"
     const val ATTENDANCE = "attendance"
     const val COMMENTS = "comments"

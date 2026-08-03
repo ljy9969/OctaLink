@@ -81,6 +81,9 @@ class SessionViewModel : ViewModel() {
                     _state.value = SessionState(phase = SessionState.Phase.UNAUTHENTICATED)
                 }
                 .collect { (uid, displayName, member) ->
+                    // 멀티테넌트 앰비언트 gymId 갱신 — repository 쿼리 스코핑용. 회원 없으면 null.
+                    com.unboundapex.octalink.data.SessionGym.gymId =
+                        member?.gymId?.takeIf { it.isNotBlank() }
                     // kakaoIdentity 결정 우선순위:
                     //   1. signInWithKakao() 가 set 한 기존 값 (phoneNumber 포함 가장 풍부)
                     //   2. AuthRepository.currentDisplayName 기반 fallback

@@ -23,6 +23,7 @@ import java.time.LocalDate
 
 internal fun MemberDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "id" to id,
+    "gymId" to gymId,
     "name" to name,
     "belt" to belt.name,
     "weightClass" to weightClass.name,
@@ -61,6 +62,7 @@ internal fun DocumentSnapshot.toMemberDoc(): MemberDoc? {
     val wcName = getString("weightClass") ?: return null
     return MemberDoc(
         id = id,
+        gymId = getString("gymId") ?: "",
         name = name,
         belt = runCatching { Belt.valueOf(beltName) }.getOrDefault(Belt.WHITE),
         weightClass = runCatching { WeightClass.valueOf(wcName) }.getOrDefault(WeightClass.LIGHT),

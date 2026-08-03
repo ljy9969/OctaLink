@@ -6,6 +6,7 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import com.google.firebase.functions.functions
 import com.unboundapex.octalink.data.Belt
+import com.unboundapex.octalink.data.SessionGym
 import com.unboundapex.octalink.data.SkillSet
 import com.unboundapex.octalink.data.WeightClass
 import com.unboundapex.octalink.data.repo.MemberRepository
@@ -37,10 +38,18 @@ class FirestoreMemberRepository : MemberRepository {
     private val col = db.collection(Collections.MEMBERS)
     private val functions = Firebase.functions("asia-northeast3")
 
-    override fun observeAll(): Flow<List<MemberDoc>> = col.snapshotsAsList()
+    override fun observeAll(): Flow<List<MemberDoc>> = col.scopedToGym().snapshotsAsList()
 
     override fun observeByStatus(status: MembershipStatus): Flow<List<MemberDoc>> =
-        col.whereEqualTo("status", status.name).snapshotsAsList()
+        col.scopedToGym().whereEqualTo("status", status.name).snapshotsAsList()
+
+    /**
+     * 현재 세션 사용자의 소속 체육관([SessionGym.gymId])으로 목록 쿼리를 제한(멀티테넌트).
+     * gymId 가 비어 있으면 `gymId == ""` 로 fail-closed — 타 체육관 회원이 새지 않음.
+     * (단일 회원 조회 [observeById] 는 본인 부트스트랩용이라 스코프하지 않음.)
+     */
+    private fun com.google.firebase.firestore.CollectionReference.scopedToGym(): Query =
+        whereEqualTo("gymId", SessionGym.gymId ?: "")
 
     override fun observeById(memberId: String): Flow<MemberDoc?> = callbackFlow {
         val sub = col.document(memberId).addSnapshotListener { snap, err ->
