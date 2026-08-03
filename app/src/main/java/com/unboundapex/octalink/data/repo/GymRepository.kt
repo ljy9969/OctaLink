@@ -15,4 +15,10 @@ interface GymRepository {
 
     /** 전체 체육관 목록 — CREATOR 관리 화면·교류전 대상 선택용. */
     fun observeAll(): Flow<List<GymDoc>>
+
+    /**
+     * 가입코드로 체육관 1건 조회 (정규화: trim + 대문자). 없으면 null.
+     * 가입 화면에서 코드 입력 시 체육관명 확인용 — 최종 소속 확정은 서버 completeSignup 이 재검증.
+     */
+    suspend fun findByJoinCode(joinCode: String): GymDoc?
 }

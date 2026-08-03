@@ -138,6 +138,21 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     // 캐릭터는 성별 + 체급에서 자동 파생. effectiveGender 가 null 이면 avatarFor 가 m_* 로 fallback.
     val avatarId = avatarFor(effectiveGender, weightClass).id
 
+    // 체육관 가입코드 — 서버가 검증해 소속 gymId 확정. 대소문자/공백은 서버에서 정규화.
+    // 입력 시 코드로 체육관을 조회해 이름을 확인 표시(resolvedGym), 유효할 때만 신청 가능.
+    var gymCode by remember { mutableStateOf("") }
+    var resolvedGym by remember { mutableStateOf<com.unboundapex.octalink.data.schema.GymDoc?>(null) }
+    var gymChecked by remember { mutableStateOf(false) }
+    LaunchedEffect(gymCode) {
+        val code = gymCode.trim()
+        resolvedGym = null
+        gymChecked = false
+        if (code.length < 2) return@LaunchedEffect
+        kotlinx.coroutines.delay(400) // debounce
+        resolvedGym = runCatching { sessionVm.resolveGymByCode(code) }.getOrNull()
+        gymChecked = true
+    }
+
     // 입관일 (체육관 등록일) — 기본값 오늘. 이미 다니던 회원은 과거 날짜로 변경.
     val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
     var joinDate by remember { mutableStateOf(today) }
@@ -153,8 +168,8 @@ fun SignupScreen(sessionVm: SessionViewModel) {
 
     val avatar = avatarById(avatarId)
     val name = nameValue.text
-    // 가입 가능 조건: 이름 + 성별 둘 다 결정 (kakao 자동 또는 사용자 선택)
-    val canSubmit = name.isNotBlank() && effectiveGender != null
+    // 가입 가능 조건: 이름 + 성별 + 유효한 체육관 가입코드
+    val canSubmit = name.isNotBlank() && effectiveGender != null && resolvedGym != null
     val joinDateLabel = remember(joinDate) {
         joinDate.format(DateTimeFormatter.ofPattern("yyyy년 M월 d일"))
     }
@@ -198,6 +213,37 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            // 체육관 가입코드 — 소속 체육관 확정. 코드 입력 시 체육관 이름을 조회해 확인 표시.
+            PosseCard {
+                OutlinedTextField(
+                    value = gymCode,
+                    onValueChange = { gymCode = it },
+                    label = { Text("체육관 가입코드") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    isError = gymChecked && resolvedGym == null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                when {
+                    resolvedGym != null -> Text(
+                        "✓ ${resolvedGym!!.name}${resolvedGym!!.branch?.let { " · $it" } ?: ""}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFF27AE60),
+                    )
+                    gymChecked -> Text(
+                        "가입코드에 해당하는 체육관을 찾을 수 없어요. 코드를 확인해주세요.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    else -> Text(
+                        "체육관에서 받은 가입코드를 입력하세요.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             // 성별 — 카카오 비즈 검수 통과 시 자동 (kakaoGender != null), 그 외엔 사용자 직접 선택.
@@ -329,6 +375,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                         weightClass = weightClass,
                         avatarId = avatarId,
                         joinDate = joinDate,
+                        gymCode = gymCode.trim(),
                         phone = kakaoPhone,
                         pickedGender = pickedGender,
                     )

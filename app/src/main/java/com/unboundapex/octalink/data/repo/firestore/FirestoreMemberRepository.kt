@@ -80,6 +80,7 @@ class FirestoreMemberRepository : MemberRepository {
         functions.getHttpsCallable("completeSignup")
             .call(
                 mapOf(
+                    "gymCode" to req.gymCode,
                     "name" to req.name,
                     "belt" to req.belt.name,
                     "weightClass" to req.weightClass.name,
