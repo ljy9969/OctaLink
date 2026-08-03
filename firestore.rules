@@ -93,6 +93,20 @@ service cloud.firestore {
       return request.resource.data.role == resource.data.role;
     }
 
+    // ── 멀티테넌트(체육관) 헬퍼 ──────────────────────────────
+    /** 현재 호출자의 소속 체육관 id. */
+    function callerGym() {
+      return memberDoc().gymId;
+    }
+    /** 대상 회원 doc 이 나와 같은 체육관인지. */
+    function sameGymDoc() {
+      return isApproved() && resource.data.gymId == callerGym();
+    }
+    /** gymId 필드 변경 여부 — 회원이 스스로 소속 체육관 변경 못 하도록 강제 */
+    function gymUnchanged() {
+      return request.resource.data.gymId == resource.data.gymId;
+    }
+
     // ════════════════════════════════════════════════════════
     // CollectionGroup 쿼리 룰 (recursive wildcard)
     // ════════════════════════════════════════════════════════
@@ -120,14 +134,25 @@ service cloud.firestore {
     }
 
     // ════════════════════════════════════════════════════════
+    // gyms — 체육관(테넌트) 마스터
+    // ════════════════════════════════════════════════════════
+    // read: 인증 사용자면 누구나 — 가입 드롭다운(아직 미승인 신규 가입자 포함) + 소속 체육관 표시.
+    //       체육관 이름/지점은 민감정보 아님.
+    // write: CREATOR 단독 (체육관 생성 / 운영진 지정).
+    match /gyms/{gymId} {
+      allow read: if isAuth();
+      allow write: if isCreator();
+    }
+
+    // ════════════════════════════════════════════════════════
     // members — 회원 마스터
     // ════════════════════════════════════════════════════════
     match /members/{uid} {
       // get: 본인 own doc 은 unconditional (가입 부트스트랩 — 아직 MemberDoc 없는 신규 카카오 가입자도
-      //      자기 doc 존재 여부 확인 가능). 그 외엔 APPROVED 회원만.
-      // list: APPROVED 회원만 (출석 동료 표시 / 창조자 페이지 / draw 풀 등 list 쿼리)
-      allow get: if isSelf(uid) || isApproved();
-      allow list: if isApproved();
+      //      자기 doc 존재 여부 확인 가능). 그 외엔 **같은 체육관** APPROVED 회원만(멀티테넌트).
+      // list: 같은 체육관 회원만 (클라이언트가 gymId 로 필터 → 각 doc gymId == 내 체육관).
+      allow get: if isSelf(uid) || sameGymDoc();
+      allow list: if sameGymDoc();
 
       // create는 Cloud Function (admin SDK)만. 클라이언트 직접 차단.
       // → role/status를 클라이언트가 임의로 결정할 수 없게 막음
@@ -140,7 +165,7 @@ service cloud.firestore {
       allow update: if (
         isSelf(uid) && memberSelfEditableOnly()
       ) || (
-        isMaster() && roleUnchanged()
+        isMaster() && roleUnchanged() && gymUnchanged() && sameGymDoc()
       ) || (
         isCreator()
       );

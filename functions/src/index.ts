@@ -175,6 +175,16 @@ export const completeSignup = onCall(
       throw new HttpsError("invalid-argument", "name required");
     }
 
+    // 소속 체육관(멀티테넌트) — 클라이언트가 드롭다운에서 고른 gymId. 서버가 실재 여부 재검증.
+    // 빈 값은 레거시/전환기 호환으로 허용(gymId="") — 마이그레이션 후 신규 가입은 항상 유효 gymId.
+    const gymId = ((data.gymId as string | undefined) ?? "").trim();
+    if (gymId) {
+      const gymSnap = await admin.firestore().doc(`gyms/${gymId}`).get();
+      if (!gymSnap.exists) {
+        throw new HttpsError("invalid-argument", "존재하지 않는 체육관입니다.");
+      }
+    }
+
     const role = matchRole(name);
     const status =
       ["CREATOR", "MASTER", "COACH"].includes(role) ? "APPROVED" : "PENDING";
@@ -221,6 +231,7 @@ export const completeSignup = onCall(
 
     await docRef.set({
       id: uid,
+      gymId,
       name,
       belt: data.belt ?? "WHITE",
       weightClass: data.weightClass ?? "LIGHT",

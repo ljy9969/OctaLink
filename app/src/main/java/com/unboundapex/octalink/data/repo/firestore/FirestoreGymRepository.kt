@@ -28,7 +28,12 @@ class FirestoreGymRepository : GymRepository {
 
     override fun observeAll(): Flow<List<GymDoc>> = callbackFlow {
         val sub = col.addSnapshotListener { snap, err ->
-            if (err != null) { close(err); return@addSnapshotListener }
+            if (err != null) {
+                // 규칙 미배포/권한 오류 등에도 앱이 죽지 않게 빈 목록으로 폴백 (가입 화면 가드와 함께).
+                android.util.Log.w("OctaLink.Gym", "observeAll error → empty", err)
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
             trySend(snap?.documents?.mapNotNull { it.toGymDoc() }.orEmpty())
         }
         awaitClose { sub.remove() }
