@@ -370,8 +370,8 @@ data class GymDoc(
     val id: String,
     val name: String,
     val branch: String? = null,
-    /** 가입코드 — 신규 회원이 소속 확정에 입력. 서버에서 대소문자 정규화 후 비교. */
-    val joinCode: String,
+    /** (선택) 비공개 가입코드. 현재 가입은 드롭다운 선택 방식이라 필수 아님 — 향후 확장 여지. */
+    val joinCode: String? = null,
     /** 이 체육관의 운영진(MASTER/COACH) member id 목록. CREATOR 가 지정. */
     val staffMemberIds: List<String> = emptyList(),
     val createdAt: Instant,

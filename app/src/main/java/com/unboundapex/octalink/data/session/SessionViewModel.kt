@@ -59,10 +59,6 @@ data class SessionState(
 class SessionViewModel : ViewModel() {
     private val auth = RepositoryProvider.auth
     private val members = RepositoryProvider.members
-    private val gyms = RepositoryProvider.gyms
-
-    /** 가입코드 → 체육관 조회 (가입 화면에서 체육관명 확인용). 없으면 null. */
-    suspend fun resolveGymByCode(code: String) = gyms.findByJoinCode(code)
 
     private val _state = MutableStateFlow(SessionState())
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -190,7 +186,7 @@ class SessionViewModel : ViewModel() {
         weightClass: WeightClass,
         avatarId: String,
         joinDate: java.time.LocalDate,
-        gymCode: String,
+        gymId: String,
         phone: String? = null,
         pickedGender: String? = null,
     ) {
@@ -200,7 +196,7 @@ class SessionViewModel : ViewModel() {
             members.signup(
                 SignupRequest(
                     authProviderId = authId,
-                    gymCode = gymCode,
+                    gymId = gymId,
                     name = name,
                     belt = belt,
                     weightClass = weightClass,

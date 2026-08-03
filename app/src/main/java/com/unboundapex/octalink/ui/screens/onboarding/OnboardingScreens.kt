@@ -23,6 +23,9 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
@@ -138,20 +141,11 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     // 캐릭터는 성별 + 체급에서 자동 파생. effectiveGender 가 null 이면 avatarFor 가 m_* 로 fallback.
     val avatarId = avatarFor(effectiveGender, weightClass).id
 
-    // 체육관 가입코드 — 서버가 검증해 소속 gymId 확정. 대소문자/공백은 서버에서 정규화.
-    // 입력 시 코드로 체육관을 조회해 이름을 확인 표시(resolvedGym), 유효할 때만 신청 가능.
-    var gymCode by remember { mutableStateOf("") }
-    var resolvedGym by remember { mutableStateOf<com.unboundapex.octalink.data.schema.GymDoc?>(null) }
-    var gymChecked by remember { mutableStateOf(false) }
-    LaunchedEffect(gymCode) {
-        val code = gymCode.trim()
-        resolvedGym = null
-        gymChecked = false
-        if (code.length < 2) return@LaunchedEffect
-        kotlinx.coroutines.delay(400) // debounce
-        resolvedGym = runCatching { sessionVm.resolveGymByCode(code) }.getOrNull()
-        gymChecked = true
-    }
+    // 소속 체육관 — 드롭다운에서 선택 (목록은 gyms 컬렉션). 가입은 운영진 승인 필수라 코드 대신 선택.
+    val gymOptions by com.unboundapex.octalink.data.repo.RepositoryProvider.gyms.observeAll()
+        .collectAsState(initial = emptyList())
+    var selectedGym by remember { mutableStateOf<com.unboundapex.octalink.data.schema.GymDoc?>(null) }
+    var gymMenuOpen by remember { mutableStateOf(false) }
 
     // 입관일 (체육관 등록일) — 기본값 오늘. 이미 다니던 회원은 과거 날짜로 변경.
     val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
@@ -168,8 +162,8 @@ fun SignupScreen(sessionVm: SessionViewModel) {
 
     val avatar = avatarById(avatarId)
     val name = nameValue.text
-    // 가입 가능 조건: 이름 + 성별 + 유효한 체육관 가입코드
-    val canSubmit = name.isNotBlank() && effectiveGender != null && resolvedGym != null
+    // 가입 가능 조건: 이름 + 성별 + 체육관 선택
+    val canSubmit = name.isNotBlank() && effectiveGender != null && selectedGym != null
     val joinDateLabel = remember(joinDate) {
         joinDate.format(DateTimeFormatter.ofPattern("yyyy년 M월 d일"))
     }
@@ -215,34 +209,39 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 )
             }
 
-            // 체육관 가입코드 — 소속 체육관 확정. 코드 입력 시 체육관 이름을 조회해 확인 표시.
+            // 소속 체육관 — 드롭다운에서 선택.
             PosseCard {
-                OutlinedTextField(
-                    value = gymCode,
-                    onValueChange = { gymCode = it },
-                    label = { Text("체육관 가입코드") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                    isError = gymChecked && resolvedGym == null,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(6.dp))
-                when {
-                    resolvedGym != null -> Text(
-                        "✓ ${resolvedGym!!.name}${resolvedGym!!.branch?.let { " · $it" } ?: ""}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFF27AE60),
+                ExposedDropdownMenuBox(
+                    expanded = gymMenuOpen,
+                    onExpandedChange = { gymMenuOpen = it },
+                ) {
+                    OutlinedTextField(
+                        value = selectedGym?.let { it.name + (it.branch?.let { b -> " · $b" } ?: "") } ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("소속 체육관") },
+                        placeholder = { Text("체육관을 선택하세요") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = gymMenuOpen) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
                     )
-                    gymChecked -> Text(
-                        "가입코드에 해당하는 체육관을 찾을 수 없어요. 코드를 확인해주세요.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    else -> Text(
-                        "체육관에서 받은 가입코드를 입력하세요.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    ExposedDropdownMenu(
+                        expanded = gymMenuOpen,
+                        onDismissRequest = { gymMenuOpen = false },
+                    ) {
+                        if (gymOptions.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("등록된 체육관이 없습니다") },
+                                onClick = { gymMenuOpen = false },
+                                enabled = false,
+                            )
+                        }
+                        gymOptions.forEach { gym ->
+                            DropdownMenuItem(
+                                text = { Text(gym.name + (gym.branch?.let { " · $it" } ?: "")) },
+                                onClick = { selectedGym = gym; gymMenuOpen = false },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -375,7 +374,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                         weightClass = weightClass,
                         avatarId = avatarId,
                         joinDate = joinDate,
-                        gymCode = gymCode.trim(),
+                        gymId = selectedGym?.id.orEmpty(),
                         phone = kakaoPhone,
                         pickedGender = pickedGender,
                     )

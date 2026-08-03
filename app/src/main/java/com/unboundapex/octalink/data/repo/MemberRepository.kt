@@ -99,8 +99,8 @@ interface MemberRepository {
 /** 가입 폼 입력 결과 — 폼에서 사용자가 입력한 값 + 카카오 동의 항목에서 가져온 값 합산. */
 data class SignupRequest(
     val authProviderId: String,
-    /** 체육관 가입코드 — 서버 completeSignup 이 검증해 소속 gymId 확정. 대소문자는 서버에서 정규화. */
-    val gymCode: String,
+    /** 가입자가 드롭다운에서 선택한 소속 체육관 id. 서버 completeSignup 이 실재 여부 재검증. */
+    val gymId: String,
     val name: String,
     val belt: Belt,
     val weightClass: WeightClass,

@@ -8,7 +8,6 @@ import com.unboundapex.octalink.data.schema.GymDoc
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.tasks.await
 
 /**
  * Firestore 기반 [GymRepository]. `gyms/{gymId}`.
@@ -33,12 +32,5 @@ class FirestoreGymRepository : GymRepository {
             trySend(snap?.documents?.mapNotNull { it.toGymDoc() }.orEmpty())
         }
         awaitClose { sub.remove() }
-    }
-
-    override suspend fun findByJoinCode(joinCode: String): GymDoc? {
-        val normalized = joinCode.trim().uppercase()
-        if (normalized.isEmpty()) return null
-        val snap = col.whereEqualTo("joinCode", normalized).limit(1).get().await()
-        return snap.documents.firstOrNull()?.toGymDoc()
     }
 }

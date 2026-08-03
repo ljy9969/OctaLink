@@ -21,12 +21,11 @@ internal fun GymDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
 
 internal fun DocumentSnapshot.toGymDoc(): GymDoc? {
     val name = getString("name") ?: return null
-    val joinCode = getString("joinCode") ?: return null
     return GymDoc(
         id = id,
         name = name,
         branch = getString("branch"),
-        joinCode = joinCode,
+        joinCode = getString("joinCode"),
         staffMemberIds = (get("staffMemberIds") as? List<*>)?.filterIsInstance<String>().orEmpty(),
         createdAt = (get("createdAt") as? Timestamp)
             ?.let { Instant.ofEpochSecond(it.seconds, it.nanoseconds.toLong()) }
