@@ -125,6 +125,16 @@ fun ProfileScreen(
     val joinDate = session.member?.joinDate ?: LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
     val membership = remember(joinDate) { membershipLabel(joinDate) }
 
+    // 소속 체육관 이름 — 회원 gymId 로 조회해 이름 상단에 표시.
+    val myGymId = session.member?.gymId
+    val gymName by androidx.compose.runtime.produceState<String?>(null, myGymId) {
+        value = null
+        if (!myGymId.isNullOrBlank()) {
+            com.unboundapex.octalink.data.repo.RepositoryProvider.gyms.observeById(myGymId)
+                .collect { g -> value = g?.let { it.name + (it.branch?.let { b -> " · $b" } ?: "") } }
+        }
+    }
+
     PosseScreen(
         title = "Profile",
         trailing = {
@@ -155,6 +165,13 @@ fun ProfileScreen(
                                 .weight(1f)
                                 .padding(start = 20.dp)
                         ) {
+                            gymName?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                             Text(session.name, style = MaterialTheme.typography.titleLarge)
                             Text(
                                 "${avatar.displayName} · ${belt.displayName} 벨트 · $membership",

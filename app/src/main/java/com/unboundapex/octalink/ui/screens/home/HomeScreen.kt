@@ -119,6 +119,7 @@ fun HomeScreen(
     onOpenMyAttendance: () -> Unit = {},
     onOpenAiRoutine: () -> Unit = {},
     onOpenShadowCoach: () -> Unit = {},
+    onOpenExchange: () -> Unit = {},
     myCommentsVm: MyCommentsViewModel = viewModel(),
     weeklyAttendanceVm: HomeWeeklyAttendanceViewModel = viewModel(),
     weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
@@ -336,6 +337,8 @@ fun HomeScreen(
             }
             // AI 쉐도우 코치 — 온디바이스 실시간 자세 분석. 비용 없어 전 회원 노출.
             item { ShadowCoachCard(onClick = onOpenShadowCoach) }
+            // 교류전 — 다른 체육관 관원과 결투.
+            item { ExchangeCard(onClick = onOpenExchange) }
             if (todayCurriculum != null && !gymClosedToday) {
                 item {
                     TodayCurriculumCard(
@@ -357,6 +360,21 @@ fun HomeScreen(
  * AI 쉐도우 코치 — 홈 진입 카드. 탭 시 카메라 기반 실시간 자세 분석 화면으로.
  * 온디바이스 처리(영상 단말 밖 미전송)라 별도 권한 게이트 없이 전 회원 노출.
  */
+/** 교류전 — 홈 진입 카드. 다른 체육관 관원과 결투 신청/전적. */
+@Composable
+private fun ExchangeCard(onClick: () -> Unit) {
+    PosseCard(modifier = Modifier.clickable { onClick() }) {
+        androidx.compose.foundation.layout.Column {
+            Text("🥊 교류전", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "다른 체육관 관원과 결투를 신청하고 전적을 쌓아요.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 @Composable
 private fun ShadowCoachCard(onClick: () -> Unit) {
     PosseCard(modifier = Modifier.clickable { onClick() }) {

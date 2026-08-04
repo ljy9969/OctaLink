@@ -92,6 +92,7 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object MyAttendance : Route("my_attendance", "내 출석", Icons.Outlined.CheckCircle)
     data object AiRoutine : Route("ai_routine", "AI 코치의 맞춤 루틴", Icons.Outlined.CheckCircle)
     data object ShadowCoach : Route("shadow_coach", "AI 쉐도우 코치", Icons.Outlined.SportsMma)
+    data object Exchange : Route("exchange", "교류전", Icons.Outlined.SportsMma)
     data object TournamentHistory : Route("tournament_history", "토너먼트 히스토리", Icons.Outlined.CheckCircle)
     /** 히스토리에서 특정 토너먼트 read-only 진입 — path arg 로 tournamentId 전달. */
     data object BracketView : Route("bracket_view/{tournamentId}", "대진표 보기", Icons.Outlined.CheckCircle) {
@@ -245,6 +246,7 @@ fun PosseApp() {
                     onOpenMyAttendance = { navController.navigate(Route.MyAttendance.path) },
                     onOpenAiRoutine = { navController.navigate(Route.AiRoutine.path) },
                     onOpenShadowCoach = { navController.navigate(Route.ShadowCoach.path) },
+                    onOpenExchange = { navController.navigate(Route.Exchange.path) },
                 )
             }
             composable(Route.MyAttendance.path) {
@@ -258,6 +260,16 @@ fun PosseApp() {
             }
             composable(Route.ShadowCoach.path) {
                 ShadowCoachScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Route.Exchange.path) {
+                val exSession by sessionVm.state.collectAsState()
+                exSession.member?.let { m ->
+                    com.unboundapex.octalink.ui.screens.exchange.ExchangeScreen(
+                        memberId = m.id,
+                        myGymId = m.gymId,
+                        isStaff = m.role.isStaff,
+                    )
+                }
             }
             composable(Route.Curriculum.path) { CurriculumScreen() }
             composable(Route.Attendance.path) {
