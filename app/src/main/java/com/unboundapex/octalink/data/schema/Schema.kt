@@ -68,6 +68,11 @@ data class MemberDoc(
     val role: Role = Role.MEMBER,
     val status: MembershipStatus = MembershipStatus.PENDING,
     val joinDate: LocalDate,
+    /**
+     * 무술 총 운동경력 시작 연월 ("YYYY-MM"). 입관일([joinDate]) 이전 포함 — 다른 체육관 경력까지.
+     * 가입 시 입력. 프로필·교류전 카드에 "N년차"로 표시. null = 미입력.
+     */
+    val careerStartYm: String? = null,
     val phone: String? = null,
     val authProviderId: String? = null,
     /** 카카오 비즈앱 동의 항목들 — 가입 시 1회 채워지고 이후 운영자가 수정/보강 */
@@ -110,6 +115,10 @@ data class MemberDoc(
      * CREATOR 는 이 필드와 무관하게 항상 접근 (역할 기반).
      */
     val aiRoutineBeta: Boolean = false,
+    /** 교류전(다른 체육관과의 결투) 누적 전적. `recordDuelResult` 함수가 갱신. */
+    val exchangeWins: Int = 0,
+    val exchangeLosses: Int = 0,
+    val exchangeDraws: Int = 0,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

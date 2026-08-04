@@ -239,6 +239,10 @@ export const completeSignup = onCall(
       role,
       status,
       joinDate,
+      careerStartYm: (data.careerStartYm as string | undefined) ?? null,
+      exchangeWins: 0,
+      exchangeLosses: 0,
+      exchangeDraws: 0,
       phone: data.phone ?? null,
       // 카카오 비즈앱 동의 항목 — 권한 없거나 미동의 시 null
       email: data.email ?? null,

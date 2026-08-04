@@ -147,6 +147,12 @@ fun SignupScreen(sessionVm: SessionViewModel) {
     var selectedGym by remember { mutableStateOf<com.unboundapex.octalink.data.schema.GymDoc?>(null) }
     var gymMenuOpen by remember { mutableStateOf(false) }
 
+    // 운동 경력 시작 연도(선택) — "YYYY-01" 로 저장. 프로필·교류전 "N년차" 표시용.
+    var careerYearText by remember { mutableStateOf("") }
+    val careerStartYm = careerYearText.trim().toIntOrNull()
+        ?.takeIf { it in 1950..2100 }
+        ?.let { "%04d-01".format(it) }
+
     // 입관일 (체육관 등록일) — 기본값 오늘. 이미 다니던 회원은 과거 날짜로 변경.
     val today = remember { LocalDate.now(ZoneId.of("Asia/Seoul")) }
     var joinDate by remember { mutableStateOf(today) }
@@ -360,6 +366,28 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                 }
             }
 
+            // 운동 경력 — 시작 연도(선택). 입관 이전 포함 총 무술 경력.
+            PosseCard {
+                OutlinedTextField(
+                    value = careerYearText,
+                    onValueChange = { v -> careerYearText = v.filter { it.isDigit() }.take(4) },
+                    label = { Text("운동 시작 연도 (선택)") },
+                    placeholder = { Text("예: 2020") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    careerStartYm?.let {
+                        val yrs = today.year - careerYearText.trim().toInt() + 1
+                        "무술 경력 ${yrs}년차 (입관 이전 포함)"
+                    } ?: "다른 체육관 포함 무술을 처음 시작한 연도.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             SubmitButton(
                 enabled = canSubmit,
                 label = "가입 신청",
@@ -375,6 +403,7 @@ fun SignupScreen(sessionVm: SessionViewModel) {
                         avatarId = avatarId,
                         joinDate = joinDate,
                         gymId = selectedGym?.id.orEmpty(),
+                        careerStartYm = careerStartYm,
                         phone = kakaoPhone,
                         pickedGender = pickedGender,
                     )

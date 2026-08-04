@@ -31,6 +31,7 @@ internal fun MemberDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "role" to role.name,
     "status" to status.name,
     "joinDate" to joinDate.toString(),
+    "careerStartYm" to careerStartYm,
     "phone" to phone,
     "authProviderId" to authProviderId,
     "email" to email,
@@ -52,6 +53,9 @@ internal fun MemberDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "notificationPrefs" to notificationPrefs,
     "classReminderSlots" to classReminderSlots,
     "aiRoutineBeta" to aiRoutineBeta,
+    "exchangeWins" to exchangeWins,
+    "exchangeLosses" to exchangeLosses,
+    "exchangeDraws" to exchangeDraws,
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
     "updatedAt" to Timestamp(updatedAt.epochSecond, updatedAt.nano),
 )
@@ -103,6 +107,10 @@ internal fun DocumentSnapshot.toMemberDoc(): MemberDoc? {
             ?.filterIsInstance<String>()
             .orEmpty(),
         aiRoutineBeta = getBoolean("aiRoutineBeta") ?: false,
+        careerStartYm = getString("careerStartYm"),
+        exchangeWins = (getLong("exchangeWins") ?: 0L).toInt(),
+        exchangeLosses = (getLong("exchangeLosses") ?: 0L).toInt(),
+        exchangeDraws = (getLong("exchangeDraws") ?: 0L).toInt(),
         createdAt = (get("createdAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
         updatedAt = (get("updatedAt") as? Timestamp)?.toInstantSafe() ?: Instant.EPOCH,
     )

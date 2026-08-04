@@ -86,6 +86,7 @@ class FirestoreMemberRepository : MemberRepository {
                     "weightClass" to req.weightClass.name,
                     "avatarId" to req.avatarId,
                     "joinDate" to req.joinDate.toString(),
+                    "careerStartYm" to req.careerStartYm,
                     "phone" to req.phone,
                     "email" to req.email,
                     "gender" to req.gender,

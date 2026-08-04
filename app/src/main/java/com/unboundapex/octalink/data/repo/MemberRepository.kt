@@ -110,6 +110,8 @@ data class SignupRequest(
      * 이미 다니던 회원이 나중에 앱 가입하는 케이스 — 본인이 직접 과거 날짜로 입력.
      */
     val joinDate: LocalDate,
+    /** 무술 총 운동경력 시작 연월 ("YYYY-MM"). 입관 이전 포함. null = 미입력. */
+    val careerStartYm: String? = null,
     val phone: String? = null,
     /** 카카오 동의 항목에서 가져온 부가 정보 — null 가능, 권한/미동의 시 비어옴 */
     val email: String? = null,

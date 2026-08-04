@@ -187,6 +187,7 @@ class SessionViewModel : ViewModel() {
         avatarId: String,
         joinDate: java.time.LocalDate,
         gymId: String,
+        careerStartYm: String? = null,
         phone: String? = null,
         pickedGender: String? = null,
     ) {
@@ -197,6 +198,7 @@ class SessionViewModel : ViewModel() {
                 SignupRequest(
                     authProviderId = authId,
                     gymId = gymId,
+                    careerStartYm = careerStartYm,
                     name = name,
                     belt = belt,
                     weightClass = weightClass,
