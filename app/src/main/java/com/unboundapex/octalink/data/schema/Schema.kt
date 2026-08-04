@@ -391,6 +391,24 @@ data class GymDoc(
 )
 
 /**
+ * 크로스짐 제한 공개 프로필 — `publicProfiles/{uid}`. 서버 트리거 syncPublicProfile 이 유지.
+ * 교류전 명단에서 **다른 체육관** 관원을 조회할 때 사용 (PII 제외, 제한 필드만).
+ */
+data class PublicProfileDoc(
+    val id: String,
+    val gymId: String,
+    val name: String,
+    val gender: String? = null,
+    val weightClass: WeightClass = WeightClass.LIGHT,
+    val belt: Belt = Belt.WHITE,
+    val avatarId: String = "",
+    val careerStartYm: String? = null,
+    val exchangeWins: Int = 0,
+    val exchangeLosses: Int = 0,
+    val exchangeDraws: Int = 0,
+)
+
+/**
  * Firestore 컬렉션 경로 규약. 백엔드 선택 후 Repository 구현체에서 참조.
  *
  * 멤버 종속 데이터 (출석/코멘트/스킬)는 서브컬렉션으로 두면 권한 룰이 단순해진다.
@@ -411,6 +429,8 @@ object Collections {
     const val GYMS = "gyms"
     /** 체육관별 설정 서브컬렉션 — gyms/{gymId}/settings/{docId} (예: weeklyMission). */
     const val GYM_SETTINGS_SUB = "settings"
+    /** 크로스짐 제한 공개 프로필 — publicProfiles/{uid}. 서버 트리거가 유지, 교류전 명단용. */
+    const val PUBLIC_PROFILES = "publicProfiles"
     const val CLASS_DEFS = "classDefs"
     const val ATTENDANCE = "attendance"
     const val COMMENTS = "comments"

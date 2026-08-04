@@ -2,6 +2,7 @@ import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import {
   onDocumentCreated,
   onDocumentUpdated,
+  onDocumentWritten,
 } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
@@ -257,6 +258,41 @@ export const completeSignup = onCall(
     });
 
     return { ok: true, role, status, aiRoutineBeta };
+  },
+);
+
+/**
+ * 크로스짐 공개 프로필 투영 — members/{uid} 변경 시 publicProfiles/{uid} 유지.
+ *
+ * 교류전(다른 체육관 관원 조회)은 members 를 같은 체육관으로 스코프하는 규칙 때문에 직접 못 읽음.
+ * PII(전화/이메일/생일 등) 를 뺀 제한 필드만 별도 컬렉션에 투영해 **모든 APPROVED 회원이 크로스짐
+ * 조회** 가능하게 한다(rules: publicProfiles read=isApproved, write=서버만).
+ * 미승인/삭제 회원은 공개 프로필 제거.
+ */
+export const syncPublicProfile = onDocumentWritten(
+  { region: "asia-northeast3", document: "members/{uid}" },
+  async (event) => {
+    const uid = event.params.uid;
+    const after = event.data?.after?.data();
+    const ppRef = admin.firestore().doc(`publicProfiles/${uid}`);
+    if (!after || after.status !== "APPROVED") {
+      await ppRef.delete().catch(() => undefined);
+      return;
+    }
+    await ppRef.set({
+      id: uid,
+      gymId: after.gymId ?? "",
+      name: after.name ?? "",
+      gender: after.gender ?? null,
+      weightClass: after.weightClass ?? "LIGHT",
+      belt: after.belt ?? "WHITE",
+      avatarId: after.avatarId ?? "ryu",
+      careerStartYm: after.careerStartYm ?? null,
+      exchangeWins: after.exchangeWins ?? 0,
+      exchangeLosses: after.exchangeLosses ?? 0,
+      exchangeDraws: after.exchangeDraws ?? 0,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
   },
 );
 
