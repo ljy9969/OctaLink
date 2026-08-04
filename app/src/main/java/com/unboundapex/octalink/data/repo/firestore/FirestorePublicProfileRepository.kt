@@ -29,7 +29,7 @@ class FirestorePublicProfileRepository : PublicProfileRepository {
 
     override fun observeById(uid: String): Flow<PublicProfileDoc?> = callbackFlow {
         val sub = col.document(uid).addSnapshotListener { snap, err ->
-            if (err != null) { close(err); return@addSnapshotListener }
+            if (err != null) { close(); return@addSnapshotListener }
             trySend(snap?.toPublicProfileDoc())
         }
         awaitClose { sub.remove() }

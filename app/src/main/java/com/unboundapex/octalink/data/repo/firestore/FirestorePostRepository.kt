@@ -34,7 +34,7 @@ class FirestorePostRepository : PostRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.Posts", "observeAll snapshot error", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 val docs = snap?.documents?.mapNotNull { it.toPostDoc() }.orEmpty()

@@ -142,6 +142,13 @@ service cloud.firestore {
     match /gyms/{gymId} {
       allow read: if isAuth();
       allow write: if isCreator();
+
+      // 체육관별 설정(주간 미션 등) — gyms/{gymId}/settings/{docId}.
+      // read: 해당 체육관 APPROVED 회원(홈 카드 노출). write: 해당 체육관 운영진.
+      match /settings/{docId} {
+        allow read: if isApproved() && gymId == callerGym();
+        allow write: if isStaff() && gymId == callerGym();
+      }
     }
 
     // ════════════════════════════════════════════════════════

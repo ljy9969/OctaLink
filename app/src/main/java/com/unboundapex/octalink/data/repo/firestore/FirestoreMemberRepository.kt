@@ -53,7 +53,7 @@ class FirestoreMemberRepository : MemberRepository {
 
     override fun observeById(memberId: String): Flow<MemberDoc?> = callbackFlow {
         val sub = col.document(memberId).addSnapshotListener { snap, err ->
-            if (err != null) { close(err); return@addSnapshotListener }
+            if (err != null) { close(); return@addSnapshotListener }
             trySend(snap?.toMemberDoc())
         }
         awaitClose { sub.remove() }
@@ -212,7 +212,7 @@ class FirestoreMemberRepository : MemberRepository {
     /** Query 의 snapshot 을 List<MemberDoc> Flow 로 변환. */
     private fun Query.snapshotsAsList(): Flow<List<MemberDoc>> = callbackFlow {
         val sub = addSnapshotListener { snap, err ->
-            if (err != null) { close(err); return@addSnapshotListener }
+            if (err != null) { close(); return@addSnapshotListener }
             trySend(snap?.documents?.mapNotNull { it.toMemberDoc() }.orEmpty())
         }
         awaitClose { sub.remove() }

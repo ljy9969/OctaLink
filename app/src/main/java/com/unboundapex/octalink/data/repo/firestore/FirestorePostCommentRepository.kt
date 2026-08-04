@@ -30,7 +30,7 @@ class FirestorePostCommentRepository : PostCommentRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.PostComments", "observeForPost error postId=$postId", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 val list = snap?.documents?.mapNotNull { it.toPostCommentDoc() }.orEmpty()
@@ -47,7 +47,7 @@ class FirestorePostCommentRepository : PostCommentRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.PostComments", "observeCommentCounts error", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 val counts = snap?.documents

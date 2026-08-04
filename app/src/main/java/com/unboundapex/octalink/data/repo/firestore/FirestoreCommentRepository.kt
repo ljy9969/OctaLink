@@ -33,7 +33,7 @@ class FirestoreCommentRepository : CommentRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.Comments", "observeByMember snapshot error", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 val docs = snap?.documents?.mapNotNull { it.toCommentDoc() }.orEmpty()

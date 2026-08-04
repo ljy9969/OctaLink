@@ -37,7 +37,7 @@ class FirestoreAttendanceRepository : AttendanceRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.Attendance", "observeByDate snapshot error", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 val docs = snap?.documents?.mapNotNull { it.toAttendanceDoc() }.orEmpty()
@@ -57,7 +57,7 @@ class FirestoreAttendanceRepository : AttendanceRepository {
         val sub = memberAttendance(memberId)
             .orderBy("classDate", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
-                if (err != null) { close(err); return@addSnapshotListener }
+                if (err != null) { close(); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull { it.toAttendanceDoc() }.orEmpty())
             }
         awaitClose { sub.remove() }
@@ -70,7 +70,7 @@ class FirestoreAttendanceRepository : AttendanceRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.Attendance", "observeSince snapshot error", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 val docs = snap?.documents?.mapNotNull { it.toAttendanceDoc() }.orEmpty()

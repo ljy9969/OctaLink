@@ -39,7 +39,7 @@ class FirestoreTournamentRepository : TournamentRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.Tournament", "observeAll error", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 trySend(snap?.documents?.mapNotNull { it.toTournamentDoc() }.orEmpty())
@@ -52,7 +52,7 @@ class FirestoreTournamentRepository : TournamentRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.Tournament", "observeById error: $tournamentId", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 trySend(snap?.toTournamentDoc())
@@ -67,7 +67,7 @@ class FirestoreTournamentRepository : TournamentRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.Tournament", "observeMatches error: $tournamentId", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 val docs = snap?.documents?.mapNotNull { it.toMatchDoc(tournamentId) }.orEmpty()

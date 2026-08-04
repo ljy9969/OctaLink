@@ -45,7 +45,7 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.SkillScore", "observeByMember error: $memberId", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 trySend(snap?.documents?.mapNotNull { it.toSkillScoreDoc() }.orEmpty())
@@ -62,7 +62,7 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.SkillScore", "observeCanonicalApproved error: $memberId", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 trySend(snap?.documents?.firstOrNull()?.toSkillScoreDoc())
@@ -87,7 +87,7 @@ class FirestoreSkillScoreRepository : SkillScoreRepository {
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     android.util.Log.e("OctaLink.SkillScore", "observePendingAcrossAllMembers error", err)
-                    close(err)
+                    close()
                     return@addSnapshotListener
                 }
                 trySend(snap?.documents?.mapNotNull { it.toSkillScoreDoc() }.orEmpty())

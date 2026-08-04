@@ -38,7 +38,7 @@ class FirestoreWeeklyRoutineRepository : WeeklyRoutineRepository {
         val sub = ref.addSnapshotListener { snap, err ->
             if (err != null) {
                 android.util.Log.e(TAG, "observeCurrentWeek error", err)
-                close(err)
+                close()
                 return@addSnapshotListener
             }
             trySend(snap?.toWeeklyRoutineDoc())

@@ -39,7 +39,7 @@ class FirestoreWeeklyMissionRepository : WeeklyMissionRepository {
         val sub = ref().addSnapshotListener { snap, err ->
             if (err != null) {
                 android.util.Log.e("OctaLink.WeeklyMission", "observe error", err)
-                close(err)
+                close()
                 return@addSnapshotListener
             }
             trySend(snap?.toWeeklyMissionDoc())

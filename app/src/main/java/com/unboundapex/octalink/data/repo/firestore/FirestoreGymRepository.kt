@@ -20,7 +20,7 @@ class FirestoreGymRepository : GymRepository {
     override fun observeById(gymId: String): Flow<GymDoc?> = callbackFlow {
         if (gymId.isBlank()) { trySend(null); awaitClose { }; return@callbackFlow }
         val sub = col.document(gymId).addSnapshotListener { snap, err ->
-            if (err != null) { close(err); return@addSnapshotListener }
+            if (err != null) { close(); return@addSnapshotListener }
             trySend(snap?.toGymDoc())
         }
         awaitClose { sub.remove() }
