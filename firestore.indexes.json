@@ -47,6 +47,22 @@
         { "fieldPath": "gymId", "order": "ASCENDING" },
         { "fieldPath": "drawAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "exchangeMatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "participantIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "exchangeMatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gymIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

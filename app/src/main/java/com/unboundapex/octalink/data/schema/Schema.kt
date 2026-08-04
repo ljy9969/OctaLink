@@ -391,6 +391,43 @@ data class GymDoc(
 )
 
 /**
+ * 교류전(다른 체육관 관원과의 결투) 진행 상태.
+ * REQUESTED → (상대+양측 운영진 승인) → APPROVED → (운영진 일정 지정) → SCHEDULED →
+ * (운영진 결과 기록) → COMPLETED. 중도 거부/취소는 REJECTED/CANCELLED.
+ */
+enum class ExchangeMatchStatus { REQUESTED, APPROVED, SCHEDULED, COMPLETED, REJECTED, CANCELLED }
+
+/**
+ * 교류전 한 건 — `exchangeMatches/{id}` (top-level, 양쪽 gymId 로 조회).
+ * 생성·전이는 모두 서버 함수(requestDuel/approveDuel/scheduleDuel/recordDuelResult) 전용.
+ * 이름/체급 등은 표시용 비정규화 스냅샷.
+ */
+data class ExchangeMatchDoc(
+    val id: String,
+    val requesterMemberId: String,
+    val requesterGymId: String,
+    val requesterName: String = "",
+    val opponentMemberId: String,
+    val opponentGymId: String,
+    val opponentName: String = "",
+    val weightClass: WeightClass? = null,
+    val status: ExchangeMatchStatus = ExchangeMatchStatus.REQUESTED,
+    /** 3자 승인 — 상대 본인 + 요청측 운영진 + 상대측 운영진. 모두 true 면 APPROVED 전이. */
+    val opponentApproved: Boolean = false,
+    val requesterGymApproved: Boolean = false,
+    val opponentGymApproved: Boolean = false,
+    /** 일정 (SCHEDULED 이후). */
+    val scheduledDate: String? = null, // "YYYY-MM-DD"
+    val scheduledTime: String? = null, // "HH:mm"
+    val place: String? = null,
+    /** 결과 (COMPLETED). [isDraw] true 면 무승부, 아니면 [winnerMemberId] 승. */
+    val winnerMemberId: String? = null,
+    val isDraw: Boolean = false,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+)
+
+/**
  * 크로스짐 제한 공개 프로필 — `publicProfiles/{uid}`. 서버 트리거 syncPublicProfile 이 유지.
  * 교류전 명단에서 **다른 체육관** 관원을 조회할 때 사용 (PII 제외, 제한 필드만).
  */
@@ -431,6 +468,8 @@ object Collections {
     const val GYM_SETTINGS_SUB = "settings"
     /** 크로스짐 제한 공개 프로필 — publicProfiles/{uid}. 서버 트리거가 유지, 교류전 명단용. */
     const val PUBLIC_PROFILES = "publicProfiles"
+    /** 교류전(결투) — exchangeMatches/{id}. 생성·전이 모두 서버 함수 전용. */
+    const val EXCHANGE_MATCHES = "exchangeMatches"
     const val CLASS_DEFS = "classDefs"
     const val ATTENDANCE = "attendance"
     const val COMMENTS = "comments"

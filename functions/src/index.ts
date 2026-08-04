@@ -296,6 +296,204 @@ export const syncPublicProfile = onDocumentWritten(
   },
 );
 
+// ══════════════════════════════════════════════════════════════
+// 교류전(결투) — requestDuel / approveDuel / rejectDuel / scheduleDuel / recordDuelResult
+// 생성·전이는 모두 서버 전용(rules: exchangeMatches write=false). 상태머신:
+//   REQUESTED → (상대+양측 운영진 3자 승인) APPROVED → (운영진 일정) SCHEDULED →
+//   (운영진 결과) COMPLETED. 거부/취소 = REJECTED/CANCELLED.
+// ══════════════════════════════════════════════════════════════
+type MemberData = admin.firestore.DocumentData;
+
+async function loadApprovedCaller(uid: string): Promise<MemberData> {
+  const snap = await admin.firestore().doc(`members/${uid}`).get();
+  const m = snap.data();
+  if (!m || m.status !== "APPROVED") {
+    throw new HttpsError("permission-denied", "승인된 회원만 이용할 수 있어요.");
+  }
+  return m;
+}
+
+/** 호출자가 특정 체육관의 운영진인지 (CREATOR 는 전역). */
+function isGymStaff(member: MemberData, gymId: string): boolean {
+  if (member.role === "CREATOR") return true;
+  return member.gymId === gymId && (member.role === "MASTER" || member.role === "COACH");
+}
+
+export const requestDuel = onCall({ region: "asia-northeast3" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const opponentId = (request.data?.opponentMemberId as string | undefined)?.trim();
+  if (!opponentId) throw new HttpsError("invalid-argument", "opponentMemberId required");
+  if (opponentId === uid) throw new HttpsError("invalid-argument", "본인에게는 신청할 수 없어요.");
+
+  const caller = await loadApprovedCaller(uid);
+  const oppSnap = await admin.firestore().doc(`members/${opponentId}`).get();
+  const opp = oppSnap.data();
+  if (!opp || opp.status !== "APPROVED") {
+    throw new HttpsError("not-found", "상대 회원을 찾을 수 없어요.");
+  }
+  if ((opp.gymId ?? "") === (caller.gymId ?? "")) {
+    throw new HttpsError("failed-precondition", "다른 체육관 관원에게만 신청할 수 있어요.");
+  }
+
+  const ref = admin.firestore().collection("exchangeMatches").doc();
+  await ref.set({
+    id: ref.id,
+    requesterMemberId: uid,
+    requesterGymId: caller.gymId ?? "",
+    requesterName: caller.name ?? "",
+    opponentMemberId: opponentId,
+    opponentGymId: opp.gymId ?? "",
+    opponentName: opp.name ?? "",
+    // array-contains 쿼리용: 내 교류전(participantIds), 체육관 교류전(gymIds).
+    participantIds: [uid, opponentId],
+    gymIds: [caller.gymId ?? "", opp.gymId ?? ""],
+    weightClass: caller.weightClass ?? null,
+    status: "REQUESTED",
+    opponentApproved: false,
+    requesterGymApproved: false,
+    opponentGymApproved: false,
+    scheduledDate: null,
+    scheduledTime: null,
+    place: null,
+    winnerMemberId: null,
+    isDraw: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  logger.info("[requestDuel] created", { id: ref.id, requester: maskId(uid), opponent: maskId(opponentId) });
+  return { ok: true, id: ref.id };
+});
+
+export const approveDuel = onCall({ region: "asia-northeast3" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const matchId = (request.data?.matchId as string | undefined)?.trim();
+  if (!matchId) throw new HttpsError("invalid-argument", "matchId required");
+  const caller = await loadApprovedCaller(uid);
+  const ref = admin.firestore().doc(`exchangeMatches/${matchId}`);
+
+  await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const d = snap.data();
+    if (!d) throw new HttpsError("not-found", "교류전을 찾을 수 없어요.");
+    if (d.status !== "REQUESTED") throw new HttpsError("failed-precondition", "이미 처리된 요청이에요.");
+
+    const updates: admin.firestore.DocumentData = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (uid === d.opponentMemberId) updates.opponentApproved = true;
+    else if (isGymStaff(caller, d.requesterGymId)) updates.requesterGymApproved = true;
+    else if (isGymStaff(caller, d.opponentGymId)) updates.opponentGymApproved = true;
+    else throw new HttpsError("permission-denied", "승인 권한이 없어요.");
+
+    const opp = updates.opponentApproved ?? d.opponentApproved;
+    const rg = updates.requesterGymApproved ?? d.requesterGymApproved;
+    const og = updates.opponentGymApproved ?? d.opponentGymApproved;
+    if (opp && rg && og) updates.status = "APPROVED";
+    tx.update(ref, updates);
+  });
+  return { ok: true };
+});
+
+export const rejectDuel = onCall({ region: "asia-northeast3" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const matchId = (request.data?.matchId as string | undefined)?.trim();
+  if (!matchId) throw new HttpsError("invalid-argument", "matchId required");
+  const caller = await loadApprovedCaller(uid);
+  const ref = admin.firestore().doc(`exchangeMatches/${matchId}`);
+  const snap = await ref.get();
+  const d = snap.data();
+  if (!d) throw new HttpsError("not-found", "교류전을 찾을 수 없어요.");
+  const canAct = uid === d.opponentMemberId || uid === d.requesterMemberId
+    || isGymStaff(caller, d.requesterGymId) || isGymStaff(caller, d.opponentGymId);
+  if (!canAct) throw new HttpsError("permission-denied", "권한이 없어요.");
+  if (d.status === "COMPLETED") throw new HttpsError("failed-precondition", "이미 종료된 교류전이에요.");
+  await ref.update({
+    status: uid === d.requesterMemberId ? "CANCELLED" : "REJECTED",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+export const scheduleDuel = onCall({ region: "asia-northeast3" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const data = request.data ?? {};
+  const matchId = (data.matchId as string | undefined)?.trim();
+  const date = (data.date as string | undefined)?.trim();
+  const time = (data.time as string | undefined)?.trim();
+  const place = (data.place as string | undefined)?.trim();
+  if (!matchId || !date || !time || !place) {
+    throw new HttpsError("invalid-argument", "matchId/date/time/place required");
+  }
+  const caller = await loadApprovedCaller(uid);
+  const ref = admin.firestore().doc(`exchangeMatches/${matchId}`);
+  const snap = await ref.get();
+  const d = snap.data();
+  if (!d) throw new HttpsError("not-found", "교류전을 찾을 수 없어요.");
+  if (!isGymStaff(caller, d.requesterGymId) && !isGymStaff(caller, d.opponentGymId)) {
+    throw new HttpsError("permission-denied", "운영진만 일정을 정할 수 있어요.");
+  }
+  if (d.status !== "APPROVED" && d.status !== "SCHEDULED") {
+    throw new HttpsError("failed-precondition", "승인 완료된 교류전만 일정을 정할 수 있어요.");
+  }
+  await ref.update({
+    scheduledDate: date,
+    scheduledTime: time,
+    place,
+    status: "SCHEDULED",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+export const recordDuelResult = onCall({ region: "asia-northeast3" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const data = request.data ?? {};
+  const matchId = (data.matchId as string | undefined)?.trim();
+  const isDraw = data.isDraw === true;
+  const winnerMemberId = (data.winnerMemberId as string | undefined)?.trim();
+  if (!matchId) throw new HttpsError("invalid-argument", "matchId required");
+  if (!isDraw && !winnerMemberId) throw new HttpsError("invalid-argument", "winnerMemberId or isDraw required");
+  const caller = await loadApprovedCaller(uid);
+  const db = admin.firestore();
+  const ref = db.doc(`exchangeMatches/${matchId}`);
+  const snap = await ref.get();
+  const d = snap.data();
+  if (!d) throw new HttpsError("not-found", "교류전을 찾을 수 없어요.");
+  if (!isGymStaff(caller, d.requesterGymId) && !isGymStaff(caller, d.opponentGymId)) {
+    throw new HttpsError("permission-denied", "운영진만 결과를 기록할 수 있어요.");
+  }
+  if (d.status === "COMPLETED") throw new HttpsError("failed-precondition", "이미 결과가 기록됐어요.");
+  const p1 = d.requesterMemberId as string;
+  const p2 = d.opponentMemberId as string;
+  if (!isDraw && winnerMemberId !== p1 && winnerMemberId !== p2) {
+    throw new HttpsError("invalid-argument", "승자는 교류전 참가자여야 해요.");
+  }
+  const inc = admin.firestore.FieldValue.increment(1);
+  const batch = db.batch();
+  batch.update(ref, {
+    status: "COMPLETED",
+    isDraw,
+    winnerMemberId: isDraw ? null : winnerMemberId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  if (isDraw) {
+    batch.update(db.doc(`members/${p1}`), { exchangeDraws: inc });
+    batch.update(db.doc(`members/${p2}`), { exchangeDraws: inc });
+  } else {
+    const loser = winnerMemberId === p1 ? p2 : p1;
+    batch.update(db.doc(`members/${winnerMemberId}`), { exchangeWins: inc });
+    batch.update(db.doc(`members/${loser}`), { exchangeLosses: inc });
+  }
+  await batch.commit();
+  logger.info("[recordDuelResult] done", { id: matchId, isDraw, winner: winnerMemberId ? maskId(winnerMemberId) : null });
+  return { ok: true };
+});
+
 /**
  * 본인 회원 탈퇴 — `members/{uid}.status = "LEFT"` 로 전환.
  *

@@ -156,6 +156,19 @@ service cloud.firestore {
     }
 
     // ════════════════════════════════════════════════════════
+    // exchangeMatches — 교류전(결투). 생성·전이 모두 서버 함수 전용.
+    // ════════════════════════════════════════════════════════
+    // read: 관련된 두 체육관의 APPROVED 회원만 (내 교류전 / 우리 체육관 교류전).
+    // write: 서버(requestDuel/approveDuel/scheduleDuel/recordDuelResult) 전용.
+    match /exchangeMatches/{matchId} {
+      allow read: if isApproved() && (
+        callerGym() == resource.data.requesterGymId
+        || callerGym() == resource.data.opponentGymId
+      );
+      allow write: if false;
+    }
+
+    // ════════════════════════════════════════════════════════
     // members — 회원 마스터
     // ════════════════════════════════════════════════════════
     match /members/{uid} {

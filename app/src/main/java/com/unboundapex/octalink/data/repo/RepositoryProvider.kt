@@ -3,6 +3,7 @@ package com.unboundapex.octalink.data.repo
 import android.content.Context
 import com.unboundapex.octalink.data.repo.firestore.FirestoreAttendanceRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreCommentRepository
+import com.unboundapex.octalink.data.repo.firestore.FirestoreExchangeMatchRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreGymRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreMemberRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestorePostCommentRepository
@@ -36,6 +37,8 @@ object RepositoryProvider {
         private set
     lateinit var publicProfiles: PublicProfileRepository
         private set
+    lateinit var exchangeMatches: ExchangeMatchRepository
+        private set
     lateinit var attendance: AttendanceRepository
         private set
     lateinit var posts: PostRepository
@@ -65,6 +68,7 @@ object RepositoryProvider {
             members = FirestoreMemberRepository()
             gyms = FirestoreGymRepository()
             publicProfiles = FirestorePublicProfileRepository()
+            exchangeMatches = FirestoreExchangeMatchRepository()
             attendance = FirestoreAttendanceRepository()
             posts = FirestorePostRepository()
             postComments = FirestorePostCommentRepository()
