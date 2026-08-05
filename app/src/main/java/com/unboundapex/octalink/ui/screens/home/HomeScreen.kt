@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -364,44 +365,34 @@ fun HomeScreen(
 @Composable
 private fun ExchangeCard(onClick: () -> Unit) {
     PosseCard(modifier = Modifier.clickable { onClick() }) {
-        androidx.compose.foundation.layout.Column(
+        Text(
+            "⚔️ 교류전",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                "⚔️ 교류전",
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                "다른 체육관 관원과 결투를 신청하고 전적을 쌓아요.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
+        )
+        Text(
+            "다른 체육관 관원과 결투를 신청하고 전적을 쌓아요.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
 @Composable
 private fun ShadowCoachCard(onClick: () -> Unit) {
     PosseCard(modifier = Modifier.clickable { onClick() }) {
-        androidx.compose.foundation.layout.Column(
+        Text(
+            "🥊 AI 코치의 실시간 쉐도우 피드백",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                "🥊 AI 코치의 실시간 쉐도우 피드백",
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                "카메라 앞에서 쉐도우 복싱을 하며 AI 코치의 실시간 피드백을 받아보세요.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
+        )
+        Text(
+            "카메라 앞에서 쉐도우 복싱을 하며 AI 코치의 실시간 피드백을 받아보세요.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -419,52 +410,43 @@ private fun AiRoutineCard(
     onClick: () -> Unit,
 ) {
     PosseCard(modifier = Modifier.clickable { onClick() }) {
-        androidx.compose.foundation.layout.Column(
+        Text(
+            "🧠 AI 코치의 맞춤 루틴",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
+        )
+        if (doc != null) {
             Text(
-                "🧠 AI 코치의 맞춤 루틴",
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
+                formatWeekIdAsShortLabel(doc.weekId),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (doc != null) {
-                Text(
-                    formatWeekIdAsShortLabel(doc.weekId),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
-            if (doc == null) {
-                Text(
-                    "부족한 부분을 채워줄 AI 코치의 이번 주 맞춤형 루틴을 추천 받아보세요.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            } else {
-                val totalDrills = doc.days.sumOf { it.drills.size }
-                val totalMin = doc.days.sumOf { day -> day.drills.sumOf { it.durationMin } }
-                val daysWithDrills = doc.days.count { it.drills.isNotEmpty() }
-                val avgPerDay = if (daysWithDrills > 0) totalMin / daysWithDrills else 0
-                val focusLabel = doc.focusSkills
-                    .joinToString(" · ") { axisLabelKo(it) }
-                    .ifBlank { "이번 주 추천" }
-                Text(
-                    focusLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    "총 ${totalDrills}개 드릴 · 일일 평균 ${avgPerDay}분",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
+        }
+        if (doc == null) {
+            Text(
+                "부족한 부분을 채워줄 AI 코치의 이번 주 맞춤형 루틴을 추천 받아보세요.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            val totalDrills = doc.days.sumOf { it.drills.size }
+            val totalMin = doc.days.sumOf { day -> day.drills.sumOf { it.durationMin } }
+            val daysWithDrills = doc.days.count { it.drills.isNotEmpty() }
+            val avgPerDay = if (daysWithDrills > 0) totalMin / daysWithDrills else 0
+            val focusLabel = doc.focusSkills
+                .joinToString(" · ") { axisLabelKo(it) }
+                .ifBlank { "이번 주 추천" }
+            Text(
+                focusLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                "총 ${totalDrills}개 드릴 · 일일 평균 ${avgPerDay}분",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -540,31 +522,24 @@ private fun GymInfoCard(onClick: () -> Unit) {
 @Composable
 private fun TitleMetaCard(item: FeedItem) {
     PosseCard {
-        androidx.compose.foundation.layout.Column(
+        Text(
+            item.title,
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
+        )
+        if (item.meta.isNotBlank()) {
             Text(
-                item.title,
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            if (item.meta.isNotBlank()) {
-                Text(
-                    item.meta,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
-            Text(
-                item.body,
-                style = MaterialTheme.typography.bodyMedium,
+                item.meta,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
             )
         }
+        Text(
+            item.body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -575,33 +550,30 @@ private fun TitleMetaCard(item: FeedItem) {
 @Composable
 private fun TodayCurriculumCard(coach: String, tag: String, theme: String) {
     PosseCard {
-        androidx.compose.foundation.layout.Column(
+        Text(
+            "🥋 오늘의 커리큘럼",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "🥋 오늘의 커리큘럼",
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "$coach · ",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TagChip(tag)
-            }
             Text(
                 theme,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
+            Text(
+                "$coach · ",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TagChip(tag)
         }
     }
 }
