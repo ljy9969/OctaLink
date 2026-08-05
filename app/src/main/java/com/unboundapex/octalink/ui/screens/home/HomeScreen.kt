@@ -75,7 +75,7 @@ private data class FeedItem(val title: String, val meta: String, val body: Strin
 
 /** "받은 코멘트 없음" placeholder. 실제 데이터가 있으면 ViewModel 결과로 대체. */
 private val emptyOneLineComment = FeedItem(
-    title = "한 줄 코멘트",
+    title = "💬 한 줄 코멘트",
     meta = "",
     body = "아직 받은 코멘트가 없습니다.",
 )
@@ -148,12 +148,12 @@ fun HomeScreen(
     val sparringMatchItem = sparringMatch?.let { m ->
         val date = m.drawnAt.atZone(ZoneId.of("Asia/Seoul")).toLocalDate()
         FeedItem(
-            title = "스파링 매치",
+            title = "🤼 스파링 매치",
             meta = "${date.format(commentDateFmt)} · ${m.title}",
             body = "대진표가 업데이트 되었습니다. 확인하고 컨디션 체크해주세요.",
         )
     } ?: FeedItem(
-        title = "스파링 매치",
+        title = "🤼 스파링 매치",
         meta = "",
         body = "이번 주 대진표 추첨이 아직 없습니다.",
     )
@@ -165,7 +165,7 @@ fun HomeScreen(
     }
     val oneLineComment = latestComment?.let { c ->
         FeedItem(
-            title = "한 줄 코멘트",
+            title = "💬 한 줄 코멘트",
             meta = "${c.classDate.format(commentDateFmt)} · ${c.byMasterName}",
             body = c.text,
         )
@@ -365,7 +365,7 @@ fun HomeScreen(
 private fun ExchangeCard(onClick: () -> Unit) {
     PosseCard(modifier = Modifier.clickable { onClick() }) {
         androidx.compose.foundation.layout.Column {
-            Text("🥊 교류전", style = MaterialTheme.typography.titleMedium)
+            Text("⚔️ 교류전", style = MaterialTheme.typography.titleMedium)
             Text(
                 "다른 체육관 관원과 결투를 신청하고 전적을 쌓아요.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -575,7 +575,7 @@ private fun TodayCurriculumCard(coach: String, tag: String, theme: String) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "오늘의 커리큘럼",
+                "🥋 오늘의 커리큘럼",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
