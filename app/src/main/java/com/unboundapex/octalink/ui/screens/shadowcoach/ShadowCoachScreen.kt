@@ -13,9 +13,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -352,6 +352,7 @@ private fun PoseOverlay(frame: PoseFrame?, mirrorX: Boolean, modifier: Modifier 
 }
 
 /** 상단 카운터/코칭 칩 + 콤비 추천 + 하단 시작/정지 버튼. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ShadowHud(
     ui: ShadowUiState,
@@ -368,12 +369,12 @@ private fun ShadowHud(
     onToggleRecord: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        // 상단 1행 — 동작 종류별 카운트 + 자세 힌트. 색상별 칩, 가로 스크롤로 항상 한 줄.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+        // 상단 1행 — 동작 종류별 카운트 + 자세 힌트. 색상별 칩, FlowRow 로 넘치면 다음 줄로 wrap
+        // (가로 스크롤은 마지막 칩이 화면 밖으로 잘려 보여 wrap 으로 전환).
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Technique.mvpEnabled.forEach { tech ->
                 ColorChip("${tech.displayName} ${ui.techniqueCounts[tech] ?: 0}", techniqueColor(tech))
