@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -56,7 +57,14 @@ class ExchangeViewModel : ViewModel() {
     val directory: StateFlow<List<PublicProfileDoc>> =
         _selectedTargetGymId.flatMapLatest { gid ->
             if (gid.isNullOrBlank()) flowOf(emptyList()) else ppRepo.observeByGym(gid)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
+            // 체급 오름차순(페더→헤비 = enum ordinal). 동일 체급은 벨트·이름 순으로 안정 정렬.
+            .map { list ->
+                list.sortedWith(
+                    compareBy({ it.weightClass.ordinal }, { it.belt.ordinal }, { it.name })
+                )
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val myDuels: StateFlow<List<ExchangeMatchDoc>> =
