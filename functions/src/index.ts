@@ -297,6 +297,42 @@ export const syncPublicProfile = onDocumentWritten(
   },
 );
 
+/**
+ * 스킬 점수 승인 → member.skills 동기화 — members/{memberId}/skillScores/{scoreId} 변경 시
+ * 최신 APPROVED 점수를 member 문서의 skills 임베드 필드로 반영.
+ *
+ * 프로필 화면은 skillScores 하위컬렉션(코치 승인 점수)을, AI 루틴 화면은 member.skills 를
+ * 읽어 두 소스가 어긋나던 문제 해결. 승인 doc 작성/전이/삭제 어느 경우든 최신 APPROVED 로
+ * 재계산한다. 저장 스케일(0..1)이 skillScores 와 동일하므로 직접 복사.
+ * 승인 점수가 하나도 없으면 self-rated skills 보존을 위해 건드리지 않는다.
+ * (member 문서만 갱신 — skillScores 를 다시 쓰지 않아 트리거 재귀 없음)
+ */
+export const syncMemberSkillsOnScore = onDocumentWritten(
+  { region: "asia-northeast3", document: "members/{memberId}/skillScores/{scoreId}" },
+  async (event) => {
+    const memberId = event.params.memberId;
+    const db = admin.firestore();
+    const snap = await db
+      .collection("members").doc(memberId).collection("skillScores")
+      .where("status", "==", "APPROVED")
+      .orderBy("evaluatedAt", "desc")
+      .limit(1)
+      .get();
+    if (snap.empty) return;
+    const s = snap.docs[0].data();
+    await db.doc(`members/${memberId}`).update({
+      skills: {
+        striking: s.striking ?? 0,
+        grappling: s.grappling ?? 0,
+        stamina: s.stamina ?? 0,
+        technique: s.technique ?? 0,
+        mental: s.mental ?? 0,
+        speed: s.speed ?? 0,
+      },
+    });
+  },
+);
+
 // ══════════════════════════════════════════════════════════════
 // 교류전(결투) — requestDuel / approveDuel / rejectDuel / scheduleDuel / recordDuelResult
 // 생성·전이는 모두 서버 전용(rules: exchangeMatches write=false). 상태머신:
