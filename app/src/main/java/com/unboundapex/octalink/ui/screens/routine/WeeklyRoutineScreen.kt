@@ -74,7 +74,7 @@ fun WeeklyRoutineScreen(
     // Phase 1 베타 비용 통제 — 화이트리스트 (CREATOR + AI_ROUTINE_BETA_UIDS) 외엔 진입 차단.
     // 서버 onCall + Firestore rules 도 동일 게이트.
     if (!session.canUseAiRoutine()) {
-        PosseScreen(subtitle = "AI 코치의 맞춤 루틴") {
+        PosseScreen(title = "AI 맞춤 루틴") {
             PosseCard {
                 Text(
                     "이 기능은 베타 검증 중이라 아직 일반 공개 전이에요.",
@@ -112,10 +112,7 @@ fun WeeklyRoutineScreen(
 
     // 비용 정책: 한 주에 1회만 생성. 일단 doc 이 만들어지면 그 주 동안 재요청 불가
     // (Vertex AI + YouTube Data API quota 보호). 다음 주가 되면 weekId 가 바뀌어 새 doc 생성 가능.
-    PosseScreen(
-        subtitle = "AI 코치의 맞춤 루틴",
-        subtitleEmphasis = listOf("AI"),
-    ) {
+    PosseScreen(title = "AI 맞춤 루틴") {
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(bottom = 24.dp),
