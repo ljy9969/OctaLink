@@ -168,9 +168,14 @@ service cloud.firestore {
     // read: 관련된 두 체육관의 APPROVED 회원만 (내 교류전 / 우리 체육관 교류전).
     // write: 서버(requestDuel/approveDuel/scheduleDuel/recordDuelResult) 전용.
     match /exchangeMatches/{matchId} {
+      // list 쿼리(observeMyDuels: participantIds array-contains,
+      // observeGymDuels: gymIds array-contains)와 규칙 조건이 일치해야 허용됨.
+      // 이전엔 resource.data.requesterGymId(스칼라)를 참조해 Firestore 가 쿼리를
+      // 검증 못 하고 전량 거부 → 신청 목록이 안 보이는 버그. 필터와 같은 배열 필드로 맞춤.
+      // (참가자는 자기 gym 이 gymIds 에 포함되므로 접근 범위는 기존과 동일)
       allow read: if isApproved() && (
-        callerGym() == resource.data.requesterGymId
-        || callerGym() == resource.data.opponentGymId
+        request.auth.uid in resource.data.participantIds
+        || callerGym() in resource.data.gymIds
       );
       allow write: if false;
     }

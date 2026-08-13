@@ -212,6 +212,13 @@ enum class NotificationType(
         channelName = "스킬 검토 (운영진)",
         channelDescription = "코치 제안 스킬 점수 — 승인 대기 알림",
     ),
+    DUEL_REQUESTED(
+        displayName = "교류전 신청",
+        description = "다른 체육관에서 결투를 신청했을 때 (상대·양측 운영진)",
+        channelId = "octalink_duel",
+        channelName = "교류전",
+        channelDescription = "교류전 신청·승인 알림",
+    ),
 }
 
 /** 정기 클래스 정의 (요일별 운영 슬롯 — 변경 빈도 낮음) */

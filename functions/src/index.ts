@@ -399,6 +399,33 @@ export const requestDuel = onCall({ region: "asia-northeast3" }, async (request)
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   logger.info("[requestDuel] created", { id: ref.id, requester: maskId(uid), opponent: maskId(opponentId) });
+
+  // 알림 — 상대 본인 + 양측 운영진(해당 gym 의 MASTER/COACH + 전역 CREATOR) 에게 승인 요청 push.
+  // 발송 실패는 신청 자체를 막지 않도록 try/catch 로 감싼다.
+  try {
+    const reqGym = caller.gymId ?? "";
+    const oppGym = opp.gymId ?? "";
+    const staffSnap = await admin.firestore()
+      .collection("members")
+      .where("status", "==", "APPROVED")
+      .where("role", "in", ["MASTER", "COACH", "CREATOR"])
+      .get();
+    const recipients = new Set<string>([opponentId]);
+    staffSnap.docs.forEach((d) => {
+      const m = d.data();
+      if (m.role === "CREATOR" || m.gymId === reqGym || m.gymId === oppGym) recipients.add(d.id);
+    });
+    recipients.delete(uid); // 신청자 본인 제외
+    await sendNotificationTo(
+      Array.from(recipients),
+      "DUEL_REQUESTED",
+      "새 교류전 신청",
+      `${caller.name ?? "상대"}님이 ${opp.name ?? ""}님에게 결투를 신청했어요. 승인이 필요해요.`,
+    );
+  } catch (e) {
+    logger.warn("[requestDuel] 알림 발송 실패(무시)", e);
+  }
+
   return { ok: true, id: ref.id };
 });
 
@@ -888,7 +915,9 @@ type NotificationTypeKey =
   | "MENTION"
   // 운영진(MASTER/CREATOR) 전용 — 검토 큐 신규 항목 알림.
   | "NEW_SIGNUP_PENDING"
-  | "NEW_SKILL_PROPOSAL";
+  | "NEW_SKILL_PROPOSAL"
+  // 교류전 — 결투 신청 시 상대 + 양측 운영진에게.
+  | "DUEL_REQUESTED";
 
 /** [NotificationType.defaultEnabled] 과 일치 — 클라이언트에서 prefs 키 누락 시 기본값. */
 const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
@@ -901,6 +930,7 @@ const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
   MENTION: true,
   NEW_SIGNUP_PENDING: true,
   NEW_SKILL_PROPOSAL: true,
+  DUEL_REQUESTED: true,
 };
 
 /**
@@ -918,6 +948,7 @@ const CHANNEL_ID: Record<NotificationTypeKey, string> = {
   MENTION: "octalink_mention",
   NEW_SIGNUP_PENDING: "octalink_admin_signup_pending",
   NEW_SKILL_PROPOSAL: "octalink_admin_skill_proposal",
+  DUEL_REQUESTED: "octalink_duel",
 };
 
 /**
