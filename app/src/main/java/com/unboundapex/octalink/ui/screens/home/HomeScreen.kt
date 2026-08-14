@@ -55,6 +55,7 @@ import com.unboundapex.octalink.R
 import com.unboundapex.octalink.data.curriculumForToday
 import com.unboundapex.octalink.data.dayLabelKor
 import com.unboundapex.octalink.data.isClosed
+import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.CageIcon
 import com.unboundapex.octalink.ui.components.PosseCard
@@ -127,6 +128,7 @@ fun HomeScreen(
     gymActivityVm: HomeGymActivityViewModel = viewModel(),
     sparringMatchVm: HomeSparringMatchViewModel = viewModel(),
     weeklyRoutineVm: WeeklyRoutineViewModel = viewModel(),
+    homeExchangeVm: HomeExchangeViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
     val memberId = session.member?.id
@@ -135,7 +137,9 @@ fun HomeScreen(
         myCommentsVm.observeFor(memberId)
         weeklyAttendanceVm.observeFor(memberId)
         weeklyRoutineVm.bind(memberId)
+        homeExchangeVm.bind(memberId, session.member?.gymId, session.member?.role?.isStaff == true)
     }
+    val incomingDuels by homeExchangeVm.incomingCount.collectAsState()
     val aiRoutine by weeklyRoutineVm.routine.collectAsState()
     val myComments by myCommentsVm.myComments.collectAsState()
     val weeklyAttendCount by weeklyAttendanceVm.weeklyCount.collectAsState()
@@ -338,8 +342,8 @@ fun HomeScreen(
             }
             // AI 쉐도우 코치 — 온디바이스 실시간 자세 분석. 비용 없어 전 회원 노출.
             item { ShadowCoachCard(onClick = onOpenShadowCoach) }
-            // 교류전 — 다른 체육관 관원과 결투.
-            item { ExchangeCard(onClick = onOpenExchange) }
+            // 교류전 — 다른 체육관 관원과 결투. 들어온 신청(REQUESTED~일정 당일)이 있으면 배지 노출.
+            item { ExchangeCard(incomingCount = incomingDuels, onClick = onOpenExchange) }
             if (todayCurriculum != null && !gymClosedToday) {
                 item {
                     TodayCurriculumCard(
@@ -363,14 +367,34 @@ fun HomeScreen(
  */
 /** 교류전 — 홈 진입 카드. 다른 체육관 관원과 결투 신청/전적. */
 @Composable
-private fun ExchangeCard(onClick: () -> Unit) {
+private fun ExchangeCard(incomingCount: Int, onClick: () -> Unit) {
     PosseCard(modifier = Modifier.clickable { onClick() }) {
-        Text(
-            "⚔️ 교류전",
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "⚔️ 교류전",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            // 들어온 결투 신청 배지 — 타이틀 우측. REQUESTED~일정 당일 동안 개수 표시.
+            if (incomingCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .clip(CircleShape)
+                        .background(Color(0xFFC8102E)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (incomingCount > 9) "9+" else "$incomingCount",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                    )
+                }
+            }
+        }
         Text(
             "다른 체육관 관원과 결투를 신청하고 전적을 쌓아요.",
             style = MaterialTheme.typography.bodyMedium,

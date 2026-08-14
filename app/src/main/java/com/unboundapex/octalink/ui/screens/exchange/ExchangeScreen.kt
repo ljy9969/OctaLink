@@ -250,10 +250,22 @@ private fun chk(b: Boolean) = if (b) "✓" else "…"
 private fun statusLine(d: ExchangeMatchDoc): String = when (d.status) {
     ExchangeMatchStatus.REQUESTED -> "요청됨 — 승인 대기"
     ExchangeMatchStatus.APPROVED -> "승인 완료 — 일정 대기"
-    ExchangeMatchStatus.SCHEDULED -> "일정 확정 · ${d.scheduledDate} ${d.scheduledTime} @ ${d.place}"
+    ExchangeMatchStatus.SCHEDULED -> "일정 확정 · ${schedDateLabel(d.scheduledDate)} ${schedTimeLabel(d.scheduledTime)} @ ${d.place}"
     ExchangeMatchStatus.COMPLETED -> if (d.isDraw) "종료 · 무승부" else "종료 · 승자 ${if (d.winnerMemberId == d.requesterMemberId) d.requesterName else d.opponentName}"
     ExchangeMatchStatus.REJECTED -> "반려됨"
     ExchangeMatchStatus.CANCELLED -> "취소됨"
+}
+
+/** 저장된 ISO 일정("yyyy-MM-dd") → 표시용 "YY/MM/DD (요일)". 파싱 실패 시 원본. */
+private fun schedDateLabel(iso: String?): String {
+    val d = iso?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() } ?: return iso.orEmpty()
+    return "%02d/%02d/%02d (%s)".format(d.year % 100, d.monthValue, d.dayOfMonth, dayLabelKor(d.dayOfWeek))
+}
+
+/** 저장된 "HH:mm" → 표시용 "오전/오후 h:mm". 파싱 실패 시 원본. */
+private fun schedTimeLabel(hhmm: String?): String {
+    val t = hhmm?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() } ?: return hhmm.orEmpty()
+    return t.format(java.time.format.DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -282,6 +294,11 @@ private fun ScheduleDialog(
         java.time.LocalTime.of(hour!!, minute!!)
             .format(java.time.format.DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
     } else ""
+    // 저장은 파싱 가능한 ISO 로(배지의 일정 당일 비교·정렬용). 표시는 위 dateText/timeText.
+    val isoDate = dateMillis?.let {
+        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+    } ?: ""
+    val isoTime = if (hour != null && minute != null) "%02d:%02d".format(hour!!, minute!!) else ""
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -314,8 +331,8 @@ private fun ScheduleDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(dateText, timeText, place) },
-                enabled = dateText.isNotBlank() && timeText.isNotBlank() && place.isNotBlank(),
+                onClick = { onConfirm(isoDate, isoTime, place) },
+                enabled = isoDate.isNotBlank() && isoTime.isNotBlank() && place.isNotBlank(),
             ) { Text("확정") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
