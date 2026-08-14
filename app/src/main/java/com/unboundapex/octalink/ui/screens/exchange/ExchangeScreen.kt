@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.unboundapex.octalink.data.dayLabelKor
 import com.unboundapex.octalink.data.schema.ExchangeMatchDoc
 import com.unboundapex.octalink.data.schema.ExchangeMatchStatus
 import com.unboundapex.octalink.ui.components.PosseCard
@@ -271,10 +272,16 @@ private fun ScheduleDialog(
     var placeOpen by remember { mutableStateOf(false) }
 
     // DatePicker 는 UTC 자정 millis 를 주므로 UTC 로 날짜 추출(로컬 변환 시 하루 밀림 방지).
+    // 표시 포맷: YY/MM/DD (요일) — 예: "26/08/14 (금)".
     val dateText = dateMillis?.let {
-        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+        val ld = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+        "%02d/%02d/%02d (%s)".format(ld.year % 100, ld.monthValue, ld.dayOfMonth, dayLabelKor(ld.dayOfWeek))
     } ?: ""
-    val timeText = if (hour != null && minute != null) "%02d:%02d".format(hour, minute) else ""
+    // 표시 포맷: 오전/오후 h:mm — 예: "오후 7:30".
+    val timeText = if (hour != null && minute != null) {
+        java.time.LocalTime.of(hour!!, minute!!)
+            .format(java.time.format.DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
+    } else ""
 
     AlertDialog(
         onDismissRequest = onDismiss,
