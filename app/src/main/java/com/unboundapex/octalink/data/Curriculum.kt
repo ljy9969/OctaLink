@@ -26,7 +26,7 @@ val weeklyCurriculum: List<CurriculumDay> = listOf(
             "프론트 푸시킥 페인트 → 인사이드 로우",
             "패드 라운드 3 × 3분",
         ),
-        coach = "관장 김파시",
+        coach = "관장 김호준",
         tag = "스트라이킹",
     ),
     CurriculumDay(
@@ -48,7 +48,7 @@ val weeklyCurriculum: List<CurriculumDay> = listOf(
             "클린치 + 니 스트라이크",
             "그라운드 컨트롤 → 마운트 이스케이프",
         ),
-        coach = "관장 김파시",
+        coach = "관장 김호준",
         tag = "그래플링",
     ),
     CurriculumDay(
@@ -59,7 +59,7 @@ val weeklyCurriculum: List<CurriculumDay> = listOf(
             "케이지 푸시 → 더블레그",
             "케이지 컨트롤 1분 라운드",
         ),
-        coach = "관장 김파시",
+        coach = "관장 김호준",
         tag = "MMA",
     ),
     CurriculumDay(
@@ -70,7 +70,7 @@ val weeklyCurriculum: List<CurriculumDay> = listOf(
             "라이트 스파링 3 × 2분",
             "쿨다운 + 피드백 1대1",
         ),
-        coach = "관장 김파시",
+        coach = "관장 김호준",
         tag = "스파링",
     ),
 )
