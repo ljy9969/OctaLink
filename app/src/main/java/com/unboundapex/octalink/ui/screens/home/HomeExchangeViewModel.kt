@@ -60,7 +60,7 @@ class HomeExchangeViewModel : ViewModel() {
                     )
                 involved && when (d.status) {
                     ExchangeMatchStatus.REQUESTED, ExchangeMatchStatus.APPROVED -> true
-                    ExchangeMatchStatus.SCHEDULED -> {
+                    ExchangeMatchStatus.MATCHED, ExchangeMatchStatus.SCHEDULED -> {
                         // 일정 당일까지 — scheduledDate 가 오늘 이전이 아니면(오늘 포함) 유지.
                         val sd = d.scheduledDate?.let {
                             runCatching { java.time.LocalDate.parse(it) }.getOrNull()
