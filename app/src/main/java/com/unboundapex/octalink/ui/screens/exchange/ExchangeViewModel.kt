@@ -53,6 +53,11 @@ class ExchangeViewModel : ViewModel() {
             gyms.filter { it.id != myGym }.sortedBy { it.name }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** 전체 체육관 — 일정 다이얼로그 장소 옵션(양측 체육관) 라벨 해석용. */
+    val allGyms: StateFlow<List<GymDoc>> =
+        gymsRepo.observeAll()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val directory: StateFlow<List<PublicProfileDoc>> =
         _selectedTargetGymId.flatMapLatest { gid ->

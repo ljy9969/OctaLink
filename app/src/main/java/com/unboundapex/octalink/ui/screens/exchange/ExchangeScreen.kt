@@ -12,8 +12,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +57,7 @@ fun ExchangeScreen(
     val directory by vm.directory.collectAsState()
     val myDuels by vm.myDuels.collectAsState()
     val gymDuels by vm.gymDuels.collectAsState()
+    val allGyms by vm.allGyms.collectAsState()
     val message by vm.message.collectAsState()
 
     val context = LocalContext.current
@@ -134,7 +140,11 @@ fun ExchangeScreen(
     }
 
     scheduleTarget?.let { d ->
+        fun gymLabel(id: String) = allGyms.firstOrNull { it.id == id }
+            ?.let { it.name + (it.branch?.let { b -> " · $b" } ?: "") } ?: id
+        val placeOptions = listOf(gymLabel(d.requesterGymId), gymLabel(d.opponentGymId)).distinct()
         ScheduleDialog(
+            placeOptions = placeOptions,
             onDismiss = { scheduleTarget = null },
             onConfirm = { date, time, place -> vm.schedule(d.id, date, time, place); scheduleTarget = null },
         )
@@ -245,29 +255,86 @@ private fun statusLine(d: ExchangeMatchDoc): String = when (d.status) {
     ExchangeMatchStatus.CANCELLED -> "취소됨"
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScheduleDialog(onDismiss: () -> Unit, onConfirm: (String, String, String) -> Unit) {
-    var date by remember { mutableStateOf("") }
-    var time by remember { mutableStateOf("") }
-    var place by remember { mutableStateOf("") }
+private fun ScheduleDialog(
+    placeOptions: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String) -> Unit,
+) {
+    var dateMillis by remember { mutableStateOf<Long?>(null) }
+    var hour by remember { mutableStateOf<Int?>(null) }
+    var minute by remember { mutableStateOf<Int?>(null) }
+    var place by remember { mutableStateOf(placeOptions.firstOrNull().orEmpty()) }
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
+    var placeOpen by remember { mutableStateOf(false) }
+
+    // DatePicker 는 UTC 자정 millis 를 주므로 UTC 로 날짜 추출(로컬 변환 시 하루 밀림 방지).
+    val dateText = dateMillis?.let {
+        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+    } ?: ""
+    val timeText = if (hour != null && minute != null) "%02d:%02d".format(hour, minute) else ""
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("교류전 일정") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = date, onValueChange = { date = it }, label = { Text("날짜 (예: 2026-09-01)") }, singleLine = true)
-                OutlinedTextField(value = time, onValueChange = { time = it }, label = { Text("시간 (예: 19:30)") }, singleLine = true)
-                OutlinedTextField(value = place, onValueChange = { place = it }, label = { Text("장소") }, singleLine = true)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = { showDate = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (dateText.isBlank()) "📅  날짜 선택" else "📅  $dateText")
+                }
+                OutlinedButton(onClick = { showTime = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (timeText.isBlank()) "🕐  시간 선택" else "🕐  $timeText")
+                }
+                ExposedDropdownMenuBox(expanded = placeOpen, onExpandedChange = { placeOpen = it }) {
+                    OutlinedTextField(
+                        value = place,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("장소") },
+                        placeholder = { Text("체육관 선택") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = placeOpen) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = placeOpen, onDismissRequest = { placeOpen = false }) {
+                        placeOptions.forEach { opt ->
+                            DropdownMenuItem(text = { Text(opt) }, onClick = { place = opt; placeOpen = false })
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(date.trim(), time.trim(), place.trim()) },
-                enabled = date.isNotBlank() && time.isNotBlank() && place.isNotBlank(),
+                onClick = { onConfirm(dateText, timeText, place) },
+                enabled = dateText.isNotBlank() && timeText.isNotBlank() && place.isNotBlank(),
             ) { Text("확정") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
+
+    if (showDate) {
+        val state = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = { dateMillis = state.selectedDateMillis; showDate = false }) { Text("확인") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("취소") } },
+        ) { DatePicker(state = state) }
+    }
+    if (showTime) {
+        val state = rememberTimePickerState(is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            confirmButton = {
+                TextButton(onClick = { hour = state.hour; minute = state.minute; showTime = false }) { Text("확인") }
+            },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("취소") } },
+            text = { Column { TimePicker(state = state) } },
+        )
+    }
 }
 
 @Composable
