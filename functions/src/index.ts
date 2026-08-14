@@ -446,10 +446,14 @@ export const approveDuel = onCall({ region: "asia-northeast3" }, async (request)
     const updates: admin.firestore.DocumentData = {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    if (uid === d.opponentMemberId) updates.opponentApproved = true;
-    else if (isGymStaff(caller, d.requesterGymId)) updates.requesterGymApproved = true;
-    else if (isGymStaff(caller, d.opponentGymId)) updates.opponentGymApproved = true;
-    else throw new HttpsError("permission-denied", "승인 권한이 없어요.");
+    // 한 사람이 여러 승인 역할을 겸할 수 있음(예: 상대 본인이면서 그 체육관의 코치,
+    // 또는 양측 staff 인 CREATOR). else-if 로 하나만 세팅하면 겸직자가 나머지 승인을
+    // 영영 못 채워 교착됨 → 독립 if 로 caller 가 가진 모든 역할의 승인을 한 번에 반영.
+    let touched = false;
+    if (uid === d.opponentMemberId) { updates.opponentApproved = true; touched = true; }
+    if (isGymStaff(caller, d.requesterGymId)) { updates.requesterGymApproved = true; touched = true; }
+    if (isGymStaff(caller, d.opponentGymId)) { updates.opponentGymApproved = true; touched = true; }
+    if (!touched) throw new HttpsError("permission-denied", "승인 권한이 없어요.");
 
     const opp = updates.opponentApproved ?? d.opponentApproved;
     const rg = updates.requesterGymApproved ?? d.requesterGymApproved;
