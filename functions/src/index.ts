@@ -356,6 +356,12 @@ function isGymStaff(member: MemberData, gymId: string): boolean {
   return member.gymId === gymId && (member.role === "MASTER" || member.role === "COACH");
 }
 
+const DUEL_BANDS = ["MORNING", "AFTERNOON", "EVENING"];
+function duelBandOrder(b: string): number {
+  const i = DUEL_BANDS.indexOf(b);
+  return i < 0 ? 99 : i;
+}
+
 export const requestDuel = onCall({ region: "asia-northeast3" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const uid = request.auth.uid;
@@ -464,6 +470,67 @@ export const approveDuel = onCall({ region: "asia-northeast3" }, async (request)
   return { ok: true };
 });
 
+export const proposeDuelSlots = onCall({ region: "asia-northeast3" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const matchId = (request.data?.matchId as string | undefined)?.trim();
+  const slots = request.data?.slots as string[] | undefined;
+  if (!matchId || !Array.isArray(slots) || slots.length < 1 || slots.length > 3) {
+    throw new HttpsError("invalid-argument", "matchId 와 슬롯(1~3개)이 필요해요.");
+  }
+  const todayKst = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  const norm: string[] = [];
+  for (const s of slots) {
+    const m = /^(\d{4}-\d{2}-\d{2})\|(MORNING|AFTERNOON|EVENING)$/.exec(s ?? "");
+    if (!m) throw new HttpsError("invalid-argument", "슬롯 형식이 올바르지 않아요.");
+    if (m[1] < todayKst) throw new HttpsError("invalid-argument", "오늘 이후 날짜만 제시할 수 있어요.");
+    if (!norm.includes(s)) norm.push(s);
+  }
+  await loadApprovedCaller(uid);
+  const ref = admin.firestore().doc(`exchangeMatches/${matchId}`);
+  await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const d = snap.data();
+    if (!d) throw new HttpsError("not-found", "교류전을 찾을 수 없어요.");
+    if (d.status !== "APPROVED") throw new HttpsError("failed-precondition", "승인 완료된 교류전만 일정을 제시할 수 있어요.");
+    const isRequester = uid === d.requesterMemberId;
+    const isOpponent = uid === d.opponentMemberId;
+    if (!isRequester && !isOpponent) throw new HttpsError("permission-denied", "대전자만 일정을 제시할 수 있어요.");
+
+    const updates: admin.firestore.DocumentData = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+    if (isRequester) updates.requesterSlots = norm;
+    else updates.opponentSlots = norm;
+
+    const reqSlots: string[] = isRequester ? norm : (d.requesterSlots ?? []);
+    const oppSlots: string[] = isOpponent ? norm : (d.opponentSlots ?? []);
+    if (reqSlots.length > 0 && oppSlots.length > 0) {
+      const common = reqSlots.filter((s) => oppSlots.includes(s));
+      if (common.length > 0) {
+        common.sort((a, b) => {
+          const [da, ba] = a.split("|");
+          const [db, bb] = b.split("|");
+          return da === db ? duelBandOrder(ba) - duelBandOrder(bb) : (da < db ? -1 : 1);
+        });
+        const [date, band] = common[0].split("|");
+        updates.scheduledDate = date;
+        updates.scheduledBand = band;
+        updates.status = "MATCHED";
+      }
+    }
+    tx.update(ref, updates);
+  });
+  const after = (await ref.get()).data();
+  if (after?.status === "MATCHED") {
+    await sendNotificationTo(
+      [after.requesterMemberId, after.opponentMemberId],
+      "DUEL_SCHEDULED",
+      "교류전 일정 매칭",
+      `${after.requesterName ?? ""} vs ${after.opponentName ?? ""} — 일정이 맞춰졌어요. 운영진 확정을 기다려요.`,
+    );
+  }
+  return { ok: true };
+});
+
 export const rejectDuel = onCall({ region: "asia-northeast3" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const uid = request.auth.uid;
@@ -490,16 +557,10 @@ export const scheduleDuel = onCall({ region: "asia-northeast3" }, async (request
   const uid = request.auth.uid;
   const data = request.data ?? {};
   const matchId = (data.matchId as string | undefined)?.trim();
-  const date = (data.date as string | undefined)?.trim();
   const time = (data.time as string | undefined)?.trim();
   const place = (data.place as string | undefined)?.trim();
-  if (!matchId || !date || !time || !place) {
-    throw new HttpsError("invalid-argument", "matchId/date/time/place required");
-  }
-  // 일정은 오늘(KST)부터만 — 과거 날짜 금지. date 는 ISO "yyyy-MM-dd" 라 문자열 비교로 안전.
-  const todayKst = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < todayKst) {
-    throw new HttpsError("invalid-argument", "교류전 일정은 오늘 이후로만 정할 수 있어요.");
+  if (!matchId || !time || !place) {
+    throw new HttpsError("invalid-argument", "matchId/time/place required");
   }
   const caller = await loadApprovedCaller(uid);
   const ref = admin.firestore().doc(`exchangeMatches/${matchId}`);
@@ -507,18 +568,23 @@ export const scheduleDuel = onCall({ region: "asia-northeast3" }, async (request
   const d = snap.data();
   if (!d) throw new HttpsError("not-found", "교류전을 찾을 수 없어요.");
   if (!isGymStaff(caller, d.requesterGymId) && !isGymStaff(caller, d.opponentGymId)) {
-    throw new HttpsError("permission-denied", "운영진만 일정을 정할 수 있어요.");
+    throw new HttpsError("permission-denied", "운영진만 확정할 수 있어요.");
   }
-  if (d.status !== "APPROVED" && d.status !== "SCHEDULED") {
-    throw new HttpsError("failed-precondition", "승인 완료된 교류전만 일정을 정할 수 있어요.");
+  if (d.status !== "MATCHED") {
+    throw new HttpsError("failed-precondition", "매칭된 교류전만 확정할 수 있어요.");
   }
   await ref.update({
-    scheduledDate: date,
     scheduledTime: time,
     place,
     status: "SCHEDULED",
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+  await sendNotificationTo(
+    [d.requesterMemberId, d.opponentMemberId],
+    "DUEL_SCHEDULED",
+    "교류전 일정 확정",
+    `${d.requesterName ?? ""} vs ${d.opponentName ?? ""} — ${d.scheduledDate} ${time} @ ${place}`,
+  );
   return { ok: true };
 });
 
@@ -926,7 +992,8 @@ type NotificationTypeKey =
   | "NEW_SIGNUP_PENDING"
   | "NEW_SKILL_PROPOSAL"
   // 교류전 — 결투 신청 시 상대 + 양측 운영진에게.
-  | "DUEL_REQUESTED";
+  | "DUEL_REQUESTED"
+  | "DUEL_SCHEDULED";
 
 /** [NotificationType.defaultEnabled] 과 일치 — 클라이언트에서 prefs 키 누락 시 기본값. */
 const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
@@ -940,6 +1007,7 @@ const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
   NEW_SIGNUP_PENDING: true,
   NEW_SKILL_PROPOSAL: true,
   DUEL_REQUESTED: true,
+  DUEL_SCHEDULED: true,
 };
 
 /**
@@ -958,6 +1026,7 @@ const CHANNEL_ID: Record<NotificationTypeKey, string> = {
   NEW_SIGNUP_PENDING: "octalink_admin_signup_pending",
   NEW_SKILL_PROPOSAL: "octalink_admin_skill_proposal",
   DUEL_REQUESTED: "octalink_duel",
+  DUEL_SCHEDULED: "octalink_duel_scheduled",
 };
 
 /**
