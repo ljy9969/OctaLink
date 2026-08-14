@@ -30,9 +30,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -82,6 +84,7 @@ fun ExchangeScreen(
             .toSet()
     }
 
+    var proposeTarget by remember { mutableStateOf<ExchangeMatchDoc?>(null) }
     var scheduleTarget by remember { mutableStateOf<ExchangeMatchDoc?>(null) }
     var resultTarget by remember { mutableStateOf<ExchangeMatchDoc?>(null) }
 
@@ -133,6 +136,7 @@ fun ExchangeScreen(
                     isStaff = isStaff,
                     onApprove = { vm.approve(d.id) },
                     onReject = { vm.reject(d.id) },
+                    onPropose = { proposeTarget = d },
                     onSchedule = { scheduleTarget = d },
                     onResult = { resultTarget = d },
                 )
@@ -140,14 +144,24 @@ fun ExchangeScreen(
         }
     }
 
+    proposeTarget?.let { d ->
+        val mine = if (memberId == d.opponentMemberId) d.opponentSlots else d.requesterSlots
+        ProposeSlotsDialog(
+            initial = mine,
+            onDismiss = { proposeTarget = null },
+            onConfirm = { slots -> vm.propose(d.id, slots); proposeTarget = null },
+        )
+    }
     scheduleTarget?.let { d ->
         fun gymLabel(id: String) = allGyms.firstOrNull { it.id == id }
             ?.let { it.name + (it.branch?.let { b -> " · $b" } ?: "") } ?: id
         val placeOptions = listOf(gymLabel(d.requesterGymId), gymLabel(d.opponentGymId)).distinct()
-        ScheduleDialog(
+        FinalizeDialog(
+            matchedDate = d.scheduledDate,
+            matchedBand = d.scheduledBand,
             placeOptions = placeOptions,
             onDismiss = { scheduleTarget = null },
-            onConfirm = { date, time, place -> vm.schedule(d.id, date, time, place); scheduleTarget = null },
+            onConfirm = { time, place -> vm.schedule(d.id, time, place); scheduleTarget = null },
         )
     }
     resultTarget?.let { d ->
@@ -200,6 +214,7 @@ private fun DuelRow(
     isStaff: Boolean,
     onApprove: () -> Unit,
     onReject: () -> Unit,
+    onPropose: () -> Unit,
     onSchedule: () -> Unit,
     onResult: () -> Unit,
 ) {
@@ -214,7 +229,8 @@ private fun DuelRow(
             || (staffOfOpp && !d.opponentGymApproved)
     )
     val canReject = d.status == ExchangeMatchStatus.REQUESTED && (iAmParticipant || staffOfReq || staffOfOpp)
-    val canSchedule = d.status == ExchangeMatchStatus.APPROVED && (staffOfReq || staffOfOpp)
+    val canPropose = d.status == ExchangeMatchStatus.APPROVED && iAmParticipant
+    val canSchedule = d.status == ExchangeMatchStatus.MATCHED && (staffOfReq || staffOfOpp)
     val canResult = d.status == ExchangeMatchStatus.SCHEDULED && (staffOfReq || staffOfOpp)
 
     PosseCard {
@@ -232,11 +248,26 @@ private fun DuelRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (canApprove || canReject || canSchedule || canResult) {
+            if (d.status == ExchangeMatchStatus.APPROVED) {
+                val mine = if (iAmOpponent) d.opponentSlots else d.requesterSlots
+                val oppDone = if (iAmOpponent) d.requesterSlots.isNotEmpty() else d.opponentSlots.isNotEmpty()
+                val bothTried = d.requesterSlots.isNotEmpty() && d.opponentSlots.isNotEmpty()
+                Text(
+                    when {
+                        bothTried -> "일정 불일치 — 다시 제시해 주세요."
+                        mine.isNotEmpty() -> "내 일정 제시 완료 · 상대 ${if (oppDone) "완료" else "대기"}"
+                        else -> "가능한 일정을 제시해 주세요."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (canApprove || canReject || canPropose || canSchedule || canResult) {
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (canApprove) Button(onClick = onApprove) { Text("승인") }
-                    if (canSchedule) Button(onClick = onSchedule) { Text("일정 정하기") }
+                    if (canPropose) Button(onClick = onPropose) { Text("일정 제시") }
+                    if (canSchedule) Button(onClick = onSchedule) { Text("장소·시간 확정") }
                     if (canResult) Button(onClick = onResult) { Text("결과 입력") }
                     if (canReject) OutlinedButton(onClick = onReject) { Text("반려/취소") }
                 }
@@ -250,8 +281,8 @@ private fun chk(b: Boolean) = if (b) "✓" else "…"
 private fun statusLine(d: ExchangeMatchDoc): String = when (d.status) {
     ExchangeMatchStatus.REQUESTED -> "요청됨 — 승인 대기"
     ExchangeMatchStatus.APPROVED -> "승인 완료 — 일정 대기"
-    ExchangeMatchStatus.MATCHED -> "일정 매칭됨 — 확정 대기"
-    ExchangeMatchStatus.SCHEDULED -> "일정 확정 · ${schedDateLabel(d.scheduledDate)} ${schedTimeLabel(d.scheduledTime)} @ ${d.place}"
+    ExchangeMatchStatus.MATCHED -> "일정 매칭 · ${schedDateLabel(d.scheduledDate)} ${d.scheduledBand?.let { bandLabel(it) } ?: ""} · 장소·시간 확정 대기"
+    ExchangeMatchStatus.SCHEDULED -> "일정 확정 · ${schedDateLabel(d.scheduledDate)} ${d.scheduledBand?.let { bandLabel(it) } ?: ""} ${schedTimeLabel(d.scheduledTime)} @ ${d.place}"
     ExchangeMatchStatus.COMPLETED -> if (d.isDraw) "종료 · 무승부" else "종료 · 승자 ${if (d.winnerMemberId == d.requesterMemberId) d.requesterName else d.opponentName}"
     ExchangeMatchStatus.REJECTED -> "반려됨"
     ExchangeMatchStatus.CANCELLED -> "취소됨"
@@ -269,78 +300,76 @@ private fun schedTimeLabel(hhmm: String?): String {
     return t.format(java.time.format.DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
 }
 
+private val DUEL_BANDS = listOf("MORNING", "AFTERNOON", "EVENING")
+private fun bandLabel(b: String): String = when (b) {
+    "MORNING" -> "오전"; "AFTERNOON" -> "오후"; "EVENING" -> "저녁"; else -> b
+}
+/** "yyyy-MM-dd" → "YY/MM/DD (요일)". schedDateLabel 재사용. */
+private fun slotDateLabel(iso: String): String = schedDateLabel(iso)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScheduleDialog(
-    placeOptions: List<String>,
+private fun ProposeSlotsDialog(
+    initial: List<String>,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String) -> Unit,
+    onConfirm: (List<String>) -> Unit,
 ) {
-    var dateMillis by remember { mutableStateOf<Long?>(null) }
-    var hour by remember { mutableStateOf<Int?>(null) }
-    var minute by remember { mutableStateOf<Int?>(null) }
-    var place by remember { mutableStateOf(placeOptions.firstOrNull().orEmpty()) }
+    val slots = remember { mutableStateListOf<String>().apply { addAll(initial) } }
+    var pickDateMillis by remember { mutableStateOf<Long?>(null) }
+    var pickBand by remember { mutableStateOf<String?>(null) }
     var showDate by remember { mutableStateOf(false) }
-    var showTime by remember { mutableStateOf(false) }
-    var placeOpen by remember { mutableStateOf(false) }
 
-    // DatePicker 는 UTC 자정 millis 를 주므로 UTC 로 날짜 추출(로컬 변환 시 하루 밀림 방지).
-    // 표시 포맷: YY/MM/DD (요일) — 예: "26/08/14 (금)".
-    val dateText = dateMillis?.let {
-        val ld = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-        "%02d/%02d/%02d (%s)".format(ld.year % 100, ld.monthValue, ld.dayOfMonth, dayLabelKor(ld.dayOfWeek))
-    } ?: ""
-    // 표시 포맷: 오전/오후 h:mm — 예: "오후 7:30".
-    val timeText = if (hour != null && minute != null) {
-        java.time.LocalTime.of(hour!!, minute!!)
-            .format(java.time.format.DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
-    } else ""
-    // 저장은 파싱 가능한 ISO 로(배지의 일정 당일 비교·정렬용). 표시는 위 dateText/timeText.
-    val isoDate = dateMillis?.let {
+    val pickDateIso = pickDateMillis?.let {
         java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
-    } ?: ""
-    val isoTime = if (hour != null && minute != null) "%02d:%02d".format(hour!!, minute!!) else ""
+    }
+    fun addSlot() {
+        val iso = pickDateIso ?: return
+        val band = pickBand ?: return
+        val s = "$iso|$band"
+        if (slots.size < 3 && s !in slots) slots.add(s)
+        pickDateMillis = null; pickBand = null
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("교류전 일정") },
+        title = { Text("가능한 일정 제시 (최대 3개)") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = { showDate = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (dateText.isBlank()) "📅  날짜 선택" else "📅  $dateText")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                slots.forEach { s ->
+                    val (iso, band) = s.split("|")
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${slotDateLabel(iso)} ${bandLabel(band)}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = { slots.remove(s) }) { Text("삭제") }
+                    }
                 }
-                OutlinedButton(onClick = { showTime = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (timeText.isBlank()) "🕐  시간 선택" else "🕐  $timeText")
-                }
-                ExposedDropdownMenuBox(expanded = placeOpen, onExpandedChange = { placeOpen = it }) {
-                    OutlinedTextField(
-                        value = place,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("장소") },
-                        placeholder = { Text("체육관 선택") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = placeOpen) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    )
-                    ExposedDropdownMenu(expanded = placeOpen, onDismissRequest = { placeOpen = false }) {
-                        placeOptions.forEach { opt ->
-                            DropdownMenuItem(text = { Text(opt) }, onClick = { place = opt; placeOpen = false })
+                if (slots.size < 3) {
+                    Text("새 슬롯 추가", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { showDate = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(pickDateIso?.let { "📅  ${slotDateLabel(it)}" } ?: "📅  날짜 선택")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DUEL_BANDS.forEach { b ->
+                            val sel = pickBand == b
+                            OutlinedButton(
+                                onClick = { pickBand = b },
+                                colors = if (sel) androidx.compose.material3.ButtonDefaults.buttonColors() else androidx.compose.material3.ButtonDefaults.outlinedButtonColors(),
+                            ) { Text(bandLabel(b)) }
                         }
                     }
+                    TextButton(
+                        onClick = { addSlot() },
+                        enabled = pickDateIso != null && pickBand != null,
+                    ) { Text("+ 슬롯 추가") }
                 }
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = { onConfirm(isoDate, isoTime, place) },
-                enabled = isoDate.isNotBlank() && isoTime.isNotBlank() && place.isNotBlank(),
-            ) { Text("확정") }
+            TextButton(onClick = { onConfirm(slots.toList()) }, enabled = slots.isNotEmpty()) { Text("제시") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
 
     if (showDate) {
-        // 오늘(KST)부터만 선택 가능하도록 강제 — 과거 날짜/연도 비활성.
         val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
         val minMillis = today.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
         val minYear = today.year
@@ -353,19 +382,67 @@ private fun ScheduleDialog(
         val state = rememberDatePickerState(selectableDates = selectable)
         DatePickerDialog(
             onDismissRequest = { showDate = false },
-            confirmButton = {
-                TextButton(onClick = { dateMillis = state.selectedDateMillis; showDate = false }) { Text("확인") }
-            },
+            confirmButton = { TextButton(onClick = { pickDateMillis = state.selectedDateMillis; showDate = false }) { Text("확인") } },
             dismissButton = { TextButton(onClick = { showDate = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FinalizeDialog(
+    matchedDate: String?,
+    matchedBand: String?,
+    placeOptions: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit,   // (time "HH:mm", place)
+) {
+    var hour by remember { mutableStateOf<Int?>(null) }
+    var minute by remember { mutableStateOf<Int?>(null) }
+    var place by remember { mutableStateOf(placeOptions.firstOrNull().orEmpty()) }
+    var showTime by remember { mutableStateOf(false) }
+    var placeOpen by remember { mutableStateOf(false) }
+
+    val timeText = if (hour != null && minute != null) {
+        java.time.LocalTime.of(hour!!, minute!!).format(java.time.format.DateTimeFormatter.ofPattern("a h:mm", java.util.Locale.KOREAN))
+    } else ""
+    val isoTime = if (hour != null && minute != null) "%02d:%02d".format(hour!!, minute!!) else ""
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("교류전 확정") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "매칭 일정 · ${matchedDate?.let { schedDateLabel(it) } ?: ""} ${matchedBand?.let { bandLabel(it) } ?: ""}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = { showTime = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (timeText.isBlank()) "🕐  정확한 시간 선택" else "🕐  $timeText")
+                }
+                ExposedDropdownMenuBox(expanded = placeOpen, onExpandedChange = { placeOpen = it }) {
+                    OutlinedTextField(
+                        value = place, onValueChange = {}, readOnly = true, label = { Text("장소") },
+                        placeholder = { Text("체육관 선택") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = placeOpen) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = placeOpen, onDismissRequest = { placeOpen = false }) {
+                        placeOptions.forEach { opt -> DropdownMenuItem(text = { Text(opt) }, onClick = { place = opt; placeOpen = false }) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(isoTime, place) }, enabled = isoTime.isNotBlank() && place.isNotBlank()) { Text("확정") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
     if (showTime) {
         val state = rememberTimePickerState(is24Hour = true)
         AlertDialog(
             onDismissRequest = { showTime = false },
-            confirmButton = {
-                TextButton(onClick = { hour = state.hour; minute = state.minute; showTime = false }) { Text("확인") }
-            },
+            confirmButton = { TextButton(onClick = { hour = state.hour; minute = state.minute; showTime = false }) { Text("확인") } },
             dismissButton = { TextButton(onClick = { showTime = false }) { Text("취소") } },
             text = { Column { TimePicker(state = state) } },
         )

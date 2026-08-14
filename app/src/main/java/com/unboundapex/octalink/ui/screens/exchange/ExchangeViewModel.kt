@@ -98,8 +98,8 @@ class ExchangeViewModel : ViewModel() {
     fun reject(id: String) = run("반려/취소했어요.") { exRepo.rejectDuel(id) }
     fun propose(id: String, slots: List<String>) =
         run("가능한 일정을 제시했어요.") { exRepo.proposeDuelSlots(id, slots) }
-    fun schedule(id: String, d: String, t: String, p: String) =
-        run("일정을 정했어요.") { exRepo.scheduleDuel(id, d, t, p) }
+    fun schedule(id: String, time: String, place: String) =
+        run("일정을 확정했어요.") { exRepo.scheduleDuel(id, time, place) }
     fun recordResult(id: String, winnerId: String?, draw: Boolean) =
         run("결과를 기록했어요.") { exRepo.recordResult(id, winnerId, draw) }
 }
