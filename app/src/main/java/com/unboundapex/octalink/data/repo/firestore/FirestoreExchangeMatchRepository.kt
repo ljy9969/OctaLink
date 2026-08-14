@@ -42,6 +42,10 @@ class FirestoreExchangeMatchRepository : ExchangeMatchRepository {
         call("rejectDuel", mapOf("matchId" to matchId))
     }
 
+    override suspend fun proposeDuelSlots(matchId: String, slots: List<String>) {
+        call("proposeDuelSlots", mapOf("matchId" to matchId, "slots" to slots))
+    }
+
     override suspend fun scheduleDuel(matchId: String, date: String, time: String, place: String) {
         call("scheduleDuel", mapOf("matchId" to matchId, "date" to date, "time" to time, "place" to place))
     }

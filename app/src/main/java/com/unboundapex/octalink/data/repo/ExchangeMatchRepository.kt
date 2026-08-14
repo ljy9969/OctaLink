@@ -18,6 +18,7 @@ interface ExchangeMatchRepository {
     suspend fun requestDuel(opponentMemberId: String)
     suspend fun approveDuel(matchId: String)
     suspend fun rejectDuel(matchId: String)
+    suspend fun proposeDuelSlots(matchId: String, slots: List<String>)
     suspend fun scheduleDuel(matchId: String, date: String, time: String, place: String)
     suspend fun recordResult(matchId: String, winnerMemberId: String?, isDraw: Boolean)
 }
