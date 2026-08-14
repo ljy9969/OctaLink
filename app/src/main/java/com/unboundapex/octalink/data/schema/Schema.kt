@@ -219,6 +219,13 @@ enum class NotificationType(
         channelName = "교류전",
         channelDescription = "교류전 신청·승인 알림",
     ),
+    DUEL_SCHEDULED(
+        displayName = "교류전 일정",
+        description = "교류전 일정이 매칭/확정됐을 때",
+        channelId = "octalink_duel_scheduled",
+        channelName = "교류전 일정",
+        channelDescription = "교류전 일정 매칭·확정 알림",
+    ),
 }
 
 /** 정기 클래스 정의 (요일별 운영 슬롯 — 변경 빈도 낮음) */
@@ -402,7 +409,7 @@ data class GymDoc(
  * REQUESTED → (상대+양측 운영진 승인) → APPROVED → (운영진 일정 지정) → SCHEDULED →
  * (운영진 결과 기록) → COMPLETED. 중도 거부/취소는 REJECTED/CANCELLED.
  */
-enum class ExchangeMatchStatus { REQUESTED, APPROVED, SCHEDULED, COMPLETED, REJECTED, CANCELLED }
+enum class ExchangeMatchStatus { REQUESTED, APPROVED, MATCHED, SCHEDULED, COMPLETED, REJECTED, CANCELLED }
 
 /**
  * 교류전 한 건 — `exchangeMatches/{id}` (top-level, 양쪽 gymId 로 조회).
@@ -426,6 +433,9 @@ data class ExchangeMatchDoc(
     /** 일정 (SCHEDULED 이후). */
     val scheduledDate: String? = null, // "YYYY-MM-DD"
     val scheduledTime: String? = null, // "HH:mm"
+    val scheduledBand: String? = null,
+    val requesterSlots: List<String> = emptyList(),
+    val opponentSlots: List<String> = emptyList(),
     val place: String? = null,
     /** 결과 (COMPLETED). [isDraw] true 면 무승부, 아니면 [winnerMemberId] 승. */
     val winnerMemberId: String? = null,

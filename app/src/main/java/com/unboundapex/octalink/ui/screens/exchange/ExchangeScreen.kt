@@ -250,6 +250,7 @@ private fun chk(b: Boolean) = if (b) "✓" else "…"
 private fun statusLine(d: ExchangeMatchDoc): String = when (d.status) {
     ExchangeMatchStatus.REQUESTED -> "요청됨 — 승인 대기"
     ExchangeMatchStatus.APPROVED -> "승인 완료 — 일정 대기"
+    ExchangeMatchStatus.MATCHED -> "일정 매칭됨 — 확정 대기"
     ExchangeMatchStatus.SCHEDULED -> "일정 확정 · ${schedDateLabel(d.scheduledDate)} ${schedTimeLabel(d.scheduledTime)} @ ${d.place}"
     ExchangeMatchStatus.COMPLETED -> if (d.isDraw) "종료 · 무승부" else "종료 · 승자 ${if (d.winnerMemberId == d.requesterMemberId) d.requesterName else d.opponentName}"
     ExchangeMatchStatus.REJECTED -> "반려됨"
