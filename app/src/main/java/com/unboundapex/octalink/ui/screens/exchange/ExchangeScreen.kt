@@ -339,7 +339,17 @@ private fun ScheduleDialog(
     )
 
     if (showDate) {
-        val state = rememberDatePickerState()
+        // 오늘(KST)부터만 선택 가능하도록 강제 — 과거 날짜/연도 비활성.
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+        val minMillis = today.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        val minYear = today.year
+        val selectable = remember(minMillis) {
+            object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= minMillis
+                override fun isSelectableYear(year: Int): Boolean = year >= minYear
+            }
+        }
+        val state = rememberDatePickerState(selectableDates = selectable)
         DatePickerDialog(
             onDismissRequest = { showDate = false },
             confirmButton = {

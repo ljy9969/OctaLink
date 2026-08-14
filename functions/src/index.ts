@@ -496,6 +496,11 @@ export const scheduleDuel = onCall({ region: "asia-northeast3" }, async (request
   if (!matchId || !date || !time || !place) {
     throw new HttpsError("invalid-argument", "matchId/date/time/place required");
   }
+  // 일정은 오늘(KST)부터만 — 과거 날짜 금지. date 는 ISO "yyyy-MM-dd" 라 문자열 비교로 안전.
+  const todayKst = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < todayKst) {
+    throw new HttpsError("invalid-argument", "교류전 일정은 오늘 이후로만 정할 수 있어요.");
+  }
   const caller = await loadApprovedCaller(uid);
   const ref = admin.firestore().doc(`exchangeMatches/${matchId}`);
   const snap = await ref.get();
