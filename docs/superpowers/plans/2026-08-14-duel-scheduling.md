@@ -330,7 +330,7 @@ private fun slotDateLabel(iso: String): String = schedDateLabel(iso)
 
 - [ ] **Step 2: statusLine 의 MATCHED/SCHEDULED 갱신**
 
-`statusLine` 의 SCHEDULED 라인을 교체하고 MATCHED 라인 추가:
+`statusLine` 의 임시 MATCHED 라인(`"일정 매칭됨 — 확정 대기"`, Task 1에서 추가됨)과 SCHEDULED 라인을 아래 두 줄로 교체:
 ```kotlin
     ExchangeMatchStatus.MATCHED -> "일정 매칭 · ${schedDateLabel(d.scheduledDate)} ${d.scheduledBand?.let { bandLabel(it) } ?: ""} · 장소·시간 확정 대기"
     ExchangeMatchStatus.SCHEDULED -> "일정 확정 · ${schedDateLabel(d.scheduledDate)} ${d.scheduledBand?.let { bandLabel(it) } ?: ""} ${schedTimeLabel(d.scheduledTime)} @ ${d.place}"
