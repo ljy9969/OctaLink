@@ -13,11 +13,11 @@ test('applyProfile writes model + trigger into agent config.json', () => {
     name: 'x', risk: 'safe', trigger: 'old', model: { provider: 'dryrun', name: 'dryrun' },
     budget: { maxRetries: 1, maxUsd: 0.1 }, stop: 'verifier_pass', isolate: false }));
   writeFileSync(join(ops, 'profiles', 'p.json'), JSON.stringify({
-    agents: { x: { provider: 'anthropic-oauth', name: 'anthropic/claude-sonnet-5', trigger: 'cron:0 9 * * *' } } }));
+    agents: { x: { provider: 'ollama', name: 'ollama/qwen2.5:7b', trigger: 'cron:0 9 * * *' } } }));
   const changed = applyProfile(ops, 'p');
   const cfg = JSON.parse(readFileSync(join(ops, 'agents', 'x', 'config.json'), 'utf8'));
-  assert.equal(cfg.model.provider, 'anthropic-oauth');
-  assert.equal(cfg.model.name, 'anthropic/claude-sonnet-5');
+  assert.equal(cfg.model.provider, 'ollama');
+  assert.equal(cfg.model.name, 'ollama/qwen2.5:7b');
   assert.equal(cfg.trigger, 'cron:0 9 * * *');
   assert.equal(cfg.risk, 'safe');  // 나머지 필드 보존
   assert.equal(changed.length, 1);

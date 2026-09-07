@@ -13,8 +13,8 @@
 | 항목 | 결정 | 근거 |
 |---|---|---|
 | 실행 기반 | **하이브리드** — 지금은 Claude Code/로컬에서 이식 가능한 스킬/스크립트로 실행, 서버 계정 생기면 동일 코드를 클라우드로 승격 | 계정 없이 오늘 실제 루프 시연 가능 + 24/7로 점진 승격 |
-| 모델 계층화 | **CEO 루프 = Claude(Opus/Sonnet) 고정**. **8 에이전트 = 에이전트별 config에서 자유 선택**: OpenRouter 오픈소스(DeepSeek-V3 / Llama-3.3-70B) **또는 Claude 저가 모델(Haiku 4.5, `anthropic/claude-haiku-4-5-20251001`)**. 검증 서브에이전트도 동일하게 선택 | 방향·판단은 프런티어; 실행은 비용·품질·데이터보안 트레이드오프에 따라 provider 선택 |
-| 저가 모델 경로 | **OpenRouter** (로컬 Ollama는 소형 양자화라 한국어 카피·JSON 준수·판정 신뢰도 미검증 → 제외, 단 router 백엔드로 남겨둠) | 품질 안정성 |
+| 모델 계층화 | **CEO 루프 = Claude(Opus/Sonnet) 고정**. **8 에이전트 = 프로필로 선택**: 버전 A OpenRouter 오픈소스(DeepSeek/Llama/Qwen) 또는 버전 C 로컬 Ollama(무료). `apply-profile`로 일괄 전환 | 방향·판단은 프런티어; 실행은 비용·품질 트레이드오프로 선택 |
+| ~~버전 B (Claude Max OAuth)~~ | **폐기** — Max 구독은 API 호출 미포함(크레딧 필요)이라 에이전트 자동 실행 불가로 확인됨 | 검증 결과 반영 |
 | 자율성 | **게이트형 자율운영** — 루프는 계속 돌되, 되돌릴 수 없거나 외부로 나가는 행동은 승인 대기 | 광고·결제·공개게시·고객응대 리스크 차단 |
 | 계정 생성 | **제가 대신 생성 불가** — 서버·결제사 가입은 실명/KYC/카드/약관동의 필요. 저는 런북 + 자격증명 슬롯 + 연결코드 제공, 가입은 사용자 본인 | 신원 도용·법적 동의 불가 |
 | 브랜치 | `main` 단일(feature 브랜치 없음), 격리는 **git worktree**로 | 사용자 정책 |
@@ -105,15 +105,19 @@ ops/
 - `risk: gated` (나머지 6) → 결과물은 `approvals/`에 제안서로 생성, 사람이 OK해야 외부 실행(게시/집행/머지)
 - 돈이 나가는 액션(ads 집행, payments 이동)은 **항상** 게이트 + 예산 상한(config) 이중 안전
 
-## 9. 모델 라우팅 (에이전트별 config에서 자유 선택)
+## 9. 모델 라우팅 (프로필로 전환, `apply-profile`)
 
-| 역할 | 기본 | 대안 | 비고 |
-|---|---|---|---|
-| CEO 루프 | Claude Opus/Sonnet (비싼·똑똑) | — | 방향·판단, 고정 |
-| 실행 에이전트 | OpenRouter 오픈소스(`openrouter/deepseek/deepseek-chat`, `openrouter/meta-llama/llama-3.3-70b-instruct`) | **Claude 저가(`anthropic/claude-haiku-4-5-20251001`)** / (옵션)`ollama/*` | 에이전트 `config.model.{provider,name}`로 지정 |
-| 검증 서브에이전트 | 실행 모델과 동급/중급 | Claude Haiku | 참/거짓 판정 |
+에이전트 실행 모델은 `ops/profiles/`의 버전을 `apply-profile <name>`로 8개 config에 일괄 반영한다.
 
-**엔진 요구(Phase 1b)**: (1) 가격표에 Haiku 4.5 추가, (2) provider는 `config.model.provider`를 권위로 사용(model.name 접두사 휴리스틱 대체 — Task7 이연 #2), (3) 검증 호출 비용도 예산/원장/일일캡에 합산(이연 #3). 이로써 각 에이전트를 OpenRouter 오픈소스 ↔ Claude Haiku 간 config 한 줄로 전환 가능.
+| 버전 | provider | 모델 | 비용 | 필요물 |
+|---|---|---|---|---|
+| **A (기본)** | openrouter | 역할별 오픈소스(DeepSeek-V3 / Llama-3.3-70B / 한국어 Qwen-2.5-72B) | 저렴(종량) | OpenRouter 키 |
+| **C** | ollama | 로컬 qwen2.5(7B/14B) | **무료** | Ollama 설치+pull(카드·계정 X) |
+| CEO 루프 | (별도) Claude | Opus/Sonnet | — | 방향·판단, 고정 |
+
+**폐기: 구 버전 B(Claude Max 구독 OAuth, `anthropic-oauth`)** — Max 구독은 API 호출을 포함하지 않아(`api.anthropic.com`이 크레딧 요구) 에이전트 자동 실행에 사용 불가함이 확인됨. 관련 프로필·provider·런북 제거.
+
+**엔진**: provider는 `config.model.provider`를 권위로 사용, 검증 호출 비용도 예산/원장/일일캡에 합산. provider 자격증명 없으면 dryrun 폴백.
 
 ## 10. 단계별 구축 계획
 

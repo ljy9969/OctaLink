@@ -3,8 +3,8 @@
   "risk": "gated",
   "trigger": "cron:0 14 * * 2 | event:issue.assigned",
   "model": {
-    "provider": "anthropic-oauth",
-    "name": "anthropic/claude-sonnet-5"
+    "provider": "openrouter",
+    "name": "openrouter/deepseek/deepseek-chat"
   },
   "budget": {
     "maxRetries": 3,

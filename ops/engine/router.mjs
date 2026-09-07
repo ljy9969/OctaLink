@@ -54,24 +54,6 @@ export function createRouter({ transport = globalThis.fetch, env = process.env }
       return { text, usage: { ...usage, costUsd: estimateCost(model, usage) } };
     }
 
-    if (provider === 'anthropic-oauth') {
-      // Claude Max 구독을 OAuth Bearer 토큰으로 사용(종량 과금 없음 → cost 0).
-      // 토큰: `ant auth login` 후 `ant auth print-credentials --access-token` (단기 토큰).
-      const token = env.ANTHROPIC_AUTH_TOKEN;
-      if (!token) return dryrun(model, messages);
-      const res = await transport('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`,
-          'anthropic-version': '2023-06-01', 'anthropic-beta': 'oauth-2025-04-20' },
-        body: JSON.stringify({ model: model.replace(/^anthropic\//, ''),
-          max_tokens: maxTokens, system, messages }),
-      });
-      const j = await res.json();
-      const usage = { inputTokens: j.usage?.input_tokens ?? 0, outputTokens: j.usage?.output_tokens ?? 0 };
-      const text = (j.content ?? []).map((b) => b.text ?? '').join('');
-      return { text, usage: { ...usage, costUsd: 0 } };
-    }
-
     if (provider === 'ollama') {
       const res = await transport(`${env.OLLAMA_URL ?? 'http://localhost:11434'}/api/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

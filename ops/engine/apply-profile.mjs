@@ -22,7 +22,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
   const opsRoot = process.env.OPS_ROOT || join(here, '..');
   const name = process.argv[2];
-  if (!['openrouter', 'max'].includes(name)) { console.error('usage: apply-profile.mjs <openrouter|max>'); process.exit(1); }
+  if (!['openrouter', 'ollama'].includes(name)) { console.error('usage: apply-profile.mjs <openrouter|ollama>'); process.exit(1); }
   const changed = applyProfile(opsRoot, name);
   console.log(`applied profile "${name}":`);
   for (const c of changed) console.log('  ' + c);
