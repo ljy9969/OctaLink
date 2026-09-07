@@ -3,8 +3,8 @@
   "risk": "safe",
   "trigger": "cron:0 10 * * 2,5",
   "model": {
-    "provider": "openrouter",
-    "name": "openrouter/deepseek/deepseek-chat"
+    "provider": "anthropic-oauth",
+    "name": "anthropic/claude-sonnet-5"
   },
   "budget": {
     "maxRetries": 3,

@@ -3,8 +3,8 @@
   "risk": "safe",
   "trigger": "cron:0 9,15,21 * * *",
   "model": {
-    "provider": "openrouter",
-    "name": "openrouter/deepseek/deepseek-chat"
+    "provider": "anthropic-oauth",
+    "name": "anthropic/claude-haiku-4-5"
   },
   "budget": {
     "maxRetries": 2,
