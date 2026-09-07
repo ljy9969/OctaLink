@@ -1,0 +1,11 @@
+{
+  "_comment": "MCP/커넥터 등록부. status=disabled 는 자격증명 슬롯만 있고 미연결. Phase 2에서 활성화.",
+  "connectors": {
+    "firebase":  { "status": "disabled", "env": "FIREBASE_SERVICE_ACCOUNT", "used_by": ["payments","bug","research"], "scope": "read" },
+    "instagram": { "status": "disabled", "env": "INSTAGRAM_TOKEN", "used_by": ["social","support"] },
+    "threads":   { "status": "disabled", "env": "THREADS_TOKEN", "used_by": ["social"] },
+    "meta_ads":  { "status": "disabled", "env": "META_ADS_TOKEN", "used_by": ["ads"], "note": "집행은 항상 승인 게이트" },
+    "google_ads":{ "status": "disabled", "env": "GOOGLE_ADS_TOKEN", "used_by": ["ads"] },
+    "payments":  { "status": "disabled", "env": "TOSS_PAYMENTS_SECRET", "used_by": ["payments"], "scope": "read" }
+  }
+}

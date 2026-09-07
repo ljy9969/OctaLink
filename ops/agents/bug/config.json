@@ -1,0 +1,9 @@
+{
+  "name": "bug",
+  "risk": "safe",
+  "trigger": "cron:0 * * * * | event:crashlytics.new_issue",
+  "model": { "provider": "openrouter", "name": "openrouter/deepseek/deepseek-chat" },
+  "budget": { "maxRetries": 2, "maxUsd": 0.2 },
+  "stop": "verifier_pass",
+  "isolate": false
+}

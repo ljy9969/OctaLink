@@ -1,0 +1,9 @@
+{
+  "name": "ads",
+  "risk": "gated",
+  "trigger": "cron:0 11 * * 1",
+  "model": { "provider": "openrouter", "name": "openrouter/meta-llama/llama-3.3-70b-instruct" },
+  "budget": { "maxRetries": 3, "maxUsd": 0.4 },
+  "stop": "verifier_pass",
+  "isolate": false
+}

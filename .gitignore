@@ -22,3 +22,11 @@ firebase-debug.*.log
 scripts/__pycache__/
 scripts/out/
 ops/.worktrees/
+
+# ops runtime artifacts + secrets
+ops/mcp/.env
+ops/state/*.json
+ops/state/ledger.jsonl
+ops/reports/*.md
+ops/approvals/*.md
+ops/tasks/*.md

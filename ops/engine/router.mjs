@@ -2,6 +2,7 @@
 const PRICES = {
   'anthropic/claude-opus-4': [15, 75],
   'anthropic/claude-sonnet-4': [3, 15],
+  'anthropic/claude-haiku-4-5-20251001': [1, 5],
   'openrouter/deepseek/deepseek-chat': [0.27, 1.10],
   'openrouter/meta-llama/llama-3.3-70b-instruct': [0.13, 0.40],
 };
