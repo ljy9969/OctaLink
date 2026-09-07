@@ -1,7 +1,7 @@
 // ops/engine/test/run-agent.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, cpSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, cpSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,4 +38,29 @@ test('daily cap blocks the run', async () => {
   const { ops, agentDir } = opsWithDummy();
   const r = await runAgent({ agentDir, opsRoot: ops, router: okRouter, now: () => new Date('2026-09-07T00:00:00Z'), dailyCapUsd: 0 });
   assert.equal(r.status, 'daily_cap');
+});
+
+test('config model.provider is authoritative and verifier cost is billed', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-prov-'));
+  const agentDir = join(ops, 'agents', 'p');
+  mkdirSync(agentDir, { recursive: true });
+  // provider is openrouter but the model NAME starts with "anthropic" — a name-prefix
+  // heuristic would mis-derive "anthropic"; the config's provider must win.
+  writeFileSync(join(agentDir, 'config.json'), JSON.stringify({
+    name: 'p', risk: 'safe', trigger: 'manual',
+    model: { provider: 'openrouter', name: 'anthropic/looks-like-anthropic' },
+    budget: { maxRetries: 0, maxUsd: 1 }, stop: 'verifier_pass', isolate: false }));
+  writeFileSync(join(agentDir, 'skill.md'), 'skill');
+  writeFileSync(join(agentDir, 'verifier.md'), 'verify');
+  const providers = [];
+  const router = { complete: async ({ provider, messages }) => {
+    providers.push(provider);
+    const isVerifier = /Respond with ONLY the JSON verdict/.test(messages[0].content);
+    return { text: isVerifier ? '{"pass":true,"checks":[]}' : 'artifact',
+      usage: { inputTokens: 0, outputTokens: 0, costUsd: isVerifier ? 0.02 : 0.05 } };
+  }};
+  const r = await runAgent({ agentDir, opsRoot: ops, router, now: () => new Date('2026-09-07T00:00:00Z') });
+  assert.deepEqual(providers, ['openrouter', 'openrouter']); // both calls used config provider
+  assert.ok(Math.abs(r.costUsd - 0.07) < 1e-9);              // agent 0.05 + verifier 0.02
+  assert.equal(r.status, 'done');
 });

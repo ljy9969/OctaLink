@@ -18,3 +18,15 @@ test('unparseable output => pass:false', async () => {
   assert.equal(r.pass, false);
   assert.equal(r.checks[0].name, 'parse');
 });
+
+test('uses caller-provided provider (not name heuristic) and returns usage', async () => {
+  let seenProvider;
+  const router = { complete: async ({ provider }) => {
+    seenProvider = provider;
+    return { text: '{"pass":true,"checks":[]}', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } };
+  } };
+  const r = await runVerifier({ router, provider: 'openrouter', model: 'anthropic/looks-anthropic', verifierPrompt: 'p', artifact: 'a' });
+  assert.equal(seenProvider, 'openrouter');
+  assert.equal(r.usage.costUsd, 0.001);
+  assert.equal(r.pass, true);
+});

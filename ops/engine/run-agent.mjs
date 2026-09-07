@@ -9,13 +9,6 @@ function stamp(d) {
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
 }
-function providerOf(model) {
-  if (model.startsWith('anthropic')) return 'anthropic';
-  if (model.startsWith('ollama')) return 'ollama';
-  if (model === 'dryrun') return 'dryrun';
-  return 'openrouter';
-}
-
 export async function runAgent({ agentDir, opsRoot, router, now = () => new Date(), dailyCapUsd = 5 }) {
   const cfg = loadAgentConfig(agentDir);
   const stateDir = join(opsRoot, 'state');
@@ -34,12 +27,13 @@ export async function runAgent({ agentDir, opsRoot, router, now = () => new Date
   for (let i = 0; i < cfg.budget.maxRetries + 1; i++) {
     iterations = i + 1;
     const out = await router.complete({
-      provider: providerOf(cfg.model.name), model: cfg.model.name,
+      provider: cfg.model.provider, model: cfg.model.name,
       system: cfg.skill,
       messages: [{ role: 'user', content: `TASK:\n${task}\n\nPREVIOUS STATE:\n${JSON.stringify(prev)}\n${feedback ? `\nFIX THIS:\n${feedback}` : ''}` }],
     });
     artifact = out.text; cost += out.usage.costUsd;
-    verifier = await runVerifier({ router, model: cfg.model.name, verifierPrompt: cfg.verifier, artifact });
+    verifier = await runVerifier({ router, provider: cfg.model.provider, model: cfg.model.name, verifierPrompt: cfg.verifier, artifact });
+    cost += verifier.usage?.costUsd || 0;
     if (verifier.pass) break;
     feedback = verifier.checks.map((c) => c.reason).join('; ');
     if (cost > cfg.budget.maxUsd) {
