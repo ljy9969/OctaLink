@@ -1,0 +1,9 @@
+{
+  "name": "dummy",
+  "risk": "safe",
+  "trigger": "manual",
+  "model": { "provider": "dryrun", "name": "dryrun" },
+  "budget": { "maxRetries": 2, "maxUsd": 0.1 },
+  "stop": "verifier_pass",
+  "isolate": false
+}
