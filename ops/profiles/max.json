@@ -1,0 +1,13 @@
+{
+  "note": "버전 B — 모든 에이전트 provider=anthropic-oauth(Claude Max 구독). 토큰 ANTHROPIC_AUTH_TOKEN(=ant auth print-credentials --access-token). 종량 과금 없음(구독 rate limit 유의). 24/7 아님 — 역할별 주기로 트리거도 함께 조정.",
+  "agents": {
+    "dev":      { "provider": "anthropic-oauth", "name": "anthropic/claude-sonnet-5", "trigger": "cron:0 14 * * 2 | event:issue.assigned", "note": "주1회(화)+이슈 배정. 코딩=Sonnet" },
+    "research": { "provider": "anthropic-oauth", "name": "anthropic/claude-sonnet-5", "trigger": "cron:0 10 * * 2,5", "note": "주2회(화·금). 추론=Sonnet" },
+    "ads":      { "provider": "anthropic-oauth", "name": "anthropic/claude-sonnet-5", "trigger": "cron:0 11 * * 1", "note": "주1회(월). 기획=Sonnet" },
+    "bug":      { "provider": "anthropic-oauth", "name": "anthropic/claude-haiku-4-5", "trigger": "cron:0 9,15,21 * * *", "note": "하루 3회 배치 점검(비상시 수동). 빠른 트리아지=Haiku" },
+    "sales":    { "provider": "anthropic-oauth", "name": "anthropic/claude-sonnet-5", "trigger": "cron:0 11 * * 1", "note": "주1회(월). 한국어 카피=Sonnet" },
+    "support":  { "provider": "anthropic-oauth", "name": "anthropic/claude-haiku-4-5", "trigger": "cron:0 10,14,18 * * *", "note": "하루 3회 문의 배치. 빠른 응대=Haiku" },
+    "payments": { "provider": "anthropic-oauth", "name": "anthropic/claude-sonnet-5", "trigger": "cron:0 9 * * *", "note": "매일 1회(09) 대사. 정확성=Sonnet" },
+    "social":   { "provider": "anthropic-oauth", "name": "anthropic/claude-sonnet-5", "trigger": "cron:0 10 * * 1,3,5", "note": "주3회(월·수·금). 브랜드 카피=Sonnet" }
+  }
+}

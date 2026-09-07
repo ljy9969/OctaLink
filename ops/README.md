@@ -14,13 +14,18 @@ CEO 루프(Claude) 아래 8개 전담 에이전트가 실행·검증을 반복�
 - `mcp/` — 커넥터 설정 + `.env`(자격증명, git 제외)
 - `runbooks/` — 서버·결제·API 가입 런북(사용자가 수행)
 
-## 모델 선택 (에이전트별 자유)
-각 `agents/<name>/config.json`의 `model`에서 provider를 고릅니다:
-- `{"provider":"openrouter","name":"openrouter/deepseek/deepseek-chat"}` — 저가 오픈소스
-- `{"provider":"openrouter","name":"openrouter/meta-llama/llama-3.3-70b-instruct"}`
-- `{"provider":"anthropic","name":"anthropic/claude-haiku-4-5-20251001"}` — Claude 저가(한국어 카피 품질↑)
-- `{"provider":"dryrun","name":"dryrun"}` — 키 없이 배선 점검
-키가 없으면 openrouter/anthropic는 자동으로 dryrun으로 폴백합니다(배선은 계속 검증 가능).
+## 모델 버전 (2가지 프로필, 한 줄로 전환)
+`ops/profiles/`에 두 버전이 있고, `apply-profile`로 8개 에이전트 config에 한 번에 반영합니다.
+
+```
+node ops/engine/apply-profile.mjs openrouter   # 버전 A (기본 활성)
+node ops/engine/apply-profile.mjs max          # 버전 B
+```
+
+- **버전 A — OpenRouter (`profiles/openrouter.json`)**: 전 에이전트 `provider=openrouter`, 역할별 오픈소스. 한국어 중요한 sales/support/social은 **Qwen-2.5-72B**, 나머지는 DeepSeek-V3/Llama-3.3-70B. **키 1개(`OPENROUTER_API_KEY`)로 전부 가동.**
+- **버전 B — Claude Max 구독 OAuth (`profiles/max.json`)**: 전 에이전트 `provider=anthropic-oauth`, 역할별 Claude(Sonnet 5 / 빠른 트리아지·응대는 Haiku 4.5). **종량 과금 없음**(구독), 대신 **24/7 아닌 역할별 주기**로 트리거까지 조정(bug 하루 3회, support 하루 3회, 콘텐츠 주3회, 전략 주1~2회, 결제 매일 1회). 토큰은 `runbooks/max-oauth.md` 참고.
+
+provider별 자격증명(`ops/mcp/.env`)이 없으면 자동으로 **dryrun 폴백**하여 배선은 계속 검증됩니다. 개별 에이전트만 바꾸려면 해당 `agents/<name>/config.json`의 `model`을 직접 수정해도 됩니다.
 
 ## 실행 (dry-run, 키 불필요)
 ```

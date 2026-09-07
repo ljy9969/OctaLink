@@ -1,9 +1,15 @@
 {
   "name": "dev",
   "risk": "gated",
-  "trigger": "cron:0 14 * * * | event:issue.assigned",
-  "model": { "provider": "openrouter", "name": "openrouter/deepseek/deepseek-chat" },
-  "budget": { "maxRetries": 3, "maxUsd": 0.5 },
+  "trigger": "cron:0 14 * * 2 | event:issue.assigned",
+  "model": {
+    "provider": "openrouter",
+    "name": "openrouter/deepseek/deepseek-chat"
+  },
+  "budget": {
+    "maxRetries": 3,
+    "maxUsd": 0.5
+  },
   "stop": "verifier_pass",
   "isolate": true
 }

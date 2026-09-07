@@ -31,3 +31,28 @@ test('missing api key falls back to dryrun', async () => {
   const r = await router.complete({ provider: 'openrouter', model: 'm', system: 's', messages: [{ role: 'user', content: 'q' }] });
   assert.match(r.text, /DRYRUN/);
 });
+
+test('anthropic-oauth uses Bearer token + oauth beta header, cost 0 (subscription)', async () => {
+  let captured;
+  const transport = async (url, init) => {
+    captured = { url, init };
+    return mockResponse({ content: [{ type: 'text', text: 'claude reply' }],
+      usage: { input_tokens: 1_000_000, output_tokens: 1_000_000 } });
+  };
+  const router = createRouter({ transport, env: { ANTHROPIC_AUTH_TOKEN: 'oauth-tok' } });
+  const r = await router.complete({
+    provider: 'anthropic-oauth', model: 'anthropic/claude-sonnet-5',
+    system: 's', messages: [{ role: 'user', content: 'q' }],
+  });
+  assert.equal(captured.url, 'https://api.anthropic.com/v1/messages');
+  assert.equal(captured.init.headers.Authorization, 'Bearer oauth-tok');
+  assert.equal(captured.init.headers['anthropic-beta'], 'oauth-2025-04-20');
+  assert.equal(r.text, 'claude reply');
+  assert.equal(r.usage.costUsd, 0);   // Max 구독 = 종량 과금 없음
+});
+
+test('anthropic-oauth without token falls back to dryrun', async () => {
+  const router = createRouter({ transport: async () => { throw new Error('should not call'); }, env: {} });
+  const r = await router.complete({ provider: 'anthropic-oauth', model: 'anthropic/claude-haiku-4-5', system: 's', messages: [{ role: 'user', content: 'q' }] });
+  assert.match(r.text, /DRYRUN/);
+});

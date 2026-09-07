@@ -1,9 +1,15 @@
 {
   "name": "support",
   "risk": "gated",
-  "trigger": "event:inbox.new_message",
-  "model": { "provider": "anthropic", "name": "anthropic/claude-haiku-4-5-20251001" },
-  "budget": { "maxRetries": 3, "maxUsd": 0.3 },
+  "trigger": "cron:0 10,14,18 * * *",
+  "model": {
+    "provider": "openrouter",
+    "name": "openrouter/qwen/qwen-2.5-72b-instruct"
+  },
+  "budget": {
+    "maxRetries": 3,
+    "maxUsd": 0.3
+  },
   "stop": "verifier_pass",
   "isolate": false
 }

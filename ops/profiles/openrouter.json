@@ -1,0 +1,13 @@
+{
+  "note": "버전 A — 모든 에이전트 provider=openrouter, 오픈소스 모델을 역할별 선택. 키 1개(OPENROUTER_API_KEY). Claude Haiku 쓰던 sales/support/social은 한국어 강한 Qwen-2.5-72B로 대체.",
+  "agents": {
+    "dev":      { "provider": "openrouter", "name": "openrouter/deepseek/deepseek-chat", "note": "코딩" },
+    "research": { "provider": "openrouter", "name": "openrouter/deepseek/deepseek-chat", "note": "조사·추론" },
+    "ads":      { "provider": "openrouter", "name": "openrouter/meta-llama/llama-3.3-70b-instruct", "note": "광고 기획·카피" },
+    "bug":      { "provider": "openrouter", "name": "openrouter/deepseek/deepseek-chat", "note": "트리아지" },
+    "sales":    { "provider": "openrouter", "name": "openrouter/qwen/qwen-2.5-72b-instruct", "note": "한국어 아웃리치" },
+    "support":  { "provider": "openrouter", "name": "openrouter/qwen/qwen-2.5-72b-instruct", "note": "한국어 응대" },
+    "payments": { "provider": "openrouter", "name": "openrouter/deepseek/deepseek-chat", "note": "수치 대사" },
+    "social":   { "provider": "openrouter", "name": "openrouter/qwen/qwen-2.5-72b-instruct", "note": "한국어 브랜드 카피" }
+  }
+}

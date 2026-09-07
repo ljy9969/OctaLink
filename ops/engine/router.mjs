@@ -1,10 +1,13 @@
 // Price table: USD per 1,000,000 tokens [input, output].
 const PRICES = {
-  'anthropic/claude-opus-4': [15, 75],
-  'anthropic/claude-sonnet-4': [3, 15],
-  'anthropic/claude-haiku-4-5-20251001': [1, 5],
+  // Claude (Anthropic API 키 경로). Max 구독(anthropic-oauth) 경로는 종량 과금이 없어 cost 0.
+  'anthropic/claude-opus-5': [5, 25],
+  'anthropic/claude-sonnet-5': [2, 10],
+  'anthropic/claude-haiku-4-5': [1, 5],
+  // OpenRouter 오픈소스
   'openrouter/deepseek/deepseek-chat': [0.27, 1.10],
   'openrouter/meta-llama/llama-3.3-70b-instruct': [0.13, 0.40],
+  'openrouter/qwen/qwen-2.5-72b-instruct': [0.35, 0.40],
 };
 
 export function estimateCost(model, usage) {
@@ -49,6 +52,24 @@ export function createRouter({ transport = globalThis.fetch, env = process.env }
       const usage = { inputTokens: j.usage?.input_tokens ?? 0, outputTokens: j.usage?.output_tokens ?? 0 };
       const text = (j.content ?? []).map((b) => b.text ?? '').join('');
       return { text, usage: { ...usage, costUsd: estimateCost(model, usage) } };
+    }
+
+    if (provider === 'anthropic-oauth') {
+      // Claude Max 구독을 OAuth Bearer 토큰으로 사용(종량 과금 없음 → cost 0).
+      // 토큰: `ant auth login` 후 `ant auth print-credentials --access-token` (단기 토큰).
+      const token = env.ANTHROPIC_AUTH_TOKEN;
+      if (!token) return dryrun(model, messages);
+      const res = await transport('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`,
+          'anthropic-version': '2023-06-01', 'anthropic-beta': 'oauth-2025-04-20' },
+        body: JSON.stringify({ model: model.replace(/^anthropic\//, ''),
+          max_tokens: maxTokens, system, messages }),
+      });
+      const j = await res.json();
+      const usage = { inputTokens: j.usage?.input_tokens ?? 0, outputTokens: j.usage?.output_tokens ?? 0 };
+      const text = (j.content ?? []).map((b) => b.text ?? '').join('');
+      return { text, usage: { ...usage, costUsd: 0 } };
     }
 
     if (provider === 'ollama') {

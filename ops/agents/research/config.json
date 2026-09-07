@@ -2,8 +2,14 @@
   "name": "research",
   "risk": "safe",
   "trigger": "cron:0 10 * * 2,5",
-  "model": { "provider": "openrouter", "name": "openrouter/deepseek/deepseek-chat" },
-  "budget": { "maxRetries": 3, "maxUsd": 0.3 },
+  "model": {
+    "provider": "openrouter",
+    "name": "openrouter/deepseek/deepseek-chat"
+  },
+  "budget": {
+    "maxRetries": 3,
+    "maxUsd": 0.3
+  },
   "stop": "verifier_pass",
   "isolate": false
 }

@@ -9,7 +9,7 @@ test('estimateCost uses per-model price table', () => {
 });
 
 test('estimateCost prices the Claude Haiku 4.5 agent option', () => {
-  const c = estimateCost('anthropic/claude-haiku-4-5-20251001',
+  const c = estimateCost('anthropic/claude-haiku-4-5',
     { inputTokens: 1_000_000, outputTokens: 1_000_000 });
   assert.ok(Math.abs(c - (1 + 5)) < 1e-9);
 });
