@@ -1,5 +1,5 @@
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runAgent } from './run-agent.mjs';
 import { createRouter } from './router.mjs';
 
@@ -12,7 +12,7 @@ export async function runChain({ opsRoot, agents, router, now = () => new Date()
 }
 
 // CLI: node run-chain.mjs research bug
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
   const opsRoot = process.env.OPS_ROOT || join(here, '..');
   const agents = process.argv.slice(2);

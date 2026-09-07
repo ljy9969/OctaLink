@@ -24,6 +24,6 @@ export function spendSince(stateDir, sinceIso) {
   if (!existsSync(f)) return 0;
   return readFileSync(f, 'utf8').split('\n').filter(Boolean)
     .map((l) => JSON.parse(l))
-    .filter((e) => e.ts >= sinceIso)
+    .filter((e) => Date.parse(e.ts) >= Date.parse(sinceIso))
     .reduce((s, e) => s + (e.costUsd || 0), 0);
 }
