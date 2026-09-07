@@ -13,7 +13,7 @@
 | 항목 | 결정 | 근거 |
 |---|---|---|
 | 실행 기반 | **하이브리드** — 지금은 Claude Code/로컬에서 이식 가능한 스킬/스크립트로 실행, 서버 계정 생기면 동일 코드를 클라우드로 승격 | 계정 없이 오늘 실제 루프 시연 가능 + 24/7로 점진 승격 |
-| 모델 계층화 | **CEO 루프 = Claude(Opus/Sonnet)**, **8 에이전트 = OpenRouter(DeepSeek-V3 / Llama-3.3-70B 등)**, **검증 서브에이전트 = OpenRouter 중급** | 방향·판단은 프런티어, 실행은 풀사이즈 오픈소스로 저렴 |
+| 모델 계층화 | **CEO 루프 = Claude(Opus/Sonnet) 고정**. **8 에이전트 = 에이전트별 config에서 자유 선택**: OpenRouter 오픈소스(DeepSeek-V3 / Llama-3.3-70B) **또는 Claude 저가 모델(Haiku 4.5, `anthropic/claude-haiku-4-5-20251001`)**. 검증 서브에이전트도 동일하게 선택 | 방향·판단은 프런티어; 실행은 비용·품질·데이터보안 트레이드오프에 따라 provider 선택 |
 | 저가 모델 경로 | **OpenRouter** (로컬 Ollama는 소형 양자화라 한국어 카피·JSON 준수·판정 신뢰도 미검증 → 제외, 단 router 백엔드로 남겨둠) | 품질 안정성 |
 | 자율성 | **게이트형 자율운영** — 루프는 계속 돌되, 되돌릴 수 없거나 외부로 나가는 행동은 승인 대기 | 광고·결제·공개게시·고객응대 리스크 차단 |
 | 계정 생성 | **제가 대신 생성 불가** — 서버·결제사 가입은 실명/KYC/카드/약관동의 필요. 저는 런북 + 자격증명 슬롯 + 연결코드 제공, 가입은 사용자 본인 | 신원 도용·법적 동의 불가 |
@@ -105,14 +105,15 @@ ops/
 - `risk: gated` (나머지 6) → 결과물은 `approvals/`에 제안서로 생성, 사람이 OK해야 외부 실행(게시/집행/머지)
 - 돈이 나가는 액션(ads 집행, payments 이동)은 **항상** 게이트 + 예산 상한(config) 이중 안전
 
-## 9. 모델 라우팅
+## 9. 모델 라우팅 (에이전트별 config에서 자유 선택)
 
-| 역할 | 모델 | 비고 |
-|---|---|---|
-| CEO 루프 | `claude-opus`/`claude-sonnet` | 방향·판단 |
-| 실행 에이전트 | `openrouter: deepseek-v3` (개발/리서치/결제 대사), `llama-3.3-70b`(소셜/고객/영업) | 에이전트별 config에서 지정 |
-| 검증 서브에이전트 | `openrouter: 중급`(deepseek/llama-70b) | 참/거짓 판정 |
-| (옵션) 로컬 | `ollama`(비민감 배치) | router 백엔드로 유지 |
+| 역할 | 기본 | 대안 | 비고 |
+|---|---|---|---|
+| CEO 루프 | Claude Opus/Sonnet (비싼·똑똑) | — | 방향·판단, 고정 |
+| 실행 에이전트 | OpenRouter 오픈소스(`openrouter/deepseek/deepseek-chat`, `openrouter/meta-llama/llama-3.3-70b-instruct`) | **Claude 저가(`anthropic/claude-haiku-4-5-20251001`)** / (옵션)`ollama/*` | 에이전트 `config.model.{provider,name}`로 지정 |
+| 검증 서브에이전트 | 실행 모델과 동급/중급 | Claude Haiku | 참/거짓 판정 |
+
+**엔진 요구(Phase 1b)**: (1) 가격표에 Haiku 4.5 추가, (2) provider는 `config.model.provider`를 권위로 사용(model.name 접두사 휴리스틱 대체 — Task7 이연 #2), (3) 검증 호출 비용도 예산/원장/일일캡에 합산(이연 #3). 이로써 각 에이전트를 OpenRouter 오픈소스 ↔ Claude Haiku 간 config 한 줄로 전환 가능.
 
 ## 10. 단계별 구축 계획
 
