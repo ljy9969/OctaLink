@@ -35,5 +35,16 @@
     "tokenEnv": "INSTAGRAM_TOKEN",
     "_auth": "비밀번호 아님 — Meta 그래프 API 액세스 토큰(비즈니스 계정). runbooks/instagram.md 참고.",
     "status": "token_pending"
+  },
+  "youtube": {
+    "keyEnv": "YOUTUBE_API_KEY",
+    "status": "key_pending",
+    "channelQueries": [
+      "코리안좀비 MMA 정찬성",
+      "김동현 MMA 스턴건",
+      "팀매드 양감독",
+      "유우성 관장 MMA",
+      "박문호 좀비트립"
+    ]
   }
 }
