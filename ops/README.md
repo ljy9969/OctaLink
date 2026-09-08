@@ -49,6 +49,11 @@ node ops/engine/dispatch.mjs            # 지금 실행해야 할 잡만 1회 �
 
 현재 주기: CEO 매일 09:00 / bug 00·08·16시 / support 10·13·17시 / payments 09:30 / research 월·목 21시 / social 월·수·금 08·18시 / sales·ads 월 11시 / dev 화 14시(+이슈 배정 이벤트).
 
+## 커넥터 (앱데이터·이벤트) — `ops/connectors/`
+- **GitHub 이슈**(`github-issues.mjs`): dev 이벤트 트리거(위). `GH_TOKEN` 필요.
+- **Firebase Firestore**(`firebase.mjs`): 앱 실데이터를 읽어 `context/<agent>.md` 스냅샷 생성 → 해당 에이전트가 실행 시 참고(run-agent가 자동 주입). 설정 `connectors/config.json`의 `firebase.context`(에이전트→컬렉션). `node ops/connectors/firebase.mjs`로 갱신. 자격증명(`FIREBASE_SERVICE_ACCOUNT`)+`firebase-admin` 설치 필요(`runbooks/firebase.md`), 없으면 placeholder만.
+- 소셜·광고 실집행 커넥터는 계정·API·(광고)비용이 필요해 보류 — 지금은 초안/제안서(`approvals/`)까지.
+
 ## 안전장치
 - risk `safe`(research·bug) = 자동, `gated`(나머지) = 승인 대기
 - 종료조건: 검증 통과 시 종료 · 재시도 ≤ config · 토큰비용 ≤ config

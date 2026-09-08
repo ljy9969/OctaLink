@@ -22,6 +22,8 @@ export async function runAgent({ agentDir, opsRoot, router, now = () => new Date
 
   const taskFile = join(opsRoot, 'tasks', `${cfg.name}.md`);
   const task = existsSync(taskFile) ? readFileSync(taskFile, 'utf8') : '(이번 주기 지시 없음 — 기본 임무 수행)';
+  const ctxFile = join(opsRoot, 'context', `${cfg.name}.md`); // 커넥터가 채우는 앱 데이터 스냅샷(있으면 참고)
+  const context = existsSync(ctxFile) ? readFileSync(ctxFile, 'utf8') : '';
   const prev = loadState(stateDir, cfg.name);
 
   let artifact = '', verifier = { pass: false, checks: [] }, cost = 0, iterations = 0, feedback = '';
@@ -30,7 +32,7 @@ export async function runAgent({ agentDir, opsRoot, router, now = () => new Date
     const out = await router.complete({
       provider: cfg.model.provider, model: cfg.model.name,
       system: LANG_GUARD + cfg.skill,
-      messages: [{ role: 'user', content: `TASK:\n${task}\n\nPREVIOUS STATE:\n${JSON.stringify(prev)}\n${feedback ? `\nFIX THIS:\n${feedback}` : ''}` }],
+      messages: [{ role: 'user', content: `TASK:\n${task}\n${context ? `\nAPP DATA(참고):\n${context}\n` : ''}\nPREVIOUS STATE:\n${JSON.stringify(prev)}\n${feedback ? `\nFIX THIS:\n${feedback}` : ''}` }],
     });
     artifact = out.text; cost += out.usage.costUsd;
     verifier = await runVerifier({ router, provider: cfg.model.provider, model: cfg.model.name, verifierPrompt: cfg.verifier, artifact });
