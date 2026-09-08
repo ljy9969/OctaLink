@@ -18,19 +18,44 @@ export function parseDdg(html) {
   return out;
 }
 
-export async function search(query, { transport = globalThis.fetch, env = process.env } = {}) {
-  if (env.BRAVE_API_KEY) {
-    const res = await transport(`https://api.search.brave.com/res/v1/web/search?count=8&q=${encodeURIComponent(query)}`,
-      { headers: { 'X-Subscription-Token': env.BRAVE_API_KEY, Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`Brave ${res.status}: ${(await res.text().catch(() => '')).slice(0, 150)}`);
-    const j = await res.json();
-    return (j.web?.results || []).slice(0, 8).map((r) => ({ title: r.title, url: r.url, snippet: r.description || '' }));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function braveSearch(query, transport, key) {
+  const res = await transport(`https://api.search.brave.com/res/v1/web/search?count=8&q=${encodeURIComponent(query)}`,
+    { headers: { 'X-Subscription-Token': key, Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Brave ${res.status}: ${(await res.text().catch(() => '')).slice(0, 150)}`);
+  const j = await res.json();
+  return (j.web?.results || []).slice(0, 8).map((r) => ({ title: r.title, url: r.url, snippet: r.description || '' }));
+}
+async function ddgSearch(query, transport, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    const res = await transport('https://html.duckduckgo.com/html/', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0' },
+      body: `q=${encodeURIComponent(query)}` });
+    if (res.ok && res.status === 200) { const r = parseDdg(await res.text()); if (r.length) return r; }
+    if (i < tries - 1) await sleep(1200 * (i + 1)); // 백오프(202 anomaly 완화)
   }
-  const res = await transport('https://html.duckduckgo.com/html/', {
-    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0' },
-    body: `q=${encodeURIComponent(query)}` });
-  if (!res.ok) throw new Error(`DDG ${res.status}`);
-  return parseDdg(await res.text());
+  return [];
+}
+async function searxSearch(query, transport, instances = ['https://searx.be', 'https://search.rhscz.eu', 'https://priv.au']) {
+  for (const base of instances) {
+    try {
+      const res = await transport(`${base}/search?format=json&q=${encodeURIComponent(query)}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } });
+      if (!res.ok) continue;
+      const j = await res.json();
+      const r = (j.results || []).slice(0, 8).map((x) => ({ title: x.title, url: x.url, snippet: x.content || '' }));
+      if (r.length) return r;
+    } catch { /* 다음 인스턴스 */ }
+  }
+  return [];
+}
+
+// 우선순위: Brave(키) → DuckDuckGo(재시도) → SearXNG 공개 인스턴스. 첫 결과 반환.
+export async function search(query, { transport = globalThis.fetch, env = process.env } = {}) {
+  if (env.BRAVE_API_KEY) return braveSearch(query, transport, env.BRAVE_API_KEY);
+  let r = await ddgSearch(query, transport); if (r.length) return r;
+  return searxSearch(query, transport);
 }
 
 export async function buildResearchContext({ opsRoot, agent = 'research', queries, searchFn = search, env, delayMs = 1500, now = () => new Date() }) {

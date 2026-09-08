@@ -3,7 +3,18 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseDdg, buildResearchContext } from '../../connectors/websearch.mjs';
+import { parseDdg, buildResearchContext, search } from '../../connectors/websearch.mjs';
+
+test('search: DDG 차단(202) 시 SearXNG 폴백', async () => {
+  const transport = async (url) => {
+    if (url.includes('duckduckgo')) return { ok: true, status: 202, async text() { return '<html>anomaly</html>'; } };
+    if (url.includes('format=json')) return { ok: true, status: 200, async json() { return { results: [{ title: '선수 체육관', url: 'https://youtube.com/@x', content: '채널' }] }; } };
+    return { ok: false, status: 404, async text() { return ''; } };
+  };
+  const r = await search('q', { transport, env: {} });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].url, 'https://youtube.com/@x');
+});
 
 test('parseDdg: result__a uddg 디코드 + 스니펫', () => {
   const html = `
