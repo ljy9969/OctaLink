@@ -4,7 +4,7 @@
   "trigger": "cron:0 0,8,16 * * *",
   "model": {
     "provider": "ollama",
-    "name": "ollama/qwen2.5:14b"
+    "name": "ollama/exaone3.5:7.8b"
   },
   "budget": {
     "maxRetries": 2,

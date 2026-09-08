@@ -1,44 +1,44 @@
 {
-  "note": "버전 C — 모든 에이전트 provider=ollama, 로컬 모델. 완전 무료·카드/계정 불필요(내 PC에서 실행). Ollama 설치+모델 pull 필요(runbooks/ollama.md). OLLAMA_URL 기본 localhost:11434.",
+  "note": "버전 C — 로컬 무료. 한국어 대면 에이전트+CEO=exaone3.5:7.8b(LG, 한국어 특화·VRAM 적합·빠름), dev=qwen2.5-coder:7b. 8GB VRAM에 다 올라감.",
   "agents": {
     "dev": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5-coder:14b",
+      "name": "ollama/qwen2.5-coder:7b",
       "note": "코딩"
     },
     "research": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5:14b",
+      "name": "ollama/exaone3.5:7.8b",
       "note": "조사"
     },
     "ads": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5:14b",
+      "name": "ollama/exaone3.5:7.8b",
       "note": "광고 카피"
     },
     "bug": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5:14b",
+      "name": "ollama/exaone3.5:7.8b",
       "note": "트리아지"
     },
     "sales": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5:14b",
+      "name": "ollama/exaone3.5:7.8b",
       "note": "한국어 아웃리치"
     },
     "support": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5:14b",
+      "name": "ollama/exaone3.5:7.8b",
       "note": "한국어 응대"
     },
     "payments": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5:14b",
+      "name": "ollama/exaone3.5:7.8b",
       "note": "수치 대사"
     },
     "social": {
       "provider": "ollama",
-      "name": "ollama/qwen2.5:14b",
+      "name": "ollama/exaone3.5:7.8b",
       "note": "한국어 카피"
     }
   }
