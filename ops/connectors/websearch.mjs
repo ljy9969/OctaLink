@@ -51,8 +51,17 @@ async function searxSearch(query, transport, instances = ['https://searx.be', 'h
   return [];
 }
 
-// 우선순위: Brave(키) → DuckDuckGo(재시도) → SearXNG 공개 인스턴스. 첫 결과 반환.
+async function googleCse(query, transport, key, cx) {
+  const res = await transport(`https://www.googleapis.com/customsearch/v1?num=8&key=${key}&cx=${cx}&q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error(`Google CSE ${res.status}: ${(await res.text().catch(() => '')).slice(0, 150)}`);
+  const j = await res.json();
+  return (j.items || []).slice(0, 8).map((i) => ({ title: i.title, url: i.link, snippet: i.snippet || '' }));
+}
+
+// 우선순위: Google CSE(키+cx) → Brave(키) → DuckDuckGo(재시도) → SearXNG. 첫 결과 반환.
 export async function search(query, { transport = globalThis.fetch, env = process.env } = {}) {
+  const gkey = env.GOOGLE_API_KEY || env.YOUTUBE_API_KEY; // 같은 프로젝트 API 키 재사용 가능
+  if (env.GOOGLE_CSE_ID && gkey) return googleCse(query, transport, gkey, env.GOOGLE_CSE_ID);
   if (env.BRAVE_API_KEY) return braveSearch(query, transport, env.BRAVE_API_KEY);
   let r = await ddgSearch(query, transport); if (r.length) return r;
   return searxSearch(query, transport);

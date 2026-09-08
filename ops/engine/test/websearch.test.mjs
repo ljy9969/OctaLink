@@ -5,6 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseDdg, buildResearchContext, search } from '../../connectors/websearch.mjs';
 
+test('search: Google CSE(cx+key) 우선 사용', async () => {
+  let url;
+  const transport = async (u) => { url = u; return { ok: true, status: 200, async json() { return { items: [{ title: '정찬성 체육관', link: 'https://youtube.com/@kz', snippet: 'MMA' }] }; }, async text() { return ''; } }; };
+  const r = await search('q', { transport, env: { GOOGLE_CSE_ID: 'cx1', GOOGLE_API_KEY: 'k1' } });
+  assert.match(url, /customsearch\/v1/);
+  assert.match(url, /cx=cx1/);
+  assert.equal(r[0].url, 'https://youtube.com/@kz');
+});
+
 test('search: DDG 차단(202) 시 SearXNG 폴백', async () => {
   const transport = async (url) => {
     if (url.includes('duckduckgo')) return { ok: true, status: 202, async text() { return '<html>anomaly</html>'; } };
