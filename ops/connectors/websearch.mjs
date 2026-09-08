@@ -33,9 +33,11 @@ export async function search(query, { transport = globalThis.fetch, env = proces
   return parseDdg(await res.text());
 }
 
-export async function buildResearchContext({ opsRoot, agent = 'research', queries, searchFn = search, env, now = () => new Date() }) {
+export async function buildResearchContext({ opsRoot, agent = 'research', queries, searchFn = search, env, delayMs = 1500, now = () => new Date() }) {
   const blocks = [];
-  for (const q of queries) {
+  for (let qi = 0; qi < queries.length; qi++) {
+    const q = queries[qi];
+    if (qi > 0 && delayMs) await new Promise((r) => setTimeout(r, delayMs)); // DDG 연속요청 스로틀링 완화
     let results = [];
     try { results = await searchFn(q, { env }); } catch (e) { blocks.push(`## ${q}\n(검색 실패: ${e.message})`); continue; }
     const lines = results.map((r) => `- [${r.title}](${r.url})${r.snippet ? ` — ${r.snippet.slice(0, 180)}` : ''}`);
