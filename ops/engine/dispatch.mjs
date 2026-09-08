@@ -10,15 +10,21 @@ import { runCeo } from './ceo-run.mjs';
 import { createRouter } from './router.mjs';
 import { checkAssignedIssue } from '../connectors/github-issues.mjs';
 import { buildResearchContext } from '../connectors/websearch.mjs';
+import { buildYoutubeContext } from '../connectors/youtube.mjs';
+import { loadEnv } from './env.mjs';
 
 function cronOf(trigger) { const m = /cron:\s*([^|]+)/.exec(trigger || ''); return m ? m[1].trim() : null; }
 function loadConnectors(opsRoot) { const p = join(opsRoot, 'connectors', 'config.json'); return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {}; }
 
 // 에이전트 실행 전 웹 검색 컨텍스트 갱신(websearch.queries[agent] 있으면). 실패해도 진행.
 async function defaultRefresh({ opsRoot, agent, env }) {
-  const ws = loadConnectors(opsRoot).websearch;
-  const queries = ws?.queries?.[agent];
-  if (queries?.length) { try { await buildResearchContext({ opsRoot, agent, queries, env }); } catch { /* stale context로 진행 */ } }
+  const conn = loadConnectors(opsRoot);
+  const queries = conn.websearch?.queries?.[agent];
+  if (queries?.length) { try { await buildResearchContext({ opsRoot, agent, queries, env }); } catch { /* stale로 진행 */ } }
+  const yt = conn.youtube; // research: 유튜브 채널 조사 결과를 컨텍스트에 추가
+  if (agent === 'research' && yt?.channelQueries?.length && env.YOUTUBE_API_KEY) {
+    try { await buildYoutubeContext({ opsRoot, agent, queries: yt.channelQueries, apiKey: env.YOUTUBE_API_KEY }); } catch { /* skip */ }
+  }
 }
 
 export function readEventAgents(opsRoot) {
@@ -91,6 +97,7 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
   const opsRoot = process.env.OPS_ROOT || join(here, '..');
+  loadEnv(opsRoot); // ops/mcp/.env 의 커넥터 자격증명 로드
   if (process.argv.includes('--list')) {
     for (const j of readJobs(opsRoot)) console.log(`${j.name.padEnd(9)} ${j.kind.padEnd(6)} ${j.cron}`);
   } else {
