@@ -1,7 +1,7 @@
 {
   "name": "bug",
   "risk": "safe",
-  "trigger": "cron:0 9,15,21 * * *",
+  "trigger": "cron:0 0,8,16 * * *",
   "model": {
     "provider": "ollama",
     "name": "ollama/qwen2.5:7b"

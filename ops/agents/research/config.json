@@ -1,7 +1,7 @@
 {
   "name": "research",
   "risk": "safe",
-  "trigger": "cron:0 10 * * 2,5",
+  "trigger": "cron:0 21 * * 1,4",
   "model": {
     "provider": "ollama",
     "name": "ollama/qwen2.5:7b"

@@ -30,3 +30,4 @@ ops/state/ledger.jsonl
 ops/reports/*.md
 ops/approvals/*.md
 ops/tasks/*.md
+ops/state/*.log

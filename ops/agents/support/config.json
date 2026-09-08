@@ -1,7 +1,7 @@
 {
   "name": "support",
   "risk": "gated",
-  "trigger": "cron:0 10,14,18 * * *",
+  "trigger": "cron:0 10,13,17 * * *",
   "model": {
     "provider": "ollama",
     "name": "ollama/qwen2.5:7b"

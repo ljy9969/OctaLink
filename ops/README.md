@@ -29,11 +29,24 @@ node ops/engine/apply-profile.mjs ollama       # 버전 C (로컬 무료)
 
 provider별 자격증명(`ops/mcp/.env`)이 없으면 자동으로 **dryrun 폴백**하여 배선은 계속 검증됩니다. 개별 에이전트만 바꾸려면 해당 `agents/<name>/config.json`의 `model`을 직접 수정해도 됩니다.
 
-## 실행 (dry-run, 키 불필요)
+## 실행 (수동)
 ```
 node ops/engine/run-chain.mjs research bug     # safe 에이전트 예시
 ```
 `reports/`에 리포트가, gated 에이전트는 `approvals/`에 제안서가 생성됩니다.
+
+## 트리거 자동화 (디스패처 + Windows 작업 스케줄러)
+트리거의 **단일 출처 = 각 `agents/<name>/config.json`의 `trigger`(cron) + `ceo/cadence.json`.**
+```
+node ops/engine/dispatch.mjs --list     # 유효 스케줄(9개 잡) 확인
+node ops/engine/dispatch.mjs            # 지금 실행해야 할 잡만 1회 처리
+```
+- `dispatch.mjs`가 cron을 읽어 "지금 발화할 CEO/에이전트"를 판정해 실행. `state/dispatch.json`의 last-run으로 **중복 방지 + 미실행 캐치업(24h 캡)**. 타임존 **KST 고정**.
+- **작업 스케줄러 등록됨**: `OctaLink-Ops-Dispatcher` (15분마다 `ops/engine/dispatch.cmd` 실행 → 로그 `state/dispatch.log`). 로그인 세션에서 동작(로컬 Ollama 필요).
+  - 해제: `schtasks /Delete /TN OctaLink-Ops-Dispatcher /F`  ·  주기 변경: `/Create ... /MO <분>`
+- CEO는 로컬 모델(`ceo/config.json`)로 state·리포트를 읽어 `tasks/<agent>.md` 발행. 이벤트 트리거(dev `issue.assigned` 등)는 커넥터 붙는 Phase 2까지 보류(현재 cron만).
+
+현재 주기: CEO 매일 09:00 / bug 00·08·16시 / support 10·13·17시 / payments 09:30 / research 월·목 21시 / social 월·수·금 08·18시 / sales·ads 월 11시 / dev 화 14시.
 
 ## 안전장치
 - risk `safe`(research·bug) = 자동, `gated`(나머지) = 승인 대기

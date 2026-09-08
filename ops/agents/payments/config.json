@@ -1,7 +1,7 @@
 {
   "name": "payments",
   "risk": "gated",
-  "trigger": "cron:0 9 * * *",
+  "trigger": "cron:30 9 * * *",
   "model": {
     "provider": "ollama",
     "name": "ollama/qwen2.5:7b"

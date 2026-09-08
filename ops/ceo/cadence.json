@@ -1,4 +1,7 @@
 {
-  "daily":  { "cron": "0 8 * * *",  "tz": "Asia/Seoul", "action": "일일 운영 목표 발행 + 리포트/제안 검토" },
-  "weekly": { "cron": "0 9 * * 1",  "tz": "Asia/Seoul", "action": "주간 전략 리뷰 — 우선순위 재조정" }
+  "daily": {
+    "cron": "0 9 * * *",
+    "tz": "Asia/Seoul",
+    "action": "일일 운영 목표 발행 + 리포트/제안 검토(월요일엔 주간 전략 겸함)"
+  }
 }
