@@ -3,8 +3,8 @@
   "risk": "gated",
   "trigger": "cron:0 9 * * *",
   "model": {
-    "provider": "openrouter",
-    "name": "openrouter/deepseek/deepseek-chat"
+    "provider": "ollama",
+    "name": "ollama/qwen2.5:7b"
   },
   "budget": {
     "maxRetries": 2,

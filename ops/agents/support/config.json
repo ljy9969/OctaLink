@@ -3,8 +3,8 @@
   "risk": "gated",
   "trigger": "cron:0 10,14,18 * * *",
   "model": {
-    "provider": "openrouter",
-    "name": "openrouter/qwen/qwen-2.5-72b-instruct"
+    "provider": "ollama",
+    "name": "ollama/qwen2.5:7b"
   },
   "budget": {
     "maxRetries": 3,
