@@ -9,9 +9,17 @@ import { runAgent } from './run-agent.mjs';
 import { runCeo } from './ceo-run.mjs';
 import { createRouter } from './router.mjs';
 import { checkAssignedIssue } from '../connectors/github-issues.mjs';
+import { buildResearchContext } from '../connectors/websearch.mjs';
 
 function cronOf(trigger) { const m = /cron:\s*([^|]+)/.exec(trigger || ''); return m ? m[1].trim() : null; }
 function loadConnectors(opsRoot) { const p = join(opsRoot, 'connectors', 'config.json'); return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {}; }
+
+// 에이전트 실행 전 웹 검색 컨텍스트 갱신(websearch.queries[agent] 있으면). 실패해도 진행.
+async function defaultRefresh({ opsRoot, agent, env }) {
+  const ws = loadConnectors(opsRoot).websearch;
+  const queries = ws?.queries?.[agent];
+  if (queries?.length) { try { await buildResearchContext({ opsRoot, agent, queries, env }); } catch { /* stale context로 진행 */ } }
+}
 
 export function readEventAgents(opsRoot) {
   const out = []; const dir = join(opsRoot, 'agents');
@@ -35,7 +43,7 @@ export function readJobs(opsRoot) {
   return jobs;
 }
 
-export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, env = process.env }) {
+export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, refreshContextFn = defaultRefresh, env = process.env }) {
   const at = now(); const nowMs = at.getTime();
   const stateDir = join(opsRoot, 'state');
   const st = loadState(stateDir, 'dispatch'); st.lastRun = st.lastRun || {};
@@ -45,6 +53,7 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
     const due = dueSince(j.cron, fromMs, nowMs);
     let status;
     if (due) {
+      if (j.kind !== 'ceo') await refreshContextFn({ opsRoot, agent: j.name, env }); // 웹 컨텍스트 갱신
       const r = j.kind === 'ceo'
         ? await runCeoFn({ opsRoot, router, now })
         : await runAgentFn({ agentDir: join(opsRoot, 'agents', j.name), opsRoot, router, now });
@@ -67,6 +76,7 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
       writeFileSync(join(tasksDir, `${name}.md`),
         `# ${name} — GitHub 이슈 #${r.issue.number} 구현\n\n제목: ${r.issue.title}\n배정: ${r.issue.assignee}\n${r.issue.url}\n\n${r.issue.body}\n`);
       if (!results.some((x) => x.job === name && x.ran)) { // 이번 디스패치에서 이미 cron으로 돌았으면 재실행 안 함
+        await refreshContextFn({ opsRoot, agent: name, env });
         const rr = await runAgentFn({ agentDir: join(opsRoot, 'agents', name), opsRoot, router, now });
         results.push({ job: name, ran: true, status: rr.status, event: 'issue.assigned' });
       }
