@@ -1,6 +1,6 @@
 {
   "model": {
     "provider": "ollama",
-    "name": "ollama/qwen2.5:7b"
+    "name": "ollama/qwen2.5:14b"
   }
 }

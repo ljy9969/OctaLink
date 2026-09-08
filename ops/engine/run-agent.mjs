@@ -4,6 +4,7 @@ import { loadAgentConfig } from './config.mjs';
 import { runVerifier } from './verifier.mjs';
 import { applyGate } from './gate.mjs';
 import { loadState, saveState, appendLedger, spendSince } from './state.mjs';
+import { LANG_GUARD } from './lang.mjs';
 
 function stamp(d) {
   const p = (n) => String(n).padStart(2, '0');
@@ -28,7 +29,7 @@ export async function runAgent({ agentDir, opsRoot, router, now = () => new Date
     iterations = i + 1;
     const out = await router.complete({
       provider: cfg.model.provider, model: cfg.model.name,
-      system: cfg.skill,
+      system: LANG_GUARD + cfg.skill,
       messages: [{ role: 'user', content: `TASK:\n${task}\n\nPREVIOUS STATE:\n${JSON.stringify(prev)}\n${feedback ? `\nFIX THIS:\n${feedback}` : ''}` }],
     });
     artifact = out.text; cost += out.usage.costUsd;

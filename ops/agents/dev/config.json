@@ -4,7 +4,7 @@
   "trigger": "cron:0 14 * * 2 | event:issue.assigned",
   "model": {
     "provider": "ollama",
-    "name": "ollama/qwen2.5-coder:7b"
+    "name": "ollama/qwen2.5-coder:14b"
   },
   "budget": {
     "maxRetries": 3,

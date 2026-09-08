@@ -1,6 +1,7 @@
 // CEO 러너: state·리포트·승인대기를 읽고, 모델로 이번 주기 목표를 정해 tasks/<agent>.md 발행.
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { LANG_GUARD } from './lang.mjs';
 
 function extractJson(text) {
   const s = text.indexOf('{'), e = text.lastIndexOf('}');
@@ -24,7 +25,7 @@ export async function runCeo({ opsRoot, router, now = () => new Date() }) {
   const ctx = `에이전트: ${agents.join(', ')}\n상태(state): ${JSON.stringify(states)}\n최근 리포트: ${reports.join(', ')}\n승인 대기: ${approvals.join(', ')}\n\n`
     + `각 에이전트에게 이번 주기 목표를 정하라(숫자·기한, 형용사 금지). 오직 JSON만 출력: {"priorities":["..."],"tasks":{"<agent>":"목표"}}`;
 
-  const out = await router.complete({ provider: cfg.model.provider, model: cfg.model.name, system, messages: [{ role: 'user', content: ctx }] });
+  const out = await router.complete({ provider: cfg.model.provider, model: cfg.model.name, system: LANG_GUARD + system, messages: [{ role: 'user', content: ctx }] });
   const parsed = extractJson(out.text) || { priorities: [], tasks: {} };
 
   const tasksDir = join(opsRoot, 'tasks'); if (!existsSync(tasksDir)) mkdirSync(tasksDir, { recursive: true });

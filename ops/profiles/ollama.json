@@ -1,13 +1,45 @@
 {
-  "note": "버전 C — 모든 에이전트 provider=ollama, 로컬 모델. 완전 무료·카드/계정 불필요(내 PC에서 실행). Ollama 설치+모델 pull 필요(runbooks/ollama.md). 소형 모델이라 한국어·JSON 준수 품질은 낮음(:14b로 올리면 개선). OLLAMA_URL 기본 localhost:11434.",
+  "note": "버전 C — 모든 에이전트 provider=ollama, 로컬 모델. 완전 무료·카드/계정 불필요(내 PC에서 실행). Ollama 설치+모델 pull 필요(runbooks/ollama.md). OLLAMA_URL 기본 localhost:11434.",
   "agents": {
-    "dev":      { "provider": "ollama", "name": "ollama/qwen2.5-coder:7b", "note": "코딩" },
-    "research": { "provider": "ollama", "name": "ollama/qwen2.5:7b", "note": "조사" },
-    "ads":      { "provider": "ollama", "name": "ollama/qwen2.5:7b", "note": "광고 카피" },
-    "bug":      { "provider": "ollama", "name": "ollama/qwen2.5:7b", "note": "트리아지" },
-    "sales":    { "provider": "ollama", "name": "ollama/qwen2.5:7b", "note": "한국어 아웃리치" },
-    "support":  { "provider": "ollama", "name": "ollama/qwen2.5:7b", "note": "한국어 응대" },
-    "payments": { "provider": "ollama", "name": "ollama/qwen2.5:7b", "note": "수치 대사" },
-    "social":   { "provider": "ollama", "name": "ollama/qwen2.5:7b", "note": "한국어 카피" }
+    "dev": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5-coder:14b",
+      "note": "코딩"
+    },
+    "research": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5:14b",
+      "note": "조사"
+    },
+    "ads": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5:14b",
+      "note": "광고 카피"
+    },
+    "bug": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5:14b",
+      "note": "트리아지"
+    },
+    "sales": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5:14b",
+      "note": "한국어 아웃리치"
+    },
+    "support": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5:14b",
+      "note": "한국어 응대"
+    },
+    "payments": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5:14b",
+      "note": "수치 대사"
+    },
+    "social": {
+      "provider": "ollama",
+      "name": "ollama/qwen2.5:14b",
+      "note": "한국어 카피"
+    }
   }
 }

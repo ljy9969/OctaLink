@@ -64,3 +64,16 @@ test('config model.provider is authoritative and verifier cost is billed', async
   assert.ok(Math.abs(r.costUsd - 0.07) < 1e-9);              // agent 0.05 + verifier 0.02
   assert.equal(r.status, 'done');
 });
+
+test('agent system prompt carries the Korean language guard', async () => {
+  const { ops, agentDir } = opsWithDummy();
+  let agentSystem = '';
+  const router = { complete: async ({ system, messages }) => {
+    const isVerifier = /Respond with ONLY the JSON verdict/.test(messages[0].content);
+    if (!isVerifier) agentSystem = system;
+    return { text: isVerifier ? '{"pass":true,"checks":[]}' : 'ok', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+  }};
+  await runAgent({ agentDir, opsRoot: ops, router, now: () => new Date('2026-09-08T00:00:00Z') });
+  assert.match(agentSystem, /반드시 한국어로만/);   // 언어 가드가 스킬 앞에 붙는다
+  assert.match(agentSystem, /DUMMY SKILL/);        // 원래 skill 도 유지
+});
