@@ -44,9 +44,10 @@ node ops/engine/dispatch.mjs            # 지금 실행해야 할 잡만 1회 �
 - `dispatch.mjs`가 cron을 읽어 "지금 발화할 CEO/에이전트"를 판정해 실행. `state/dispatch.json`의 last-run으로 **중복 방지 + 미실행 캐치업(24h 캡)**. 타임존 **KST 고정**.
 - **작업 스케줄러 등록됨**: `OctaLink-Ops-Dispatcher` (15분마다 `ops/engine/dispatch.cmd` 실행 → 로그 `state/dispatch.log`). 로그인 세션에서 동작(로컬 Ollama 필요).
   - 해제: `schtasks /Delete /TN OctaLink-Ops-Dispatcher /F`  ·  주기 변경: `/Create ... /MO <분>`
-- CEO는 로컬 모델(`ceo/config.json`)로 state·리포트를 읽어 `tasks/<agent>.md` 발행. 이벤트 트리거(dev `issue.assigned` 등)는 커넥터 붙는 Phase 2까지 보류(현재 cron만).
+- CEO는 로컬 모델(`ceo/config.json`)로 state·리포트를 읽어 `tasks/<agent>.md` 발행.
+- **이벤트 트리거**: dev는 cron(화 14시)에 더해 **GitHub 이슈 배정 이벤트**로도 발화. 디스패처가 매 실행 `connectors/github-issues.mjs`로 새 배정 이슈를 폴링 → `tasks/dev.md` 발행 + dev 실행(이슈번호로 중복 방지). `GH_TOKEN` 필요(`runbooks/github-events.md`), 없으면 no-op. 커넥터 설정=`connectors/config.json`.
 
-현재 주기: CEO 매일 09:00 / bug 00·08·16시 / support 10·13·17시 / payments 09:30 / research 월·목 21시 / social 월·수·금 08·18시 / sales·ads 월 11시 / dev 화 14시.
+현재 주기: CEO 매일 09:00 / bug 00·08·16시 / support 10·13·17시 / payments 09:30 / research 월·목 21시 / social 월·수·금 08·18시 / sales·ads 월 11시 / dev 화 14시(+이슈 배정 이벤트).
 
 ## 안전장치
 - risk `safe`(research·bug) = 자동, `gated`(나머지) = 승인 대기

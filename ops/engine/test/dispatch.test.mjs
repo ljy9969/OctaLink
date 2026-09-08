@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { readJobs, runDispatch } from '../dispatch.mjs';
@@ -54,4 +54,28 @@ test('lastRun 없던 잡도 다음 디스패치에서 창이 전진해 발화(�
   // 2회차: 09:05 KST — 창(08:50,09:05]에 09:00 포함 → a·ceo 발화
   await runDispatch({ opsRoot: ops, router: {}, now: () => new Date('2026-09-08T00:05:00Z'), runAgentFn, runCeoFn });
   assert.deepEqual(ran.sort(), ['a', 'ceo']);
+});
+
+test('이벤트: 새 배정 이슈 → dev 발화 + tasks/dev.md, 같은 이슈는 중복 방지', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-ev-'));
+  mkdirSync(join(ops, 'agents', 'dev'), { recursive: true });
+  writeFileSync(join(ops, 'agents', 'dev', 'config.json'), JSON.stringify({
+    name: 'dev', risk: 'gated', trigger: 'cron:0 14 * * 2 | event:issue.assigned',
+    model: { provider: 'dryrun', name: 'dryrun' }, budget: { maxRetries: 1, maxUsd: 0.1 }, stop: 'verifier_pass', isolate: false }));
+  mkdirSync(join(ops, 'connectors'), { recursive: true });
+  writeFileSync(join(ops, 'connectors', 'config.json'), JSON.stringify({ github: { repo: 'ljy9969/OctaLink' } }));
+  const ran = [];
+  const runAgentFn = async ({ agentDir }) => { ran.push(basename(agentDir)); return { status: 'queued' }; };
+  const runCeoFn = async () => ({ status: 'done' });
+  const now = () => new Date('2026-09-08T04:00:00Z'); // 크론(화 14시) 미발화 시각
+  const gh = async () => ({ fired: true, issue: { number: 7, title: '교류전 버그', assignee: 'ljy9969', url: 'u', body: '재현' } });
+  const opts = { opsRoot: ops, router: {}, now, runAgentFn, runCeoFn, githubCheckFn: gh, env: { GH_TOKEN: 't' } };
+  const res1 = await runDispatch(opts);
+  assert.ok(res1.some((r) => r.job === 'dev' && r.ran && r.event === 'issue.assigned'));
+  assert.match(readFileSync(join(ops, 'tasks', 'dev.md'), 'utf8'), /#7/);
+  assert.deepEqual(ran, ['dev']);
+  // 같은 이슈(7) → 재발화 없음
+  ran.length = 0;
+  await runDispatch(opts);
+  assert.deepEqual(ran, []);
 });

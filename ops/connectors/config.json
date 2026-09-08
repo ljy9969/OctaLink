@@ -1,0 +1,5 @@
+{
+  "_comment": "커넥터 설정. 자격증명은 ops/mcp/.env. 값 없으면 해당 커넥터 no-op.",
+  "github": { "repo": "ljy9969/OctaLink", "tokenEnv": "GH_TOKEN", "events": { "dev": "issue.assigned" } },
+  "firebase": { "projectId": "octalink-28088", "credEnv": "FIREBASE_SERVICE_ACCOUNT", "status": "planned" }
+}
