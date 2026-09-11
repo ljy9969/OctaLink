@@ -14,6 +14,14 @@ test('search: Google CSE(cx+key) 우선 사용', async () => {
   assert.equal(r[0].url, 'https://youtube.com/@kz');
 });
 
+test('search: SEARXNG_URL 있으면 self-host 최우선(트레일링 슬래시 제거)', async () => {
+  let url;
+  const transport = async (u) => { url = u; return { ok: true, status: 200, async json() { return { results: [{ title: '로컬', url: 'https://x', content: 'y' }] }; }, async text() { return ''; } }; };
+  const r = await search('q', { transport, env: { SEARXNG_URL: 'http://localhost:8888/' } });
+  assert.match(url, /localhost:8888\/search\?format=json/);
+  assert.equal(r[0].url, 'https://x');
+});
+
 test('search: DDG 차단(202) 시 SearXNG 폴백', async () => {
   const transport = async (url) => {
     if (url.includes('duckduckgo')) return { ok: true, status: 202, async text() { return '<html>anomaly</html>'; } };

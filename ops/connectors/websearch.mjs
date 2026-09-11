@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeContextSection } from './context-file.mjs';
 
 function stripTags(s) { return s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim(); }
-function decodeUddg(href) { const m = /[?&]uddg=([^&]+)/.exec(href); return m ? decodeURIComponent(m[1]) : href; }
+function decodeUddg(href) { const m = /[?&]uddg=([^&]+)/.exec(href); const u = m ? decodeURIComponent(m[1]) : href; return u.replace(/&amp;/g, '&'); }
 
 export function parseDdg(html) {
   const out = [];
@@ -59,8 +59,12 @@ async function googleCse(query, transport, key, cx) {
   return (j.items || []).slice(0, 8).map((i) => ({ title: i.title, url: i.link, snippet: i.snippet || '' }));
 }
 
-// 우선순위: Google CSE(키+cx) → Brave(키) → DuckDuckGo(재시도) → SearXNG. 첫 결과 반환.
+// 우선순위: 로컬 SearXNG(self-host·키 불필요·가장 안정) → Google CSE(키+cx) → Brave(키)
+//           → DuckDuckGo(재시도) → 공개 SearXNG. 첫 결과 반환.
+// 참고: Google Custom Search JSON API는 신규 고객 발급 중단(403 PERMISSION_DENIED)이라 사실상 막힘.
+//       공개 SearXNG 인스턴스는 대부분 JSON 비활성/429 → self-host(SEARXNG_URL) 권장.
 export async function search(query, { transport = globalThis.fetch, env = process.env } = {}) {
+  if (env.SEARXNG_URL) { const r = await searxSearch(query, transport, [env.SEARXNG_URL.replace(/\/$/, '')]); if (r.length) return r; }
   const gkey = env.GOOGLE_API_KEY || env.YOUTUBE_API_KEY; // 같은 프로젝트 API 키 재사용 가능
   if (env.GOOGLE_CSE_ID && gkey) return googleCse(query, transport, gkey, env.GOOGLE_CSE_ID);
   if (env.BRAVE_API_KEY) return braveSearch(query, transport, env.BRAVE_API_KEY);
@@ -88,6 +92,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const conf = JSON.parse(readFileSync(join(opsRoot, 'connectors', 'config.json'), 'utf8')).websearch || {};
   for (const [agent, queries] of Object.entries(conf.queries || {})) {
     const n = await buildResearchContext({ opsRoot, agent, queries });
-    console.log(`context/${agent}.md ← ${n} 쿼리 (${process.env.BRAVE_API_KEY ? 'Brave' : 'DuckDuckGo'})`);
+    const prov = process.env.SEARXNG_URL ? 'SearXNG(self-host)' : process.env.GOOGLE_CSE_ID ? 'Google CSE' : process.env.BRAVE_API_KEY ? 'Brave' : 'DuckDuckGo';
+    console.log(`context/${agent}.md ← ${n} 쿼리 (${prov})`);
   }
 }
