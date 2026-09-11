@@ -25,6 +25,9 @@ ops/.worktrees/
 
 # ops runtime artifacts + secrets
 ops/mcp/.env
+ops/mcp/*.json
+ops/connectors/node_modules/
+ops/connectors/package-lock.json
 ops/state/*.json
 ops/state/ledger.jsonl
 ops/reports/*.md

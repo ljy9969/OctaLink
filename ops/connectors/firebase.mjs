@@ -1,8 +1,9 @@
 // Firebase(Firestore) 읽기 커넥터 → 에이전트별 앱데이터 스냅샷(context/<agent>.md).
 // 실제 읽기는 firebase-admin(자격증명 있을 때 lazy import). 테스트는 readerFn 주입.
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { writeContextSection } from './context-file.mjs';
 
 async function defaultReader({ projectId, credentialJson, collection, limit }) {
   if (!credentialJson) return null; // 자격증명 없으면 no-op
@@ -21,12 +22,11 @@ export function summarize(collection, docs) {
 }
 
 export async function refreshContext({ opsRoot, projectId, credentialJson, contextMap, readerFn = defaultReader, limit = 10, now = () => new Date() }) {
-  const ctxDir = join(opsRoot, 'context'); if (!existsSync(ctxDir)) mkdirSync(ctxDir, { recursive: true });
   const written = [];
   for (const [agent, collections] of Object.entries(contextMap || {})) {
     const parts = [];
     for (const c of collections) parts.push(summarize(c, await readerFn({ projectId, credentialJson, collection: c, limit })));
-    writeFileSync(join(ctxDir, `${agent}.md`), `# ${agent} 앱데이터 스냅샷 (${now().toISOString()})\n\n${parts.join('\n')}\n`);
+    writeContextSection({ opsRoot, agent, section: '앱 데이터', body: parts.join('\n'), now });
     written.push(agent);
   }
   return written;

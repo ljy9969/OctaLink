@@ -1,0 +1,10 @@
+{
+  "name": "octalink-ops-connectors",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OctaLink ops 커넥터의 선택적 런타임 의존성(Firebase 등). 엔진은 zero-dep 유지.",
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

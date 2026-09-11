@@ -11,6 +11,7 @@ import { createRouter } from './router.mjs';
 import { checkAssignedIssue } from '../connectors/github-issues.mjs';
 import { buildResearchContext } from '../connectors/websearch.mjs';
 import { buildYoutubeContext } from '../connectors/youtube.mjs';
+import { refreshContext as refreshFirebase } from '../connectors/firebase.mjs';
 import { loadEnv } from './env.mjs';
 
 function cronOf(trigger) { const m = /cron:\s*([^|]+)/.exec(trigger || ''); return m ? m[1].trim() : null; }
@@ -24,6 +25,17 @@ async function defaultRefresh({ opsRoot, agent, env }) {
   const yt = conn.youtube; // research: 유튜브 채널 조사 결과를 컨텍스트에 추가
   if (agent === 'research' && yt?.channelQueries?.length && env.YOUTUBE_API_KEY) {
     try { await buildYoutubeContext({ opsRoot, agent, queries: yt.channelQueries, apiKey: env.YOUTUBE_API_KEY }); } catch { /* skip */ }
+  }
+  const fb = conn.firebase; // 앱데이터(Firestore) 구획 갱신 (context 맵에 이 에이전트가 있으면)
+  const collections = fb?.context?.[agent];
+  if (collections?.length) {
+    const raw = env[fb.credEnv || 'FIREBASE_SERVICE_ACCOUNT'];
+    if (raw) {
+      try {
+        const cred = existsSync(raw) ? readFileSync(raw, 'utf8') : raw; // 경로면 내용으로
+        await refreshFirebase({ opsRoot, projectId: fb.projectId, credentialJson: cred, contextMap: { [agent]: collections } });
+      } catch { /* stale로 진행 */ }
+    }
   }
 }
 

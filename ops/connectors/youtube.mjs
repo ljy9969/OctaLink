@@ -14,8 +14,7 @@ export async function searchChannels({ apiKey, query, max = 5, transport = globa
 }
 
 export async function buildYoutubeContext({ opsRoot, agent = 'research', queries, apiKey, searchFn = searchChannels, transport, delayMs = 300, now = () => new Date() }) {
-  const { writeFileSync, existsSync, mkdirSync, readFileSync } = await import('node:fs');
-  const { join } = await import('node:path');
+  const { writeContextSection } = await import('./context-file.mjs');
   const blocks = [];
   for (const q of queries) {
     let r;
@@ -24,9 +23,6 @@ export async function buildYoutubeContext({ opsRoot, agent = 'research', queries
     blocks.push(`### YT: ${q}\n${lines.join('\n') || (r.reason || '(결과 없음)')}`);
     if (delayMs) await new Promise((rs) => setTimeout(rs, delayMs));
   }
-  const ctxDir = join(opsRoot, 'context'); if (!existsSync(ctxDir)) mkdirSync(ctxDir, { recursive: true });
-  const p = join(ctxDir, `${agent}.md`);
-  const prev = existsSync(p) ? readFileSync(p, 'utf8') : `# ${agent} 스냅샷\n`;
-  writeFileSync(p, `${prev}\n## YouTube 채널 조사 (${now().toISOString()})\n\n${blocks.join('\n\n')}\n`);
+  writeContextSection({ opsRoot, agent, section: '선수 유튜브 채널', body: blocks.join('\n\n'), now });
   return blocks.length;
 }

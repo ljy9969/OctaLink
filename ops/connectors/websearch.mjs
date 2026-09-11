@@ -1,8 +1,9 @@
 // 웹 검색 커넥터 → research 컨텍스트(context/research.md)에 실데이터+출처 주입.
 // 기본: DuckDuckGo HTML(무료·키 불필요). BRAVE_API_KEY 있으면 Brave Search(JSON, 안정적).
-import { writeFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { writeContextSection } from './context-file.mjs';
 
 function stripTags(s) { return s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim(); }
 function decodeUddg(href) { const m = /[?&]uddg=([^&]+)/.exec(href); return m ? decodeURIComponent(m[1]) : href; }
@@ -75,13 +76,11 @@ export async function buildResearchContext({ opsRoot, agent = 'research', querie
     let results = [];
     try { results = await searchFn(q, { env }); } catch (e) { blocks.push(`## ${q}\n(검색 실패: ${e.message})`); continue; }
     const lines = results.map((r) => `- [${r.title}](${r.url})${r.snippet ? ` — ${r.snippet.slice(0, 180)}` : ''}`);
-    blocks.push(`## ${q}\n${lines.join('\n') || '(결과 없음)'}`);
+    blocks.push(`### ${q}\n${lines.join('\n') || '(결과 없음)'}`);
   }
-  const ctxDir = join(opsRoot, 'context'); if (!existsSync(ctxDir)) mkdirSync(ctxDir, { recursive: true });
-  writeFileSync(join(ctxDir, `${agent}.md`), `# ${agent} 웹 검색 스냅샷 (${now().toISOString()})\n\n${blocks.join('\n\n')}\n`);
-  return results_count(blocks);
+  writeContextSection({ opsRoot, agent, section: '웹 검색', body: blocks.join('\n\n'), now });
+  return blocks.length;
 }
-function results_count(blocks) { return blocks.length; }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
