@@ -1,0 +1,4 @@
+# Windows 배치/스크립트는 반드시 CRLF (LF면 CMD 파싱 깨져 콘솔 에러창 발생)
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.vbs text eol=crlf
