@@ -22,8 +22,8 @@ async function defaultRefresh({ opsRoot, agent, env }) {
   const conn = loadConnectors(opsRoot);
   const queries = conn.websearch?.queries?.[agent];
   if (queries?.length) { try { await buildResearchContext({ opsRoot, agent, queries, env }); } catch { /* stale로 진행 */ } }
-  const yt = conn.youtube; // research: 유튜브 채널 조사 결과를 컨텍스트에 추가
-  if (agent === 'research' && yt?.channelQueries?.length && env.YOUTUBE_API_KEY) {
+  const yt = conn.youtube; // social: 선수/관장 유튜브 채널 발굴 → social 컨텍스트(앱추출 research는 오염 안 되게 분리)
+  if (agent === 'social' && yt?.channelQueries?.length && env.YOUTUBE_API_KEY) {
     try { await buildYoutubeContext({ opsRoot, agent, queries: yt.channelQueries, apiKey: env.YOUTUBE_API_KEY }); } catch { /* skip */ }
   }
   const fb = conn.firebase; // 앱데이터(Firestore) 구획 갱신 (context 맵에 이 에이전트가 있으면)

@@ -72,17 +72,44 @@ export async function search(query, { transport = globalThis.fetch, env = proces
   return searxSearch(query, transport);
 }
 
+// 결정적 앱 추출: 검색 결과에서 스토어 링크만 골라 중복제거·카테고리 분류. LLM 미사용 → 환각 불가.
+export function extractApps(results) {
+  const seen = new Set(); const out = [];
+  for (const r of results) {
+    const url = r.url || ''; let store, id, m;
+    if ((m = /play\.google\.com\/store\/apps\/details\?[^\s)]*\bid=([A-Za-z0-9._]+)/.exec(url))) { store = 'Google Play'; id = m[1]; }
+    else if ((m = /apps\.apple\.com\/[^\s)]*\/id(\d+)/.exec(url))) { store = 'App Store'; id = 'id' + m[1]; }
+    else continue;
+    const key = `${store}:${id}`; if (seen.has(key)) continue; seen.add(key);
+    const text = `${r.title || ''} ${r.snippet || ''}`;
+    const category = /clash|legacy|\bgame\b|게임|배틀/i.test(text) ? '게임'
+      : /management|manage|관리|admin|academy|dojo|membership|회원|studio|\bclub\b|운영/i.test(text) ? '체육관 관리SW'
+      : '훈련/콘텐츠';
+    const name = (r.title || '').replace(/\s*[-–|]\s*(Google Play.*|Apps on Google.*|App Store.*|앱\s?스토어.*)$/i, '').trim() || id;
+    out.push({ name, store, id, url: url.replace(/[?&]hl=[a-z_-]+/i, ''), category, snippet: (r.snippet || '').replace(/\s+/g, ' ').slice(0, 120) });
+  }
+  return out;
+}
+
 export async function buildResearchContext({ opsRoot, agent = 'research', queries, searchFn = search, env, delayMs = 1500, now = () => new Date() }) {
-  const blocks = [];
+  const blocks = []; const allResults = [];
   for (let qi = 0; qi < queries.length; qi++) {
     const q = queries[qi];
     if (qi > 0 && delayMs) await new Promise((r) => setTimeout(r, delayMs)); // DDG 연속요청 스로틀링 완화
     let results = [];
     try { results = await searchFn(q, { env }); } catch (e) { blocks.push(`## ${q}\n(검색 실패: ${e.message})`); continue; }
+    allResults.push(...results);
     const lines = results.map((r) => `- [${r.title}](${r.url})${r.snippet ? ` — ${r.snippet.slice(0, 180)}` : ''}`);
     blocks.push(`### ${q}\n${lines.join('\n') || '(결과 없음)'}`);
   }
   writeContextSection({ opsRoot, agent, section: '웹 검색', body: blocks.join('\n\n'), now });
+  // 결정적 앱 인벤토리(코드 추출) — Opus 분석·CEO 판단이 참고하는 신뢰 가능한 목록.
+  const apps = extractApps(allResults);
+  const rows = apps.map((a) => `| ${a.name} | ${a.category} | ${a.store} | [열기](${a.url}) | ${a.snippet} |`);
+  const inv = apps.length
+    ? `실제 검색 결과에서 결정적 추출(중복제거) — 총 ${apps.length}개.\n\n| 앱 | 카테고리 | 스토어 | 링크 | 스니펫 |\n|---|---|---|---|---|\n${rows.join('\n')}`
+    : '(스토어 앱 링크 없음)';
+  writeContextSection({ opsRoot, agent, section: '앱 인벤토리', body: inv, now });
   return blocks.length;
 }
 

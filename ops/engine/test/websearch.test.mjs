@@ -3,7 +3,25 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseDdg, buildResearchContext, search } from '../../connectors/websearch.mjs';
+import { parseDdg, buildResearchContext, search, extractApps } from '../../connectors/websearch.mjs';
+
+test('extractApps: 스토어 링크만 추출·중복제거·카테고리 분류 (LLM 없음)', () => {
+  const results = [
+    { title: 'Gym Admin - Easy management - Apps on Google Play', url: 'https://play.google.com/store/apps/details?id=com.HF.GymAdmin', snippet: 'all-in-one management for gym, martial-arts' },
+    { title: 'Gym Admin 중복', url: 'https://play.google.com/store/apps/details?id=com.HF.GymAdmin&hl=ko', snippet: '중복이라 무시돼야 함' },
+    { title: 'MMA Legacy - Google Play 앱', url: 'https://play.google.com/store/apps/details?id=com.mmalegacy.game&hl=ko', snippet: '선수 육성 게임' },
+    { title: '나무위키 종합격투기', url: 'https://namu.wiki/w/x', snippet: '앱 아님 → 제외' },
+    { title: 'Lion Fighters - MMA', url: 'https://play.google.com/store/apps/details?id=digifit.android.virtuagym.pro.lionfighters&hl=ko', snippet: '격투 훈련 예약' },
+  ];
+  const apps = extractApps(results);
+  assert.equal(apps.length, 3);                 // 중복 1개 제거, 나무위키 제외
+  assert.equal(apps.find((a) => a.id === 'com.mmalegacy.game').category, '게임');
+  assert.equal(apps.find((a) => a.id === 'com.HF.GymAdmin').category, '체육관 관리SW');
+  assert.equal(apps.find((a) => a.id.includes('lionfighters')).category, '훈련/콘텐츠');
+  assert.equal(apps[0].name, 'Gym Admin - Easy management'); // 스토어 접미사만 제거, 앱 이름은 보존
+  assert.ok(!apps.some((a) => /hl=/.test(a.url))); // hl 파라미터 제거
+});
+
 
 test('search: Google CSE(cx+key) 우선 사용', async () => {
   let url;

@@ -23,6 +23,13 @@
       "research": [
         "구글플레이 MMA 격투 훈련 앱 안드로이드",
         "martial arts gym management app google play",
+        "주짓수 복싱 체육관 회원관리 앱 안드로이드",
+        "MMA gym membership training app android",
+        "격투기 체육관 관리 프로그램 앱 구글플레이",
+        "combat sports academy management software app"
+      ],
+      "_social_note": "선수/관장/유튜브 발굴은 social용(앱 아님) — research 앱추출 context를 오염시키지 않도록 분리",
+      "social": [
         "MMA 선수 출신 체육관 관장",
         "격투기 선수 유튜브 채널 체육관",
         "korean MMA fighter gym owner instagram youtube",
