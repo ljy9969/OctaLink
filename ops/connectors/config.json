@@ -33,8 +33,10 @@
   "instagram": {
     "handle": "octalink_mma",
     "tokenEnv": "INSTAGRAM_TOKEN",
-    "_auth": "비밀번호 아님 — Meta 그래프 API 액세스 토큰(비즈니스 계정). runbooks/instagram.md 참고.",
-    "status": "token_pending"
+    "igUserIdEnv": "IG_USER_ID",
+    "_auth": "비밀번호 아님 — Meta 그래프 API 시스템 사용자 토큰(무기한). runbooks/instagram.md 참고.",
+    "_hosting": "로컬 이미지는 connectors/storage.mjs가 Firebase Storage에 올려 공개 서명 URL로 게시.",
+    "status": "active"
   },
   "youtube": {
     "keyEnv": "YOUTUBE_API_KEY",
