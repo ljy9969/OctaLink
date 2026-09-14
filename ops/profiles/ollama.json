@@ -8,8 +8,8 @@
     },
     "research": {
       "provider": "ollama",
-      "name": "ollama/exaone3.5:7.8b",
-      "note": "조사"
+      "name": "ollama/qwen2.5:14b",
+      "note": "조사 — 14b(더 큰 모델)로 그라운딩/추론 품질↑ 시도. VRAM 8GB엔 일부 CPU offload(느림). 드리프트는 LANG_GUARD로 억제."
     },
     "ads": {
       "provider": "ollama",
