@@ -55,5 +55,31 @@
       "유우성 관장 MMA",
       "박문호 좀비트립"
     ]
+  },
+  "payments": {
+    "provider": "toss",
+    "secretEnv": "TOSS_PAYMENTS_SECRET",
+    "status": "secret_pending",
+    "_note": "수익화 스펙 docs/superpowers/specs/2026-09-16-monetization-design.md. 시크릿 없으면 대사 no-op."
+  },
+  "monetization": {
+    "_note": "가격/단가 단일 출처(스펙 §2.4). 100원=1P. 조정 가능.",
+    "subscriptionTiers": [
+      { "id": "free", "maxMembers": 15, "priceKrw": 0 },
+      { "id": "basic", "maxMembers": 50, "priceKrw": 29000 },
+      { "id": "pro", "maxMembers": null, "priceKrw": 59000 }
+    ],
+    "pointCatalog": {
+      "aiShadowCoach": 10,
+      "aiCustomRoutine": 20,
+      "exchangeMatch": 30
+    },
+    "pointPackages": [
+      { "krw": 5000, "paidPoints": 50, "bonusPoints": 0 },
+      { "krw": 10000, "paidPoints": 100, "bonusPoints": 10 },
+      { "krw": 30000, "paidPoints": 300, "bonusPoints": 60 }
+    ],
+    "paidExpiryDays": 365,
+    "bonusExpiryDays": 7
   }
 }
