@@ -39,9 +39,9 @@ FAQ 카드 아래 **"1:1 문의" 행 → 전용 화면**. 사용자가 문의를
 ## 3. 구현 단계
 | 단계 | 범위 | 위치 |
 |---|---|---|
-| 1. FAQ 카드 | 정적 아코디언 + 상수 문구 | 앱(ProfileSettingsScreen) — **이번** |
-| 2. Q&A 앱 | InquiryScreen + Firestore repo + 보안규칙 + 설정 진입행 | 앱 — **이번/다음** |
-| 3. Q&A ops | support 컨텍스트에 pending 문의 주입 + 답변 초안 게이트 | ops |
+| 1. FAQ 카드 | 정적 아코디언 + 상수 문구 | 앱(ProfileSettingsScreen) — ✅ 완료 |
+| 2. Q&A 앱 | InquiryScreen + Firestore repo + 보안규칙 + 설정 진입행 | 앱 — ✅ 완료(배포·설치됨) |
+| 3. Q&A ops | pending 문의 → support 초안 → 승인 → 게시 | ops — ✅ 완료(`engine/inquiry-flow.mjs`, runbooks/inquiries.md) |
 
 ## 4. 범위 밖
 - 실시간 채팅, 첨부파일, 공개 게시판, 답변 자동게시(항상 사람 승인).
