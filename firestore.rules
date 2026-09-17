@@ -427,6 +427,30 @@ service cloud.firestore {
     }
 
     // ════════════════════════════════════════════════════════
+    // inquiries — 1:1 문의(고객의 소리). 비공개: 작성자 본인 + 운영진(MASTER/CREATOR).
+    // 흐름: 사용자 작성(PENDING) → support 에이전트 초안(ops) → 운영자 승인·게시(ANSWERED).
+    // ════════════════════════════════════════════════════════
+    match /inquiries/{inquiryId} {
+      // 읽기: 작성자 본인 또는 같은 체육관 운영진.
+      allow read: if isApproved() && (
+        resource.data.authorId == request.auth.uid || (isMaster() && sameGymDoc())
+      );
+      // 작성: APPROVED 회원 본인. authorId/gymId 위조 차단. 초기 status=PENDING·answer 없음.
+      allow create: if isApproved()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.gymId == callerGym()
+        && request.resource.data.status == 'PENDING'
+        && request.resource.data.answer == null;
+      // 답변 게시: 같은 체육관 운영자만. answer/answeredBy/answeredAt/status 만 변경.
+      allow update: if isMaster() && sameGymDoc()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['answer', 'answeredBy', 'answeredAt', 'status']);
+      // 삭제: 작성자 본인 또는 운영자.
+      allow delete: if isApproved()
+        && (resource.data.authorId == request.auth.uid || isMaster());
+    }
+
+    // ════════════════════════════════════════════════════════
     // 매칭 안 된 모든 경로 명시적 거부 (allowlist 모델)
     // ════════════════════════════════════════════════════════
     match /{document=**} {

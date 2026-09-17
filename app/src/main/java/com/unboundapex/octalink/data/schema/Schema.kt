@@ -497,6 +497,8 @@ object Collections {
     /** posts/{postId}/postComments/{commentId} — 글 댓글. members/{uid}/comments 와 이름 분리하여
      *  collectionGroup("postComments") 가 한 줄 코멘트와 섞이지 않도록 함. */
     const val POST_COMMENTS = "postComments"
+    /** 1:1 문의(고객의 소리) — inquiries/{id}. 작성자 본인 + 운영진만 read (비공개). */
+    const val INQUIRIES = "inquiries"
     /** 도장 전역 설정 — 주간 미션 등 단일 doc 들이 들어가는 컬렉션. */
     const val GYM_SETTINGS = "gymSettings"
     /** [GYM_SETTINGS] 내 주간 미션 doc 의 고정 ID (싱글톤). */
@@ -505,6 +507,45 @@ object Collections {
     /** AI 가 생성한 회원별 주간 보강 루틴. doc ID = ISO week key ("2026-W22"). */
     const val WEEKLY_ROUTINES = "weeklyRoutines"
 }
+
+/** 1:1 문의 카테고리 — 작성자가 직접 선택(자동분류 X). */
+enum class InquiryCategory(val label: String) {
+    PRAISE("칭찬"),
+    IMPROVEMENT("개선 제안"),
+    QUESTION("문의"),
+    BUG("버그 신고"),
+}
+
+/**
+ * 1:1 문의 상태.
+ *  - [PENDING]: 작성됨, 아직 답변 없음.
+ *  - [DRAFTED]: support 에이전트가 답변 초안 작성(운영자 미승인) — 내부 상태, 사용자에겐 대기로 표시.
+ *  - [ANSWERED]: 운영자/관장 승인 후 답변 게시됨.
+ */
+enum class InquiryStatus { PENDING, DRAFTED, ANSWERED }
+
+/**
+ * 1:1 문의(고객의 소리) 한 건. `inquiries/{id}` — 비공개(작성자 본인 + 운영진만 read).
+ *
+ * 흐름: 사용자 작성(PENDING) → support 에이전트 답변 초안(DRAFTED, ops) → 운영자 승인·게시(ANSWERED).
+ * 비정규화 authorName 은 작성 시점 스냅샷.
+ */
+data class InquiryDoc(
+    val id: String,
+    /** 소속 체육관 id (멀티테넌트). 작성 시 작성자 gymId 로 stamp. */
+    val gymId: String = "",
+    val authorId: String,
+    val authorName: String,
+    val category: InquiryCategory,
+    val text: String,
+    val status: InquiryStatus = InquiryStatus.PENDING,
+    /** 운영자 승인 후 게시된 답변. null 이면 대기 중. */
+    val answer: String? = null,
+    /** 답변 게시한 운영자 회원 id. */
+    val answeredBy: String? = null,
+    val createdAt: Instant,
+    val answeredAt: Instant? = null,
+)
 
 /**
  * 도장의 이번 주 미션 — 홈 화면 카드에 모든 회원에게 동일하게 노출.

@@ -75,6 +75,7 @@ import java.time.DayOfWeek
 fun ProfileSettingsScreen(
     sessionVm: SessionViewModel,
     onBack: () -> Unit,
+    onOpenInquiry: () -> Unit = {},
     notifPrefsVm: NotificationPrefsViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
@@ -182,6 +183,29 @@ fun ProfileSettingsScreen(
             }
 
             item { FaqCard() }
+
+            item {
+                PosseCard(modifier = Modifier.clickable { onOpenInquiry() }) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("1:1 문의", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "칭찬·개선 제안·문의·버그를 남기면 답변드립니다",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            "→",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
 
             item {
                 PosseCard {
