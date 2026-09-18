@@ -100,7 +100,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const draftFn = async (inq) => {
       const out = await router.complete({
         provider: supCfg.model.provider, model: supCfg.model.name,
-        system: LANG_GUARD + support + '\n\n지금은 1:1 문의 답변 초안을 쓴다. 존댓말·간결·정확·겸손. 아래 사실만 근거로, 없는 기능/일정/가격 약속 금지.\n\n' + APP_GROUNDING,
+        system: LANG_GUARD + support + '\n\n지금은 1:1 문의 답변 초안을 쓴다. 존댓말·간결·정확·겸손. 아래 사실만 근거로, 없는 기능/일정/가격 약속 금지.'
+          + '\n\n[출력 규칙] 회원에게 그대로 보낼 **답변 본문만** 써라. "에스컬레이션", "산출물", "원문 요약" 같은 내부 라벨/머리말/메타 텍스트를 절대 붙이지 마라. 인사말+본문 2~4문장이면 충분하다.\n\n' + APP_GROUNDING,
         messages: [{ role: 'user', content: `[카테고리] ${inq.category}\n[문의]\n${inq.text}\n\n답변 초안만 출력(머리말 없이).` }],
       });
       return out.text.trim();
