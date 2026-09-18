@@ -1,7 +1,6 @@
 package com.unboundapex.octalink.ui.screens.inquiry
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -94,7 +93,8 @@ private fun AdminInquiryCard(
     inq: InquiryDoc,
     onPost: (answer: String, onDone: () -> Unit, onError: (String) -> Unit) -> Unit,
 ) {
-    var answer by remember(inq.id) { mutableStateOf(inq.answer ?: "") }
+    // 사전 입력: 게시된 답변 있으면 그것, 없으면 CEO 검토 완료 초안(draftAnswer)을 바로 채움.
+    var answer by remember(inq.id) { mutableStateOf(inq.answer ?: inq.draftAnswer ?: "") }
     var sending by remember(inq.id) { mutableStateOf(false) }
     var error by remember(inq.id) { mutableStateOf<String?>(null) }
 
@@ -135,27 +135,21 @@ private fun AdminInquiryCard(
         Spacer(Modifier.height(6.dp))
         Text(inq.text, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(10.dp))
+        if (!inq.draftAnswer.isNullOrBlank() && inq.status != InquiryStatus.ANSWERED) {
+            Text(
+                "CEO 검토 완료 초안이 입력되어 있어요 — 수정 후 게시하세요.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
         OutlinedTextField(
             value = answer,
             onValueChange = { answer = it; error = null },
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
             label = { Text("답변") },
-            placeholder = {
-                Text(inq.draftAnswer?.takeIf { it.isNotBlank() } ?: "답변을 입력하거나 초안을 수정하세요")
-            },
         )
-        val draft = inq.draftAnswer
-        if (!draft.isNullOrBlank() && inq.status != InquiryStatus.ANSWERED) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "AI 초안 불러오기 (CEO 검토 완료)",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { answer = draft },
-            )
-        }
         error?.let {
             Spacer(Modifier.height(4.dp))
             Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
