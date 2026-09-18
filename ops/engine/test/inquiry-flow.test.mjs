@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { draftPendingInquiries, overPromises } from '../inquiry-flow.mjs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { draftPendingInquiries, overPromises, appendDevTask, openBacklog, markDone, archiveDone } from '../inquiry-flow.mjs';
 
 const q = (id, category, text = 'q') => ({ id, category, text, authorId: 'u', authorName: 'n' });
 
@@ -61,4 +64,29 @@ test('draftPendingInquiries: 개선/버그면 CEO devTask를 백로그로 발행
 test('draftPendingInquiries: pending 없으면 0건', async () => {
   const r = await draftPendingInquiries({ opsRoot: 'x', fetchFn: async () => ({ ok: false, reason: 'no cred', inquiries: [] }) });
   assert.equal(r.drafted, 0);
+});
+
+test('openBacklog: 대기 항목만(완료 제외)', () => {
+  const md = '# H\n\n## [개선] 문의 a (t)\n- 상태: 대기\n- dev 지시: x\n\n## [버그] 문의 b (t)\n- 상태: 완료\n- dev 지시: y';
+  const out = openBacklog(md);
+  assert.match(out, /문의 a/);
+  assert.doesNotMatch(out, /문의 b/);
+});
+
+test('백로그 생애주기: append(누적·중복방지) → markDone → archiveDone', () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-bl-'));
+  const at = new Date('2026-09-18T00:00:00Z');
+  appendDevTask({ opsRoot: ops, inquiry: q('a', 'IMPROVEMENT'), devTask: 'fix a', now: at });
+  appendDevTask({ opsRoot: ops, inquiry: q('b', 'BUG'), devTask: 'fix b', now: at });
+  assert.equal(appendDevTask({ opsRoot: ops, inquiry: q('a', 'IMPROVEMENT'), devTask: 'again', now: at }), false); // 중복 방지
+  const p = join(ops, 'tasks', 'dev-backlog.md');
+  assert.equal((openBacklog(readFileSync(p, 'utf8')).match(/dev 지시/g) || []).length, 2); // 대기 2건
+
+  assert.equal(markDone({ opsRoot: ops, inquiryId: 'a' }), true);
+  assert.doesNotMatch(openBacklog(readFileSync(p, 'utf8')), /문의 a/); // 대기에서 빠짐
+  assert.match(openBacklog(readFileSync(p, 'utf8')), /문의 b/);
+
+  assert.equal(archiveDone({ opsRoot: ops }), 1);
+  assert.doesNotMatch(readFileSync(p, 'utf8'), /문의 a/); // 활성 백로그에서 제거
+  assert.match(readFileSync(join(ops, 'tasks', 'dev-backlog-done.md'), 'utf8'), /문의 a/); // 아카이브 보관
 });

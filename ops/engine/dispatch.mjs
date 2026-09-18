@@ -39,10 +39,14 @@ async function defaultRefresh({ opsRoot, agent, env }) {
     }
   }
   // dev: 1:1 문의(개선/버그)에서 CEO가 발행한 태스크 백로그를 컨텍스트로 주입 → dev가 CEO 통해 지시 받음.
+  // 대기(미완료) 항목만 — 완료 처리분은 제외(누적 방지).
   if (agent === 'dev') {
     const bl = join(opsRoot, 'tasks', 'dev-backlog.md');
     if (existsSync(bl)) {
-      try { writeContextSection({ opsRoot, agent: 'dev', section: '문의 개선·버그 백로그(CEO 발행)', body: readFileSync(bl, 'utf8') }); } catch { /* skip */ }
+      try {
+        const { openBacklog } = await import('./inquiry-flow.mjs');
+        writeContextSection({ opsRoot, agent: 'dev', section: '문의 개선·버그 백로그(CEO 발행, 대기만)', body: openBacklog(readFileSync(bl, 'utf8')) });
+      } catch { /* skip */ }
     }
   }
 }

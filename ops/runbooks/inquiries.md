@@ -17,6 +17,16 @@
 - **허위약속 가드(결정적)**: `overPromises()` — "지시했다/보고했다/개선 예정/곧 업데이트/수정 완료" 등 없는 조치·확정 일정 표현이 답변에 있으면 코드가 차단(로컬 LLM 자가검열 불신). 답변은 최대 "검토해 개선을 고려하겠습니다" 수준.
 - **개선/버그 → dev 지시**: CEO 검토가 `devTask`(구체 지시 1줄)를 발행 → `tasks/dev-backlog.md`(문의 id로 중복 방지) → `defaultRefresh`가 dev 컨텍스트('문의 개선·버그 백로그' 구획)로 주입해 **dev가 CEO 통해 태스크 수령**.
 
+## dev 백로그 생애주기 (수동 완료)
+`tasks/dev-backlog.md`는 **누적**(append). 각 항목은 `- 상태: 대기`. dev 컨텍스트에는 **대기 항목만** 주입(완료분 제외 → 누적 방지).
+- **완료 처리**: 작업이 끝나면(운영자가 dev의 gated PR 승인·머지 후) 수동으로:
+  ```
+  node ops/engine/inquiry-flow.mjs done <문의id>
+  ```
+  → 해당 항목 `상태: 완료` + `tasks/dev-backlog-done.md` 로 아카이브 + 활성 백로그에서 제거.
+- 또는 `tasks/dev-backlog.md`에서 직접 `상태: 대기`→`완료`로 고친 뒤 `node ops/engine/inquiry-flow.mjs done`(인자 없이) 실행 → 완료 표시분 일괄 아카이브.
+- (dev-backlog*.md는 gitignore 런타임 파일.)
+
 ## 구성 (ops)
 - `connectors/inquiries.mjs` — `fetchPending`(PENDING) · `saveDraft`(draftAnswer+DRAFTED) · `postAnswer`(ANSWERED) · `setStatus`. no-op 가드.
 - `engine/inquiry-flow.mjs` — `draftAnswer`(support) · `ceoReview`(CEO 승인/수정) · `draftPendingInquiries`(fetch→draft→CEO→save) + CLI.

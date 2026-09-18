@@ -1,7 +1,7 @@
 // 1:1 문의 답변 초안 흐름: pending 문의 → support 초안 → **CEO 검토(무조건)** → 통과분만
 // Firestore inquiries.draftAnswer 에 저장(status=DRAFTED) → 어드민 답변창 placeholder 로 노출 →
 // 운영자 검토/수정 후 인앱 게시(ANSWERED). CEO 미승인 초안은 저장 안 함(다음 주기 재시도).
-import { readFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -72,6 +72,8 @@ export async function ceoReview({ inquiry, draft, router, opsRoot }) {
   return extractJson(out.text);
 }
 
+const BACKLOG_HEADER = '# dev 백로그 — 1:1 문의(개선/버그)에서 CEO가 발행한 태스크';
+
 // 개선/버그 문의 → dev 백로그(tasks/dev-backlog.md)에 CEO 발행 태스크 append(문의 id로 중복 방지).
 export function appendDevTask({ opsRoot, inquiry, devTask, now = new Date() }) {
   const dir = join(opsRoot, 'tasks');
@@ -80,10 +82,65 @@ export function appendDevTask({ opsRoot, inquiry, devTask, now = new Date() }) {
   const prev = existsSync(p) ? readFileSync(p, 'utf8') : '';
   if (prev.includes(`문의 ${inquiry.id}`)) return false; // 이미 발행됨
   const cat = CAT_LABEL[inquiry.category] || inquiry.category;
-  const header = prev ? '' : '# dev 백로그 — 1:1 문의(개선/버그)에서 CEO가 발행한 태스크\n\n';
-  const entry = `## [${cat}] 문의 ${inquiry.id} (${now.toISOString()})\n- 원문: ${inquiry.text}\n- dev 지시: ${devTask}\n\n`;
+  const header = prev ? '' : `${BACKLOG_HEADER}\n\n`;
+  const entry = `## [${cat}] 문의 ${inquiry.id} (${now.toISOString()})\n- 상태: 대기\n- 원문: ${inquiry.text}\n- dev 지시: ${devTask}\n\n`;
   appendFileSync(p, header + entry);
   return true;
+}
+
+// 백로그 파싱 → {header, entries:[{id, status, text}]}. (순수)
+export function parseBacklog(md) {
+  const parts = (md || '').split(/\n(?=## )/);
+  let header = '';
+  const entries = [];
+  for (const p of parts) {
+    if (p.startsWith('## ')) {
+      const id = (/문의\s+(\S+)/.exec(p) || [])[1] || null;
+      const status = (/-\s*상태:\s*(\S+)/.exec(p) || [])[1] || '대기';
+      entries.push({ id, status, text: p.replace(/\s+$/, '') });
+    } else if (p.trim()) { header = p.replace(/\s+$/, ''); }
+  }
+  return { header: header || BACKLOG_HEADER, entries };
+}
+
+// dev 컨텍스트용 — 대기(미완료) 항목만. (순수)
+export function openBacklog(md) {
+  const { header, entries } = parseBacklog(md);
+  const open = entries.filter((e) => e.status !== '완료');
+  return `${header}\n\n${open.map((e) => e.text).join('\n\n') || '(대기 중인 태스크 없음)'}\n`;
+}
+
+// 특정 문의 태스크를 완료로 표시. 반환: 찾았는지.
+export function markDone({ opsRoot, inquiryId }) {
+  const p = join(opsRoot, 'tasks', 'dev-backlog.md');
+  if (!existsSync(p)) return false;
+  const { header, entries } = parseBacklog(readFileSync(p, 'utf8'));
+  let found = false;
+  for (const e of entries) {
+    if (e.id === inquiryId && e.status !== '완료') {
+      e.text = /-\s*상태:\s*\S+/.test(e.text)
+        ? e.text.replace(/-\s*상태:\s*\S+/, '- 상태: 완료')
+        : e.text.replace(/\n/, '\n- 상태: 완료\n');
+      e.status = '완료'; found = true;
+    }
+  }
+  writeFileSync(p, `${header}\n\n${entries.map((e) => e.text).join('\n\n')}\n`);
+  return found;
+}
+
+// 완료 표시된 항목을 dev-backlog-done.md 로 아카이브 + 활성 백로그에서 제거. 반환: 아카이브 건수.
+export function archiveDone({ opsRoot, now = () => new Date() }) {
+  const p = join(opsRoot, 'tasks', 'dev-backlog.md');
+  if (!existsSync(p)) return 0;
+  const { header, entries } = parseBacklog(readFileSync(p, 'utf8'));
+  const done = entries.filter((e) => e.status === '완료');
+  const open = entries.filter((e) => e.status !== '완료');
+  if (!done.length) return 0;
+  const arch = join(opsRoot, 'tasks', 'dev-backlog-done.md');
+  const ah = existsSync(arch) ? '' : '# dev 백로그 — 완료 아카이브\n\n';
+  appendFileSync(arch, ah + done.map((e) => `${e.text}\n- 완료처리: ${now().toISOString()}`).join('\n\n') + '\n\n');
+  writeFileSync(p, `${header}\n\n${open.map((e) => e.text).join('\n\n') || '(대기 중인 태스크 없음)'}\n`);
+  return done.length;
 }
 
 // pending 문의 → support 초안 → CEO 검토(+개선/버그면 dev 태스크 발행) → 통과분만 draftAnswer 저장(DRAFTED).
@@ -114,10 +171,23 @@ export async function draftPendingInquiries({ opsRoot, projectId, credentialJson
   return { drafted, skipped, devTasks };
 }
 
-// CLI: node inquiry-flow.mjs  → pending 문의 초안(→CEO검토→Firestore draftAnswer)
+// CLI: node inquiry-flow.mjs             → pending 문의 초안(→CEO검토→Firestore draftAnswer)
+//      node inquiry-flow.mjs done <id>   → dev 백로그 태스크 완료→아카이브
+//      node inquiry-flow.mjs done        → 파일에서 수동 "완료" 표시분 아카이브
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
   const opsRoot = process.env.OPS_ROOT || join(here, '..');
+  if (process.argv.includes('done')) {
+    const id = process.argv[process.argv.indexOf('done') + 1];
+    if (id) {
+      const found = markDone({ opsRoot, inquiryId: id });
+      const n = archiveDone({ opsRoot });
+      console.log(found ? `완료 처리: 문의 ${id} → 아카이브 ${n}건` : `문의 ${id} 를 백로그에서 못 찾음`);
+    } else {
+      console.log(`수동 '완료' 표시분 아카이브: ${archiveDone({ opsRoot })}건`);
+    }
+    process.exit(0);
+  }
   const { loadEnv } = await import('./env.mjs');
   loadEnv(opsRoot);
   const { createRouter } = await import('./router.mjs');
