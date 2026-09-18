@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchPending, setStatus, postAnswer } from '../../connectors/inquiries.mjs';
+import { fetchPending, setStatus, postAnswer, saveDraft } from '../../connectors/inquiries.mjs';
 
 test('fetchPending: 자격증명·readerFn 없으면 no-op', async () => {
   const r = await fetchPending({});
@@ -27,5 +27,13 @@ test('postAnswer / setStatus: writerFn 주입 실행', async () => {
 
 test('postAnswer: 자격증명·writerFn 없으면 no-op', async () => {
   const r = await postAnswer({ inquiryId: 'a', answer: 'x' });
+  assert.equal(r.ok, false);
+});
+
+test('saveDraft: writerFn 주입 실행 / 자격증명 없으면 no-op', async () => {
+  let called = false;
+  await saveDraft({ writerFn: async () => { called = true; }, inquiryId: 'a', draftAnswer: 'x' });
+  assert.equal(called, true);
+  const r = await saveDraft({ inquiryId: 'a', draftAnswer: 'x' });
   assert.equal(r.ok, false);
 });

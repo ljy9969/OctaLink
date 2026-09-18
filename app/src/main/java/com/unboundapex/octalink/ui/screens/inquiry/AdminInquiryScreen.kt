@@ -1,6 +1,7 @@
 package com.unboundapex.octalink.ui.screens.inquiry
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -140,8 +141,21 @@ private fun AdminInquiryCard(
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
             label = { Text("답변") },
-            placeholder = { Text("답변을 입력하거나 초안을 수정하세요") },
+            placeholder = {
+                Text(inq.draftAnswer?.takeIf { it.isNotBlank() } ?: "답변을 입력하거나 초안을 수정하세요")
+            },
         )
+        val draft = inq.draftAnswer
+        if (!draft.isNullOrBlank() && inq.status != InquiryStatus.ANSWERED) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "AI 초안 불러오기 (CEO 검토 완료)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { answer = draft },
+            )
+        }
         error?.let {
             Spacer(Modifier.height(4.dp))
             Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
@@ -160,7 +174,7 @@ private fun AdminInquiryCard(
                 when {
                     sending -> "게시 중…"
                     inq.status == InquiryStatus.ANSWERED -> "답변 수정 게시"
-                    else -> "승인 · 게시"
+                    else -> "게시"
                 },
             )
         }

@@ -1,6 +1,7 @@
-// 1:1 문의 답변 흐름(게이트): pending 조회 → support 초안 → approvals/inquiry-<id>.md
-// → 운영자가 파일의 "상태: 대기"를 "승인"(또는 "반려")으로 변경 → apply 시 Firestore 게시(ANSWERED).
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
+// 1:1 문의 답변 초안 흐름: pending 문의 → support 초안 → **CEO 검토(무조건)** → 통과분만
+// Firestore inquiries.draftAnswer 에 저장(status=DRAFTED) → 어드민 답변창 placeholder 로 노출 →
+// 운영자 검토/수정 후 인앱 게시(ANSWERED). CEO 미승인 초안은 저장 안 함(다음 주기 재시도).
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -13,100 +14,74 @@ export const APP_GROUNDING = `# OctaLink 사실(이것만 근거로, 없는 기�
 - 로그아웃은 데이터 보존. 탈퇴 기록은 운영 자료 보존, 완전삭제는 운영자 요청.
 - AI 쉐도우 코치/맞춤 루틴 있음. 유료화(포인트/구독)는 아직 미출시 — 가격·출시일 약속 금지.`;
 
-export function renderProposal({ inquiry, draft, now = new Date() }) {
-  const cat = CAT_LABEL[inquiry.category] || inquiry.category;
-  return `# 문의 답변 승인 대기: ${inquiry.id}\n\n`
-    + `- 문의ID: ${inquiry.id}\n`
-    + `- 카테고리: ${cat}\n`
-    + `- 작성자: ${inquiry.authorName || '?'} (${inquiry.authorId})\n`
-    + `- 생성: ${now.toISOString()}\n`
-    + `- 상태: 대기   (승인하려면 "승인", 반려는 "반려"로 바꾸세요)\n\n`
-    + `## 문의 내용\n${inquiry.text}\n\n`
-    + `## 답변 초안 (승인 전 자유롭게 수정하세요)\n${draft}\n`;
+function extractJson(text) {
+  const s = text.indexOf('{'), e = text.lastIndexOf('}');
+  if (s < 0 || e < s) return null;
+  try { return JSON.parse(text.slice(s, e + 1)); } catch { return null; }
 }
 
-export function parseProposal(md) {
-  const idM = /^- 문의ID:\s*(\S+)/m.exec(md);
-  const stM = /^- 상태:\s*(\S+)/m.exec(md);
-  const ansM = /## 답변 초안[^\n]*\n([\s\S]*?)\s*$/.exec(md);
-  return {
-    inquiryId: idM ? idM[1] : null,
-    status: stM ? stM[1] : null, // 대기 / 승인 / 반려
-    answer: ansM ? ansM[1].trim() : '',
-  };
+// support 모델로 답변 초안 1건 생성(본문만).
+export async function draftAnswer({ inquiry, router, opsRoot }) {
+  const { LANG_GUARD } = await import('./lang.mjs');
+  const support = readFileSync(join(opsRoot, 'agents', 'support', 'skill.md'), 'utf8');
+  const cfg = JSON.parse(readFileSync(join(opsRoot, 'agents', 'support', 'config.json'), 'utf8'));
+  const out = await router.complete({
+    provider: cfg.model.provider, model: cfg.model.name,
+    system: LANG_GUARD + support
+      + '\n\n지금은 1:1 문의 답변 초안을 쓴다. 존댓말·간결·정확·겸손. 아래 사실만 근거로, 없는 기능/일정/가격 약속 금지.'
+      + '\n\n[출력 규칙] 회원에게 그대로 보낼 답변 본문만 써라. "에스컬레이션","산출물","원문 요약" 같은 내부 라벨/머리말 금지. 인사말+본문 2~4문장.\n\n'
+      + APP_GROUNDING,
+    messages: [{ role: 'user', content: `[카테고리] ${CAT_LABEL[inquiry.category] || inquiry.category}\n[문의]\n${inquiry.text}\n\n답변 초안만 출력(머리말 없이).` }],
+  });
+  return out.text.trim();
 }
 
-// pending 문의마다 초안을 만들어 approvals/ 에 기록하고 상태를 DRAFTED 로 표시.
-export async function answerPending({ opsRoot, projectId, credentialJson, draftFn, fetchFn, setStatusFn, now = () => new Date() }) {
+// CEO 검토 — support 초안을 승인/수정. {approved, answer(최종), reason} JSON.
+export async function ceoReview({ inquiry, draft, router, opsRoot }) {
+  const { LANG_GUARD } = await import('./lang.mjs');
+  const ceo = readFileSync(join(opsRoot, 'ceo', 'ceo.md'), 'utf8');
+  const cfg = JSON.parse(readFileSync(join(opsRoot, 'ceo', 'config.json'), 'utf8'));
+  const out = await router.complete({
+    provider: cfg.model.provider, model: cfg.model.name,
+    system: LANG_GUARD + ceo + '\n\n지금은 support가 쓴 1:1 문의 답변 초안을 CEO로서 검토·승인하는 일이다. 허위 약속·부정확·무례·정책 위반이 있으면 고쳐서 최종 답변을 만든다.',
+    messages: [{ role: 'user', content:
+      `[문의]\n${inquiry.text}\n\n[support 초안]\n${draft}\n\n`
+      + `반드시 JSON만 출력: {"approved": true/false, "answer": "게시할 최종 답변(승인이면 초안 그대로, 문제 있으면 수정본. 존댓말·본문만)", "reason": "간단 사유"}` }],
+  });
+  return extractJson(out.text);
+}
+
+// pending 문의 → support 초안 → CEO 검토 → 통과분만 draftAnswer 저장(DRAFTED).
+export async function draftPendingInquiries({ opsRoot, projectId, credentialJson, router, fetchFn, draftFn, reviewFn, saveDraftFn, now = () => new Date() }) {
   const conn = await import('../connectors/inquiries.mjs');
   const res = await (fetchFn || conn.fetchPending)({ projectId, credentialJson });
-  if (!res.ok) return { drafted: 0, reason: res.reason };
-  const approvalsDir = join(opsRoot, 'approvals');
-  if (!existsSync(approvalsDir)) mkdirSync(approvalsDir, { recursive: true });
-  let drafted = 0;
+  if (!res.ok) return { drafted: 0, skipped: 0, reason: res.reason };
+  let drafted = 0, skipped = 0;
   for (const inq of res.inquiries) {
-    const draft = await draftFn(inq);
-    writeFileSync(join(approvalsDir, `inquiry-${inq.id}.md`), renderProposal({ inquiry: inq, draft, now: now() }));
-    await (setStatusFn || conn.setStatus)({ projectId, credentialJson, inquiryId: inq.id, status: 'DRAFTED' });
-    drafted++;
-  }
-  return { drafted };
-}
-
-// approvals/inquiry-*.md 중 "승인" 표기된 것 → Firestore 게시(ANSWERED). "반려"는 폐기. 처리분은 .done.md 로.
-export async function applyApproved({ opsRoot, projectId, credentialJson, postFn }) {
-  const conn = await import('../connectors/inquiries.mjs');
-  const approvalsDir = join(opsRoot, 'approvals');
-  if (!existsSync(approvalsDir)) return { applied: 0, rejected: 0 };
-  let applied = 0, rejected = 0;
-  for (const f of readdirSync(approvalsDir)) {
-    if (!/^inquiry-.+\.md$/.test(f) || f.endsWith('.done.md')) continue;
-    const p = join(approvalsDir, f);
-    const parsed = parseProposal(readFileSync(p, 'utf8'));
-    if (!parsed.inquiryId) continue;
-    if (parsed.status === '승인' && parsed.answer) {
-      await (postFn || conn.postAnswer)({ projectId, credentialJson, inquiryId: parsed.inquiryId, answer: parsed.answer, answeredBy: 'ops' });
-      renameSync(p, p.replace(/\.md$/, '.done.md'));
-      applied++;
-    } else if (parsed.status === '반려') {
-      renameSync(p, p.replace(/\.md$/, '.done.md'));
-      rejected++;
+    const draft = draftFn ? await draftFn(inq) : await draftAnswer({ inquiry: inq, router, opsRoot });
+    const review = reviewFn ? await reviewFn(inq, draft) : await ceoReview({ inquiry: inq, draft, router, opsRoot });
+    const finalAnswer = review && typeof review.answer === 'string' ? review.answer.trim() : '';
+    if (review && review.approved === true && finalAnswer) {
+      await (saveDraftFn || conn.saveDraft)({ projectId, credentialJson, inquiryId: inq.id, draftAnswer: finalAnswer });
+      drafted++;
+    } else {
+      skipped++; // CEO 미승인/파싱 실패 → 저장 안 함(PENDING 유지, 다음 주기 재시도)
     }
   }
-  return { applied, rejected };
+  return { drafted, skipped };
 }
 
-// CLI: node inquiry-flow.mjs         → pending 초안 작성(approvals/)
-//      node inquiry-flow.mjs apply   → "승인" 표기분 Firestore 게시
+// CLI: node inquiry-flow.mjs  → pending 문의 초안(→CEO검토→Firestore draftAnswer)
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
   const opsRoot = process.env.OPS_ROOT || join(here, '..');
   const { loadEnv } = await import('./env.mjs');
   loadEnv(opsRoot);
+  const { createRouter } = await import('./router.mjs');
   const conf = JSON.parse(readFileSync(join(opsRoot, 'connectors', 'config.json'), 'utf8'));
   const projectId = conf.firebase?.projectId;
   const credRaw = process.env[conf.firebase?.credEnv || 'FIREBASE_SERVICE_ACCOUNT'] || '';
   const cred = credRaw && existsSync(credRaw) ? readFileSync(credRaw, 'utf8') : credRaw;
-
-  if (process.argv.includes('apply')) {
-    const r = await applyApproved({ opsRoot, projectId, credentialJson: cred });
-    console.log(`문의 답변 적용: 승인 게시 ${r.applied} · 반려 ${r.rejected}`);
-  } else {
-    const { createRouter } = await import('./router.mjs');
-    const { LANG_GUARD } = await import('./lang.mjs');
-    const router = createRouter();
-    const support = readFileSync(join(opsRoot, 'agents', 'support', 'skill.md'), 'utf8');
-    const supCfg = JSON.parse(readFileSync(join(opsRoot, 'agents', 'support', 'config.json'), 'utf8'));
-    const draftFn = async (inq) => {
-      const out = await router.complete({
-        provider: supCfg.model.provider, model: supCfg.model.name,
-        system: LANG_GUARD + support + '\n\n지금은 1:1 문의 답변 초안을 쓴다. 존댓말·간결·정확·겸손. 아래 사실만 근거로, 없는 기능/일정/가격 약속 금지.'
-          + '\n\n[출력 규칙] 회원에게 그대로 보낼 **답변 본문만** 써라. "에스컬레이션", "산출물", "원문 요약" 같은 내부 라벨/머리말/메타 텍스트를 절대 붙이지 마라. 인사말+본문 2~4문장이면 충분하다.\n\n' + APP_GROUNDING,
-        messages: [{ role: 'user', content: `[카테고리] ${inq.category}\n[문의]\n${inq.text}\n\n답변 초안만 출력(머리말 없이).` }],
-      });
-      return out.text.trim();
-    };
-    const r = await answerPending({ opsRoot, projectId, credentialJson: cred, draftFn });
-    console.log(`문의 답변 초안: ${r.drafted}건${r.reason ? ` (${r.reason})` : ''} → approvals/inquiry-*.md`);
-  }
+  const r = await draftPendingInquiries({ opsRoot, projectId, credentialJson: cred, router: createRouter() });
+  console.log(`문의 초안(CEO 검토 통과 저장): ${r.drafted}건 · 미승인 보류 ${r.skipped}건${r.reason ? ` (${r.reason})` : ''}`);
 }

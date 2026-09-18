@@ -21,6 +21,7 @@ internal fun DocumentSnapshot.toInquiryDoc(): InquiryDoc? {
         text = text,
         status = runCatching { InquiryStatus.valueOf(getString("status") ?: "PENDING") }
             .getOrDefault(InquiryStatus.PENDING),
+        draftAnswer = getString("draftAnswer"),
         answer = getString("answer"),
         answeredBy = getString("answeredBy"),
         createdAt = (get("createdAt") as? Timestamp)?.let {

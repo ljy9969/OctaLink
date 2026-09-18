@@ -39,6 +39,18 @@ async function defaultRefresh({ opsRoot, agent, env }) {
   }
 }
 
+// support 주기 훅: pending 1:1 문의 → support 초안 → CEO 검토 → 통과분 Firestore draftAnswer 저장.
+// 자격증명 없으면 no-op. inquiry-flow.draftPendingInquiries 위임.
+async function defaultDraftInquiries({ opsRoot, router, env }) {
+  const fb = loadConnectors(opsRoot).firebase;
+  if (!fb) return;
+  const raw = env[fb.credEnv || 'FIREBASE_SERVICE_ACCOUNT'];
+  if (!raw) return;
+  const cred = existsSync(raw) ? readFileSync(raw, 'utf8') : raw;
+  const { draftPendingInquiries } = await import('./inquiry-flow.mjs');
+  await draftPendingInquiries({ opsRoot, projectId: fb.projectId, credentialJson: cred, router });
+}
+
 export function readEventAgents(opsRoot) {
   const out = []; const dir = join(opsRoot, 'agents');
   for (const n of (existsSync(dir) ? readdirSync(dir).sort() : [])) {
@@ -61,7 +73,7 @@ export function readJobs(opsRoot) {
   return jobs;
 }
 
-export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, refreshContextFn = defaultRefresh, env = process.env }) {
+export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, refreshContextFn = defaultRefresh, draftInquiriesFn = defaultDraftInquiries, env = process.env }) {
   const at = now(); const nowMs = at.getTime();
   const stateDir = join(opsRoot, 'state');
   const st = loadState(stateDir, 'dispatch'); st.lastRun = st.lastRun || {};
@@ -76,6 +88,8 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
         ? await runCeoFn({ opsRoot, router, now })
         : await runAgentFn({ agentDir: join(opsRoot, 'agents', j.name), opsRoot, router, now });
       status = r.status;
+      // support 주기마다 1:1 문의 초안(→CEO 검토→Firestore draftAnswer). 실패해도 진행.
+      if (j.name === 'support') { try { await draftInquiriesFn({ opsRoot, router, env }); } catch { /* skip */ } }
     }
     st.lastRun[j.name] = at.toISOString(); // 발화 여부와 무관하게 항상 갱신 → 다음 창이 전진
     results.push({ job: j.name, ran: due, status });

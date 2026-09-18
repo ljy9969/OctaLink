@@ -539,6 +539,8 @@ data class InquiryDoc(
     val category: InquiryCategory,
     val text: String,
     val status: InquiryStatus = InquiryStatus.PENDING,
+    /** support 에이전트가 만든 답변 초안(미게시). 어드민 답변창에 채워 검토·수정용. ops가 기록. */
+    val draftAnswer: String? = null,
     /** 운영자 승인 후 게시된 답변. null 이면 대기 중. */
     val answer: String? = null,
     /** 답변 게시한 운영자 회원 id. */

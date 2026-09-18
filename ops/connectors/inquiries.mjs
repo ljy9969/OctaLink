@@ -33,6 +33,17 @@ export async function setStatus({ projectId, credentialJson, inquiryId, status, 
   return { ok: true };
 }
 
+/** 답변 초안 저장(CEO 검토 통과분) — draftAnswer 저장 + status=DRAFTED. 어드민 placeholder 로 노출. */
+export async function saveDraft({ projectId, credentialJson, inquiryId, draftAnswer, writerFn }) {
+  if (!credentialJson && !writerFn) return { ok: false, reason: 'FIREBASE 자격증명 없음' };
+  const write = writerFn || (async () => {
+    const admin = await adminApp(credentialJson, projectId);
+    await admin.firestore().collection('inquiries').doc(inquiryId).update({ draftAnswer, status: 'DRAFTED' });
+  });
+  await write();
+  return { ok: true };
+}
+
 /** 답변 게시 — answer 저장 + status=ANSWERED. writerFn 주입 가능. */
 export async function postAnswer({ projectId, credentialJson, inquiryId, answer, answeredBy = 'ops', writerFn }) {
   if (!credentialJson && !writerFn) return { ok: false, reason: 'FIREBASE 자격증명 없음' };
