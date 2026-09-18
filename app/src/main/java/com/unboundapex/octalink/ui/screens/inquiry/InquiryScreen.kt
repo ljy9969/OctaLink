@@ -71,7 +71,7 @@ fun InquiryScreen(
         if (myId != null) vm.mine(myId) else flowOf(emptyList())
     }.collectAsState(initial = emptyList())
 
-    var category by remember { mutableStateOf(InquiryCategory.QUESTION) }
+    var category by remember { mutableStateOf(InquiryCategory.PRAISE) }
     var text by remember { mutableStateOf("") }
 
     // 전송 완료되면 입력 비우고 상태 초기화.
