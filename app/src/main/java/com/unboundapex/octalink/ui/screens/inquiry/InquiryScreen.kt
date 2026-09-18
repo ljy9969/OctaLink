@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -46,10 +47,11 @@ import com.unboundapex.octalink.ui.components.PosseScreen
 import kotlinx.coroutines.flow.flowOf
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-/** 문의 작성 일시 표시 — KST, "YY/MM/DD H:MM"(24시간). 사용자·운영진 화면 공용. */
+/** 문의 작성 일시 표시 — KST, "26/9/18 오후 2:30" 형식. 사용자·운영진 화면 공용. */
 internal val INQUIRY_TS_FMT: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yy/MM/dd H:mm").withZone(ZoneId.of("Asia/Seoul"))
+    DateTimeFormatter.ofPattern("yy/M/d a h:mm", Locale.KOREAN).withZone(ZoneId.of("Asia/Seoul"))
 
 @Composable
 fun InquiryScreen(
@@ -213,6 +215,12 @@ private fun InquiryCard(inq: InquiryDoc) {
                     .background(catColor)
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                INQUIRY_TS_FMT.format(inq.createdAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.weight(1f))
             Text(
                 if (inq.status == InquiryStatus.ANSWERED) "답변 완료" else "확인 중",
@@ -221,12 +229,6 @@ private fun InquiryCard(inq: InquiryDoc) {
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            INQUIRY_TS_FMT.format(inq.createdAt),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(6.dp))
         Text(inq.text, style = MaterialTheme.typography.bodyMedium)
         val answer = inq.answer

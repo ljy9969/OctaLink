@@ -50,6 +50,7 @@ import com.unboundapex.octalink.data.schema.isMaster
 import com.unboundapex.octalink.data.schema.isStaff
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
+import com.unboundapex.octalink.ui.screens.inquiry.InquiryViewModel
 import com.unboundapex.octalink.ui.components.PosseScreen
 import com.unboundapex.octalink.ui.screens.home.SaveState
 import com.unboundapex.octalink.ui.screens.home.WeeklyMissionViewModel
@@ -76,6 +77,7 @@ fun AdminScreen(
     approvalVm: MemberApprovalViewModel = viewModel(),
     weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
     skillReviewVm: SkillScoreReviewViewModel = viewModel(),
+    inquiryVm: InquiryViewModel = viewModel(),
 ) {
     val session by sessionVm.state.collectAsState()
     val pendingMembers by approvalVm.pending.collectAsState()
@@ -84,6 +86,7 @@ fun AdminScreen(
     val weeklyMission by weeklyMissionVm.mission.collectAsState()
     val missionSaveState by weeklyMissionVm.saveState.collectAsState()
     val pendingSkillScores by skillReviewVm.pending.collectAsState()
+    val unansweredInquiries by inquiryVm.unansweredCount.collectAsState()
     val role = session.role
 
     // 스킬 점수 편집 다이얼로그 — null 이면 닫힘.
@@ -139,11 +142,7 @@ fun AdminScreen(
                                 color = StripeInquiry,
                                 modifier = Modifier.weight(1f),
                             )
-                            Text(
-                                "→",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = StripeInquiry,
-                            )
+                            PendingBadge(count = unansweredInquiries)
                         }
                         Text(
                             "회원 문의 확인 · 답변 수정/게시",

@@ -5,11 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.data.schema.InquiryCategory
 import com.unboundapex.octalink.data.schema.InquiryDoc
+import com.unboundapex.octalink.data.schema.InquiryStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -28,6 +32,15 @@ class InquiryViewModel : ViewModel() {
                 android.util.Log.e("OctaLink.Inquiry", "mine flow error", e)
                 emit(emptyList())
             }
+
+    /** 미답변(ANSWERED 아님) 문의 수 — Admin 카드 배지용. 운영진만 읽힘(rules), 권한 없으면 0. */
+    val unansweredCount: StateFlow<Int> = repo.observeAllForGym()
+        .map { list -> list.count { it.status != InquiryStatus.ANSWERED } }
+        .catch { e ->
+            android.util.Log.e("OctaLink.Inquiry", "unansweredCount error", e)
+            emit(0)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /** 운영진용 — 우리 체육관 전체 문의. 권한(운영진 read)은 Firestore rules 검증. */
     fun allForGym(): Flow<List<InquiryDoc>> =
