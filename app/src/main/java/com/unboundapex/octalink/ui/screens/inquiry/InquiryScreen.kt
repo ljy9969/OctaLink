@@ -44,6 +44,12 @@ import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import kotlinx.coroutines.flow.flowOf
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+/** 문의 작성 일시 표시 — KST, "YY/MM/DD H:MM"(24시간). 사용자·운영진 화면 공용. */
+internal val INQUIRY_TS_FMT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yy/MM/dd H:mm").withZone(ZoneId.of("Asia/Seoul"))
 
 @Composable
 fun InquiryScreen(
@@ -215,6 +221,12 @@ private fun InquiryCard(inq: InquiryDoc) {
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            INQUIRY_TS_FMT.format(inq.createdAt),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(6.dp))
         Text(inq.text, style = MaterialTheme.typography.bodyMedium)
         val answer = inq.answer
