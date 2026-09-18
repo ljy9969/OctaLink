@@ -129,20 +129,20 @@ fun AdminScreen(
             if (role.isMaster) {
                 item {
                     PosseCard(
-                        leftStripeColor = StripeApprovalQueue,
+                        leftStripeColor = StripeInquiry,
                         modifier = Modifier.clickable { onOpenInquiryAdmin() },
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "1:1 문의 관리",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = StripeApprovalQueue,
+                                color = StripeInquiry,
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
                                 "→",
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = StripeApprovalQueue,
+                                color = StripeInquiry,
                             )
                         }
                         Text(
@@ -530,6 +530,7 @@ private fun SkillSlider(label: String, value: Float, onChange: (Float) -> Unit) 
 // 각 카드는 고유 색이어야 함 (중복 금지).
 private val StripeStaff = Color(0xFF1E88E5)           // 코치 블루 — 운영진 공통 카드
 private val StripeApprovalQueue = Color(0xFFFBC02D)   // 앰버 — 회원 가입 승인 큐
+private val StripeInquiry = Color(0xFF5C6BC0)         // 인디고 — 1:1 문의 관리 (앰버 승인 큐와 구분)
 private val StripeUnknownBelt = Color(0xFF00897B)     // 티얼 — 미등급 벨트 지정 (앰버 회피)
 private val StripeMaster = Color(0xFFC8102E)          // 관장 빨강 — 스킬 점수 입력
 private val StripeSkillReview = Color(0xFFEC407A)     // 핑크 — 스킬 점수 검토 큐 (관장 빨강과 구분)
