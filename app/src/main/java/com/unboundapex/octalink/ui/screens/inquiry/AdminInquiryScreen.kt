@@ -40,10 +40,11 @@ import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-/** 작성 시각 표시 — KST. */
+/** 작성 시각 표시 — KST, "YY/MM/DD 오전·오후 HH:MM"(12시간제). */
 private val INQUIRY_TS_FMT: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm").withZone(ZoneId.of("Asia/Seoul"))
+    DateTimeFormatter.ofPattern("yy/MM/dd a hh:mm", Locale.KOREAN).withZone(ZoneId.of("Asia/Seoul"))
 
 /** 운영진(관장) 전용 — 회원 1:1 문의 확인 + 답변 수정/게시. 게시 권한은 Firestore rules(isMaster) 도 강제. */
 @Composable
