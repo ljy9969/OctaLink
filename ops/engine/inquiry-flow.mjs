@@ -60,7 +60,9 @@ export async function ceoReview({ inquiry, draft, router, opsRoot }) {
   const cat = CAT_LABEL[inquiry.category] || inquiry.category;
   const isDev = inquiry.category === 'IMPROVEMENT' || inquiry.category === 'BUG';
   const devNote = isDev
-    ? `\n이 문의는 "${cat}"이다. 답변과 별개로, **dev 에이전트에게 내릴 구체적 태스크 1줄**을 devTask에 써라(무엇을 고칠지 명확히, 없는 기능 가정 금지). 답변(회원용)에는 "지시했다/곧 반영" 같은 확정 약속을 넣지 말고 "검토하겠습니다" 수준으로만.`
+    ? `\n이 문의는 "${cat}"이다. 답변과 별개로, **dev 에이전트에게 내릴 구체적 태스크**를 devTask에 써라(무엇을 고칠지 명확히, 없는 기능 가정 금지). `
+      + `**화면/UI/레이아웃/디자인/테마 변경이 포함되면, devTask에 반드시 "각 관련 화면의 as-is/to-be(개선 전·후) 스크린샷을 비교 가능하게 첨부하여 CEO에게 보고"라는 보고 요건을 함께 넣어라.** `
+      + `답변(회원용)에는 "지시했다/곧 반영" 같은 확정 약속을 넣지 말고 "검토하겠습니다" 수준으로만.`
     : `\ndevTask는 빈 문자열("")로 둔다(개선/버그 아님).`;
   const out = await router.complete({
     provider: cfg.model.provider, model: cfg.model.name,
@@ -74,17 +76,19 @@ export async function ceoReview({ inquiry, draft, router, opsRoot }) {
 
 const BACKLOG_HEADER = '# dev 백로그 — 1:1 문의(개선/버그)에서 CEO가 발행한 태스크';
 
-// 개선/버그 문의 → dev 백로그(tasks/dev-backlog.md)에 CEO 발행 태스크 append(문의 id로 중복 방지).
+// 개선/버그 문의 → dev 백로그(tasks/dev-backlog.md)에 CEO 발행 태스크 추가(문의 id로 중복 방지).
+// 기존 항목/헤더를 파싱해 재작성 → "(대기 중인 태스크 없음)" 같은 플레이스홀더 잔여 없이 깔끔.
 export function appendDevTask({ opsRoot, inquiry, devTask, now = new Date() }) {
   const dir = join(opsRoot, 'tasks');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const p = join(dir, 'dev-backlog.md');
-  const prev = existsSync(p) ? readFileSync(p, 'utf8') : '';
-  if (prev.includes(`문의 ${inquiry.id}`)) return false; // 이미 발행됨
+  const raw = existsSync(p) ? readFileSync(p, 'utf8') : '';
+  if (raw.includes(`문의 ${inquiry.id}`)) return false; // 이미 발행됨
+  const { entries } = parseBacklog(raw);
   const cat = CAT_LABEL[inquiry.category] || inquiry.category;
-  const header = prev ? '' : `${BACKLOG_HEADER}\n\n`;
-  const entry = `## [${cat}] 문의 ${inquiry.id} (${now.toISOString()})\n- 상태: 대기\n- 원문: ${inquiry.text}\n- dev 지시: ${devTask}\n\n`;
-  appendFileSync(p, header + entry);
+  const entry = `## [${cat}] 문의 ${inquiry.id} (${now.toISOString()})\n- 상태: 대기\n- 원문: ${inquiry.text}\n- dev 지시: ${devTask}`;
+  const all = [...entries.map((e) => e.text), entry];
+  writeFileSync(p, `${BACKLOG_HEADER}\n\n${all.join('\n\n')}\n`);
   return true;
 }
 
