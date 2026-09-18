@@ -55,7 +55,7 @@ internal val INQUIRY_TS_FMT: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yy/M/d a h:mm", Locale.KOREAN).withZone(ZoneId.of("Asia/Seoul"))
 
 /** 1:1 문의 본문 최대 글자 수. */
-internal const val INQUIRY_MAX_LEN = 500
+internal const val INQUIRY_MAX_LEN = 300
 
 @Composable
 fun InquiryScreen(
