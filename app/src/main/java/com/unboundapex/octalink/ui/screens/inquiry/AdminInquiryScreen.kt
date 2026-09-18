@@ -38,6 +38,12 @@ import com.unboundapex.octalink.data.schema.InquiryStatus
 import com.unboundapex.octalink.data.session.SessionViewModel
 import com.unboundapex.octalink.ui.components.PosseCard
 import com.unboundapex.octalink.ui.components.PosseScreen
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+/** 작성 시각 표시 — KST. */
+private val INQUIRY_TS_FMT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm").withZone(ZoneId.of("Asia/Seoul"))
 
 /** 운영진(관장) 전용 — 회원 1:1 문의 확인 + 답변 수정/게시. 게시 권한은 Firestore rules(isMaster) 도 강제. */
 @Composable
@@ -123,6 +129,12 @@ private fun AdminInquiryCard(
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            INQUIRY_TS_FMT.format(inq.createdAt),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(6.dp))
         Text(inq.text, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(10.dp))
