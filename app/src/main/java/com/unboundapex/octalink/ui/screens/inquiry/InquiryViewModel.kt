@@ -89,7 +89,7 @@ class InquiryViewModel : ViewModel() {
                     authorId = authorId,
                     authorName = authorName,
                     category = category,
-                    text = text.trim().take(1000),
+                    text = text.trim().take(INQUIRY_MAX_LEN),
                 )
             }.onSuccess {
                 _writeState.value = InquiryWriteState.Done

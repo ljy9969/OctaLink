@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.unboundapex.octalink.data.schema.InquiryCategory
@@ -52,6 +53,9 @@ import java.util.Locale
 /** 문의 작성 일시 표시 — KST, "26/9/18 오후 2:30" 형식. 사용자·운영진 화면 공용. */
 internal val INQUIRY_TS_FMT: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yy/M/d a h:mm", Locale.KOREAN).withZone(ZoneId.of("Asia/Seoul"))
+
+/** 1:1 문의 본문 최대 글자 수. */
+internal const val INQUIRY_MAX_LEN = 500
 
 @Composable
 fun InquiryScreen(
@@ -122,10 +126,20 @@ fun InquiryScreen(
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = text,
-                        onValueChange = { text = it },
+                        onValueChange = { if (it.length <= INQUIRY_MAX_LEN) text = it },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
                         placeholder = { Text("내용을 입력해 주세요") },
+                        supportingText = {
+                            Text(
+                                "${text.length} / $INQUIRY_MAX_LEN",
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.End,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (text.length >= INQUIRY_MAX_LEN) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
                     )
                     val ws = writeState
                     if (ws is InquiryWriteState.Error) {
