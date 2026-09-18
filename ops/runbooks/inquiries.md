@@ -6,13 +6,16 @@
 ```
 회원 문의 작성(PENDING·확인 중)
   → [cron: support 주기] support 에이전트 답변 초안
-  → CEO 검토(무조건) — 승인/수정
+  → CEO 검토(무조건) — 답변 승인/수정 + (개선/버그면) dev 태스크 발행
+  → [결정적 허위약속 가드] 답변에 없는 조치/일정 주장 있으면 저장 거부
   → 통과분만 Firestore inquiries.draftAnswer 저장(status=DRAFTED)
-  → 어드민 "1:1 문의 관리" 답변창에 초안이 placeholder + "AI 초안 불러오기(CEO 검토 완료)" 버튼
-  → 운영자 검토/수정 → 인앱 게시(ANSWERED)
+  → 개선/버그면 CEO devTask를 tasks/dev-backlog.md 에 기록 → dev 컨텍스트로 주입(dev가 CEO 통해 받음)
+  → 어드민 "1:1 문의 관리" 답변창에 초안 사전 입력 → 운영자 검토/수정 → 인앱 게시(ANSWERED)
 ```
-- **대상**: `status=PENDING`(아직 초안 없는 "확인 중") 문의만. ANSWERED는 제외, DRAFTED는 재작성 안 함(낭비 방지).
-- **CEO 게이트 필수**: CEO 미승인/파싱 실패 초안은 저장 안 함 → PENDING 유지, 다음 주기 재시도.
+- **대상**: `status=PENDING`(아직 초안 없는 "확인 중") 문의만. ANSWERED 제외, DRAFTED 재작성 안 함.
+- **CEO 게이트 필수**: 미승인/파싱실패/허위약속 초안은 저장 안 함 → PENDING 유지, 다음 주기 재시도.
+- **허위약속 가드(결정적)**: `overPromises()` — "지시했다/보고했다/개선 예정/곧 업데이트/수정 완료" 등 없는 조치·확정 일정 표현이 답변에 있으면 코드가 차단(로컬 LLM 자가검열 불신). 답변은 최대 "검토해 개선을 고려하겠습니다" 수준.
+- **개선/버그 → dev 지시**: CEO 검토가 `devTask`(구체 지시 1줄)를 발행 → `tasks/dev-backlog.md`(문의 id로 중복 방지) → `defaultRefresh`가 dev 컨텍스트('문의 개선·버그 백로그' 구획)로 주입해 **dev가 CEO 통해 태스크 수령**.
 
 ## 구성 (ops)
 - `connectors/inquiries.mjs` — `fetchPending`(PENDING) · `saveDraft`(draftAnswer+DRAFTED) · `postAnswer`(ANSWERED) · `setStatus`. no-op 가드.

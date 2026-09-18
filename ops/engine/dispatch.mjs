@@ -12,6 +12,7 @@ import { checkAssignedIssue } from '../connectors/github-issues.mjs';
 import { buildResearchContext } from '../connectors/websearch.mjs';
 import { buildYoutubeContext } from '../connectors/youtube.mjs';
 import { refreshContext as refreshFirebase } from '../connectors/firebase.mjs';
+import { writeContextSection } from '../connectors/context-file.mjs';
 import { loadEnv } from './env.mjs';
 
 function cronOf(trigger) { const m = /cron:\s*([^|]+)/.exec(trigger || ''); return m ? m[1].trim() : null; }
@@ -35,6 +36,13 @@ async function defaultRefresh({ opsRoot, agent, env }) {
         const cred = existsSync(raw) ? readFileSync(raw, 'utf8') : raw; // 경로면 내용으로
         await refreshFirebase({ opsRoot, projectId: fb.projectId, credentialJson: cred, contextMap: { [agent]: collections } });
       } catch { /* stale로 진행 */ }
+    }
+  }
+  // dev: 1:1 문의(개선/버그)에서 CEO가 발행한 태스크 백로그를 컨텍스트로 주입 → dev가 CEO 통해 지시 받음.
+  if (agent === 'dev') {
+    const bl = join(opsRoot, 'tasks', 'dev-backlog.md');
+    if (existsSync(bl)) {
+      try { writeContextSection({ opsRoot, agent: 'dev', section: '문의 개선·버그 백로그(CEO 발행)', body: readFileSync(bl, 'utf8') }); } catch { /* skip */ }
     }
   }
 }

@@ -1,7 +1,7 @@
 // 1:1 문의 답변 초안 흐름: pending 문의 → support 초안 → **CEO 검토(무조건)** → 통과분만
 // Firestore inquiries.draftAnswer 에 저장(status=DRAFTED) → 어드민 답변창 placeholder 로 노출 →
 // 운영자 검토/수정 후 인앱 게시(ANSWERED). CEO 미승인 초안은 저장 안 함(다음 주기 재시도).
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -20,6 +20,19 @@ function extractJson(text) {
   try { return JSON.parse(text.slice(s, e + 1)); } catch { return null; }
 }
 
+// 결정적 허위약속 가드 — 실제로 하지 않은 조치/확정 일정을 주장하는 초안을 차단(로컬 LLM 자가검열 불신).
+// "감사합니다, 검토해 개선을 고려하겠습니다" 수준은 통과. "지시했다/보고했다/개선 예정/곧 업데이트"는 차단.
+const OVER_PROMISE = [
+  /지시(했|하였|해\s*두었|해\s*놓)/,               // "개선하도록 지시했습니다"
+  /보고(하여|했|하였|해\s*두었)/,                   // "팀에 보고하여/보고했습니다"
+  /작업을?\s*(진행하도록|착수|진행하고 있)/,        // "작업을 진행하도록/착수했"
+  /(반영|수정|개선|업데이트|해결)\s*(될|할|하기로)\s*예정/, // "개선될 예정"
+  /(곧|조만간|빠른\s*시일|머지않아).*(반영|수정|개선|업데이트|해결)/, // "곧 업데이트"
+  /(조치|반영|수정|개선|해결)\s*(했|하였|완료)/,    // "조치했/개선 완료"
+  /예정입니다/,
+];
+export function overPromises(text) { return OVER_PROMISE.some((re) => re.test(text || '')); }
+
 // support 모델로 답변 초안 1건 생성(본문만).
 export async function draftAnswer({ inquiry, router, opsRoot }) {
   const { LANG_GUARD } = await import('./lang.mjs');
@@ -29,46 +42,76 @@ export async function draftAnswer({ inquiry, router, opsRoot }) {
     provider: cfg.model.provider, model: cfg.model.name,
     system: LANG_GUARD + support
       + '\n\n지금은 1:1 문의 답변 초안을 쓴다. 존댓말·간결·정확·겸손. 아래 사실만 근거로, 없는 기능/일정/가격 약속 금지.'
-      + '\n\n[출력 규칙] 회원에게 그대로 보낼 답변 본문만 써라. "에스컬레이션","산출물","원문 요약" 같은 내부 라벨/머리말 금지. 인사말+본문 2~4문장.\n\n'
+      + '\n\n[출력 규칙] 회원에게 그대로 보낼 답변 본문만 써라. "에스컬레이션","산출물","원문 요약" 같은 내부 라벨/머리말 금지. 인사말+본문 2~4문장.'
+      + '\n[금지] 실제로 하지 않은 조치·확정 일정을 말하지 마라. "팀에 지시/보고했다", "개선 작업을 진행 중", "곧 업데이트/반영 예정", "수정 완료" 같은 표현 절대 금지. '
+      + '버그/개선 제안에는 최대치로 "소중한 의견 감사합니다. 검토해 개선을 고려하겠습니다." 수준으로만 답하라(없는 착수/일정 약속 금지).\n\n'
       + APP_GROUNDING,
     messages: [{ role: 'user', content: `[카테고리] ${CAT_LABEL[inquiry.category] || inquiry.category}\n[문의]\n${inquiry.text}\n\n답변 초안만 출력(머리말 없이).` }],
   });
   return out.text.trim();
 }
 
-// CEO 검토 — support 초안을 승인/수정. {approved, answer(최종), reason} JSON.
+// CEO 검토 — support 초안 승인/수정 + (개선/버그면) dev 태스크 발행.
+// {approved, answer(최종), devTask(개선·버그일 때 dev 지시 1줄), reason} JSON.
 export async function ceoReview({ inquiry, draft, router, opsRoot }) {
   const { LANG_GUARD } = await import('./lang.mjs');
   const ceo = readFileSync(join(opsRoot, 'ceo', 'ceo.md'), 'utf8');
   const cfg = JSON.parse(readFileSync(join(opsRoot, 'ceo', 'config.json'), 'utf8'));
+  const cat = CAT_LABEL[inquiry.category] || inquiry.category;
+  const isDev = inquiry.category === 'IMPROVEMENT' || inquiry.category === 'BUG';
+  const devNote = isDev
+    ? `\n이 문의는 "${cat}"이다. 답변과 별개로, **dev 에이전트에게 내릴 구체적 태스크 1줄**을 devTask에 써라(무엇을 고칠지 명확히, 없는 기능 가정 금지). 답변(회원용)에는 "지시했다/곧 반영" 같은 확정 약속을 넣지 말고 "검토하겠습니다" 수준으로만.`
+    : `\ndevTask는 빈 문자열("")로 둔다(개선/버그 아님).`;
   const out = await router.complete({
     provider: cfg.model.provider, model: cfg.model.name,
-    system: LANG_GUARD + ceo + '\n\n지금은 support가 쓴 1:1 문의 답변 초안을 CEO로서 검토·승인하는 일이다. 허위 약속·부정확·무례·정책 위반이 있으면 고쳐서 최종 답변을 만든다.',
+    system: LANG_GUARD + ceo + '\n\n지금은 support가 쓴 1:1 문의 답변 초안을 CEO로서 검토·승인하고, 개선/버그면 dev 태스크를 발행하는 일이다. 답변의 허위 약속·부정확·무례는 고친다.',
     messages: [{ role: 'user', content:
-      `[문의]\n${inquiry.text}\n\n[support 초안]\n${draft}\n\n`
-      + `반드시 JSON만 출력: {"approved": true/false, "answer": "게시할 최종 답변(승인이면 초안 그대로, 문제 있으면 수정본. 존댓말·본문만)", "reason": "간단 사유"}` }],
+      `[문의 카테고리] ${cat}\n[문의]\n${inquiry.text}\n\n[support 초안]\n${draft}\n${devNote}\n\n`
+      + `반드시 JSON만 출력: {"approved": true/false, "answer": "게시할 최종 답변(존댓말·본문만, 확정 약속 금지)", "devTask": "dev 지시 1줄(개선/버그만, 아니면 빈칸)", "reason": "간단 사유"}` }],
   });
   return extractJson(out.text);
 }
 
-// pending 문의 → support 초안 → CEO 검토 → 통과분만 draftAnswer 저장(DRAFTED).
-export async function draftPendingInquiries({ opsRoot, projectId, credentialJson, router, fetchFn, draftFn, reviewFn, saveDraftFn, now = () => new Date() }) {
+// 개선/버그 문의 → dev 백로그(tasks/dev-backlog.md)에 CEO 발행 태스크 append(문의 id로 중복 방지).
+export function appendDevTask({ opsRoot, inquiry, devTask, now = new Date() }) {
+  const dir = join(opsRoot, 'tasks');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const p = join(dir, 'dev-backlog.md');
+  const prev = existsSync(p) ? readFileSync(p, 'utf8') : '';
+  if (prev.includes(`문의 ${inquiry.id}`)) return false; // 이미 발행됨
+  const cat = CAT_LABEL[inquiry.category] || inquiry.category;
+  const header = prev ? '' : '# dev 백로그 — 1:1 문의(개선/버그)에서 CEO가 발행한 태스크\n\n';
+  const entry = `## [${cat}] 문의 ${inquiry.id} (${now.toISOString()})\n- 원문: ${inquiry.text}\n- dev 지시: ${devTask}\n\n`;
+  appendFileSync(p, header + entry);
+  return true;
+}
+
+// pending 문의 → support 초안 → CEO 검토(+개선/버그면 dev 태스크 발행) → 통과분만 draftAnswer 저장(DRAFTED).
+// 답변에 결정적 허위약속 가드(overPromises) 적용 — 지어낸 조치/일정이면 저장 안 함.
+export async function draftPendingInquiries({ opsRoot, projectId, credentialJson, router, fetchFn, draftFn, reviewFn, saveDraftFn, appendDevTaskFn, now = () => new Date() }) {
   const conn = await import('../connectors/inquiries.mjs');
   const res = await (fetchFn || conn.fetchPending)({ projectId, credentialJson });
-  if (!res.ok) return { drafted: 0, skipped: 0, reason: res.reason };
-  let drafted = 0, skipped = 0;
+  if (!res.ok) return { drafted: 0, skipped: 0, devTasks: 0, reason: res.reason };
+  let drafted = 0, skipped = 0, devTasks = 0;
   for (const inq of res.inquiries) {
     const draft = draftFn ? await draftFn(inq) : await draftAnswer({ inquiry: inq, router, opsRoot });
     const review = reviewFn ? await reviewFn(inq, draft) : await ceoReview({ inquiry: inq, draft, router, opsRoot });
     const finalAnswer = review && typeof review.answer === 'string' ? review.answer.trim() : '';
-    if (review && review.approved === true && finalAnswer) {
-      await (saveDraftFn || conn.saveDraft)({ projectId, credentialJson, inquiryId: inq.id, draftAnswer: finalAnswer });
-      drafted++;
-    } else {
-      skipped++; // CEO 미승인/파싱 실패 → 저장 안 함(PENDING 유지, 다음 주기 재시도)
+    // 게이트: CEO 승인 + 본문 있음 + 허위약속 없음.
+    if (!(review && review.approved === true) || !finalAnswer || overPromises(finalAnswer)) {
+      skipped++; // 미승인/파싱실패/허위약속 → 저장 안 함(PENDING 유지, 다음 주기 재시도)
+      continue;
+    }
+    await (saveDraftFn || conn.saveDraft)({ projectId, credentialJson, inquiryId: inq.id, draftAnswer: finalAnswer });
+    drafted++;
+    // 개선/버그 → CEO가 발행한 dev 태스크를 백로그에 기록(dev가 CEO 통해 받음).
+    const isDev = inq.category === 'IMPROVEMENT' || inq.category === 'BUG';
+    if (isDev && review.devTask && String(review.devTask).trim()) {
+      const added = await (appendDevTaskFn || appendDevTask)({ opsRoot, inquiry: inq, devTask: String(review.devTask).trim(), now: now() });
+      if (added) devTasks++;
     }
   }
-  return { drafted, skipped };
+  return { drafted, skipped, devTasks };
 }
 
 // CLI: node inquiry-flow.mjs  → pending 문의 초안(→CEO검토→Firestore draftAnswer)
@@ -83,5 +126,5 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const credRaw = process.env[conf.firebase?.credEnv || 'FIREBASE_SERVICE_ACCOUNT'] || '';
   const cred = credRaw && existsSync(credRaw) ? readFileSync(credRaw, 'utf8') : credRaw;
   const r = await draftPendingInquiries({ opsRoot, projectId, credentialJson: cred, router: createRouter() });
-  console.log(`문의 초안(CEO 검토 통과 저장): ${r.drafted}건 · 미승인 보류 ${r.skipped}건${r.reason ? ` (${r.reason})` : ''}`);
+  console.log(`문의 초안(CEO 통과 저장): ${r.drafted}건 · 미승인/차단 보류 ${r.skipped}건 · dev 태스크 발행 ${r.devTasks}건${r.reason ? ` (${r.reason})` : ''}`);
 }
