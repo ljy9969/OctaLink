@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -104,6 +105,7 @@ fun InquiryScreen(
                         InquiryCategory.values().forEach { c ->
                             CategoryChip(
                                 label = c.label,
+                                color = inquiryCategoryColor(c),
                                 selected = category == c,
                                 onClick = { category = c },
                             )
@@ -162,23 +164,29 @@ fun InquiryScreen(
     }
 }
 
+/** 카테고리별 고유 색 — 칩/배지에 공통 사용(다크·라이트 모두 가독). */
+internal fun inquiryCategoryColor(c: InquiryCategory): Color = when (c) {
+    InquiryCategory.PRAISE -> Color(0xFF2E7D32)      // 초록 — 칭찬
+    InquiryCategory.IMPROVEMENT -> Color(0xFF1565C0) // 파랑 — 개선 제안
+    InquiryCategory.QUESTION -> Color(0xFF6A4CAF)    // 보라 — 문의
+    InquiryCategory.BUG -> Color(0xFFC8102E)         // 빨강 — 버그 신고
+}
+
 @Composable
 private fun CategoryChip(
     label: String,
+    color: Color,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
     Text(
         label,
         style = MaterialTheme.typography.labelLarge,
-        color = if (selected) MaterialTheme.colorScheme.onPrimary
-        else MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        color = if (selected) Color.White else color,
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant,
-            )
+            .background(if (selected) color else color.copy(alpha = 0.12f))
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
@@ -188,13 +196,18 @@ private fun CategoryChip(
 private fun InquiryCard(inq: InquiryDoc) {
     PosseCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val catColor = inquiryCategoryColor(inq.category)
             Text(
                 inq.category.label,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(catColor)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
             )
+            Spacer(Modifier.weight(1f))
             Text(
                 if (inq.status == InquiryStatus.ANSWERED) "답변 완료" else "확인 중",
                 style = MaterialTheme.typography.labelSmall,

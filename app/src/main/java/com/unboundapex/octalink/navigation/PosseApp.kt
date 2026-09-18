@@ -70,6 +70,8 @@ import com.unboundapex.octalink.ui.screens.onboarding.PendingApprovalScreen
 import com.unboundapex.octalink.ui.screens.onboarding.RejectedScreen
 import com.unboundapex.octalink.ui.screens.onboarding.SignupScreen
 import com.unboundapex.octalink.ui.screens.profile.ProfileScreen
+import com.unboundapex.octalink.ui.screens.faq.FaqScreen
+import com.unboundapex.octalink.ui.screens.inquiry.AdminInquiryScreen
 import com.unboundapex.octalink.ui.screens.inquiry.InquiryScreen
 import com.unboundapex.octalink.ui.screens.profile.ProfileSettingsScreen
 import com.unboundapex.octalink.ui.screens.splash.SplashScreen
@@ -81,7 +83,9 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object Community : Route("community", "커뮤니티", Icons.Outlined.Forum)
     data object Profile : Route("profile", "프로필", Icons.Outlined.Person)
     data object ProfileSettings : Route("profile_settings", "프로필 설정", Icons.Outlined.Settings)
+    data object Faq : Route("faq", "자주 묻는 질문", Icons.Outlined.Info)
     data object Inquiry : Route("inquiry", "1:1 문의", Icons.Outlined.Info)
+    data object InquiryAdmin : Route("inquiry_admin", "1:1 문의 관리", Icons.Outlined.Info)
     data object Bracket : Route("bracket", "대진표", Icons.Outlined.CheckCircle)
     data object BracketAdmin : Route("bracket_admin", "대진표 관리", Icons.Outlined.CheckCircle)
     data object BracketDraw : Route("bracket_draw", "추첨", Icons.Outlined.CheckCircle)
@@ -295,11 +299,21 @@ fun PosseApp() {
                 ProfileSettingsScreen(
                     sessionVm = sessionVm,
                     onBack = { navController.popBackStack() },
+                    onOpenFaq = { navController.navigate(Route.Faq.path) },
                     onOpenInquiry = { navController.navigate(Route.Inquiry.path) },
                 )
             }
+            composable(Route.Faq.path) {
+                FaqScreen(onBack = { navController.popBackStack() })
+            }
             composable(Route.Inquiry.path) {
                 InquiryScreen(
+                    sessionVm = sessionVm,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Route.InquiryAdmin.path) {
+                AdminInquiryScreen(
                     sessionVm = sessionVm,
                     onBack = { navController.popBackStack() },
                 )
@@ -314,6 +328,7 @@ fun PosseApp() {
                     onOpenCoachComment = { navController.navigate(Route.CoachComment.path) },
                     onOpenBracket = { navController.navigate(Route.BracketAdmin.path) },
                     onOpenSkillScorePropose = { navController.navigate(Route.SkillScorePropose.path) },
+                    onOpenInquiryAdmin = { navController.navigate(Route.InquiryAdmin.path) },
                 )
             }
             composable(Route.CoachComment.path) {

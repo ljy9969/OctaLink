@@ -72,6 +72,7 @@ fun AdminScreen(
     onOpenCoachComment: () -> Unit = {},
     onOpenBracket: () -> Unit = {},
     onOpenSkillScorePropose: () -> Unit = {},
+    onOpenInquiryAdmin: () -> Unit = {},
     approvalVm: MemberApprovalViewModel = viewModel(),
     weeklyMissionVm: WeeklyMissionViewModel = viewModel(),
     skillReviewVm: SkillScoreReviewViewModel = viewModel(),
@@ -120,6 +121,35 @@ fun AdminScreen(
                         ) { missionDialogOpen = true }
                         Spacer(Modifier.height(4.dp))
                         FootnoteText("출결 검토는 출석 탭의 운영진 모드, 공지 작성은 커뮤니티 탭에서 진입.")
+                    }
+                }
+            }
+
+            // 관장 — 1:1 문의 관리 (확인 · 답변 수정/게시)
+            if (role.isMaster) {
+                item {
+                    PosseCard(
+                        leftStripeColor = StripeApprovalQueue,
+                        modifier = Modifier.clickable { onOpenInquiryAdmin() },
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "1:1 문의 관리",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = StripeApprovalQueue,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                "→",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = StripeApprovalQueue,
+                            )
+                        }
+                        Text(
+                            "회원 문의 확인 · 답변 수정/게시",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

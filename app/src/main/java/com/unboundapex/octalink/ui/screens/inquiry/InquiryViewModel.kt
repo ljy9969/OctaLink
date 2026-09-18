@@ -29,6 +29,36 @@ class InquiryViewModel : ViewModel() {
                 emit(emptyList())
             }
 
+    /** 운영진용 — 우리 체육관 전체 문의. 권한(운영진 read)은 Firestore rules 검증. */
+    fun allForGym(): Flow<List<InquiryDoc>> =
+        repo.observeAllForGym()
+            .catch { e ->
+                android.util.Log.e("OctaLink.Inquiry", "allForGym flow error", e)
+                emit(emptyList())
+            }
+
+    /**
+     * 운영자 답변 게시(status=ANSWERED). 성공 시 목록 흐름이 자동 갱신되므로 카드가 알아서 반영.
+     * 카드별 진행/에러는 콜백으로 처리(화면 공유 상태 오염 방지).
+     */
+    fun postAnswer(
+        inquiryId: String,
+        answer: String,
+        answeredBy: String,
+        onDone: () -> Unit = {},
+        onError: (String) -> Unit = {},
+    ) {
+        if (answer.isBlank()) { onError("답변을 입력해 주세요."); return }
+        viewModelScope.launch {
+            runCatching { repo.postAnswer(inquiryId, answer.trim(), answeredBy) }
+                .onSuccess { onDone() }
+                .onFailure { e ->
+                    android.util.Log.e("OctaLink.Inquiry", "postAnswer FAILED", e)
+                    onError(e.message ?: "게시에 실패했습니다.")
+                }
+        }
+    }
+
     private val _writeState = MutableStateFlow<InquiryWriteState>(InquiryWriteState.Idle)
     val writeState: StateFlow<InquiryWriteState> = _writeState.asStateFlow()
 
