@@ -33,7 +33,7 @@ android {
         applicationId = "com.unboundapex.octalink"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
+        versionCode = 15
         versionName = "0.9.5"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
