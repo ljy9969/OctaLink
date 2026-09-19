@@ -63,7 +63,7 @@ export async function ceoReview({ inquiry, draft, router, opsRoot }) {
   const isDev = inquiry.category === 'IMPROVEMENT' || inquiry.category === 'BUG';
   const devNote = isDev
     ? `\n이 문의는 "${cat}"이다. 답변과 별개로, **dev 에이전트에게 내릴 구체적 태스크**를 devTask에 써라(무엇을 고칠지 명확히, 없는 기능 가정 금지). `
-      + `**화면/UI/레이아웃/디자인/테마 변경이 포함되면, devTask에 반드시 "각 관련 화면의 as-is/to-be(개선 전·후) 스크린샷을 비교 가능하게 첨부하여 CEO에게 보고"라는 보고 요건을 함께 넣어라.** `
+      + `**화면/UI/레이아웃/디자인/테마 변경이 포함되면, devTask는 반드시 다음 순서로 지시하라: "① 선(先) 디자인 — Claude Design으로 각 관련 화면 as-is/to-be(개선 전·후) 목업 작성 후 CEO 검토, ② 후(後) 구현 — 승인된 목업대로 반영".** UI 변경이 아니면 바로 구현 지시.`
       + `답변(회원용)에는 "지시했다/곧 반영" 같은 확정 약속을 넣지 말고 "검토하겠습니다" 수준으로만.`
     : `\ndevTask는 빈 문자열("")로 둔다(개선/버그 아님).`;
   const out = await router.complete({
