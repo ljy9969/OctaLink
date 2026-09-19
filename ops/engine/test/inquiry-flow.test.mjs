@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { draftPendingInquiries, overPromises, appendDevTask, openBacklog, markDone, archiveDone } from '../inquiry-flow.mjs';
+import { draftPendingInquiries, overPromises, appendDevTask, openBacklog, markDone, archiveDone, backlogEntry, completeInquiry } from '../inquiry-flow.mjs';
 
 const q = (id, category, text = 'q') => ({ id, category, text, authorId: 'u', authorName: 'n' });
 
@@ -89,4 +89,60 @@ test('백로그 생애주기: append(누적·중복방지) → markDone → arch
   assert.equal(archiveDone({ opsRoot: ops }), 1);
   assert.doesNotMatch(readFileSync(p, 'utf8'), /문의 a/); // 활성 백로그에서 제거
   assert.match(readFileSync(join(ops, 'tasks', 'dev-backlog-done.md'), 'utf8'), /문의 a/); // 아카이브 보관
+});
+
+test('backlogEntry: 문의 항목의 카테고리/원문/dev지시 파싱', () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-be-'));
+  appendDevTask({ opsRoot: ops, inquiry: q('a', 'IMPROVEMENT', '다크테마 구분 안 됨'), devTask: '블럭 구분선 추가', now: new Date('2026-09-18T00:00:00Z') });
+  const md = readFileSync(join(ops, 'tasks', 'dev-backlog.md'), 'utf8');
+  const e = backlogEntry(md, 'a');
+  assert.equal(e.category, 'IMPROVEMENT');
+  assert.equal(e.categoryLabel, '개선 제안');
+  assert.equal(e.text, '다크테마 구분 안 됨');
+  assert.equal(e.devTask, '블럭 구분선 추가');
+  assert.equal(backlogEntry(md, 'zzz'), null); // 없는 id
+});
+
+test('completeInquiry: 완료 안내 초안 CEO 통과 → saveDraft + 백로그 아카이브', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-ci-'));
+  appendDevTask({ opsRoot: ops, inquiry: q('a', 'IMPROVEMENT', '다크테마'), devTask: '블럭 구분 개선', now: new Date('2026-09-18T00:00:00Z') });
+  const saved = [];
+  const r = await completeInquiry({
+    opsRoot: ops, inquiryId: 'a', router: {},
+    draftFn: async (inq, devTask) => `완료: ${inq.text}/${devTask}`,
+    reviewFn: async (inq, d) => ({ approved: true, answer: `${d} 반영했습니다.` }),
+    saveDraftFn: async ({ inquiryId, draftAnswer }) => { saved.push([inquiryId, draftAnswer]); return { ok: true }; },
+  });
+  assert.equal(r.found, true);
+  assert.equal(r.drafted, true);
+  assert.equal(r.archived, 1);
+  assert.deepEqual(saved, [['a', '완료: 다크테마/블럭 구분 개선 반영했습니다.']]);
+  const p = join(ops, 'tasks', 'dev-backlog.md');
+  assert.doesNotMatch(readFileSync(p, 'utf8'), /문의 a/); // 완료·아카이브됨
+});
+
+test('completeInquiry: CEO 미승인이면 초안 미저장(그래도 백로그는 완료·아카이브)', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-ci2-'));
+  appendDevTask({ opsRoot: ops, inquiry: q('a', 'BUG', '버그'), devTask: 'fix', now: new Date('2026-09-18T00:00:00Z') });
+  const saved = [];
+  const r = await completeInquiry({
+    opsRoot: ops, inquiryId: 'a', router: {},
+    draftFn: async () => 'd',
+    reviewFn: async () => ({ approved: false, answer: '', reason: '과장됨' }),
+    saveDraftFn: async (x) => { saved.push(x); return { ok: true }; },
+  });
+  assert.equal(r.drafted, false);
+  assert.equal(saved.length, 0);
+  assert.equal(r.archived, 1); // 완료 처리는 진행
+  assert.match(r.reason, /CEO 미승인/);
+});
+
+test('completeInquiry: router 없으면 완료 안내 생략, 백로그만 완료·아카이브', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-ci3-'));
+  appendDevTask({ opsRoot: ops, inquiry: q('a', 'IMPROVEMENT'), devTask: 'x', now: new Date('2026-09-18T00:00:00Z') });
+  const r = await completeInquiry({ opsRoot: ops, inquiryId: 'a', router: null });
+  assert.equal(r.found, true);
+  assert.equal(r.drafted, false);
+  assert.equal(r.archived, 1);
+  assert.match(r.reason, /router 없음/);
 });

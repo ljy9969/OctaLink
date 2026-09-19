@@ -6,6 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const CAT_LABEL = { PRAISE: '칭찬', IMPROVEMENT: '개선 제안', QUESTION: '문의', BUG: '버그 신고' };
+const LABEL_CAT = Object.fromEntries(Object.entries(CAT_LABEL).map(([k, v]) => [v, k]));
 
 // 앱 기능 그라운딩 — 초안이 없는 기능/일정을 지어내지 않도록.
 export const APP_GROUNDING = `# OctaLink 사실(이것만 근거로, 없는 기능/일정 약속 금지)
@@ -76,6 +77,42 @@ export async function ceoReview({ inquiry, draft, router, opsRoot }) {
   return extractJson(out.text);
 }
 
+// support 모델로 "작업 완료 안내" 답변 초안 생성 — 요청한 개선/수정이 실제 반영·완료됐을 때.
+// (draftAnswer 와 달리, 완료 사실을 담백히 알림. 이미 완료된 것만 — 추가 기능/일정 약속 금지.)
+export async function draftCompletionAnswer({ inquiry, devTask, router, opsRoot }) {
+  const { LANG_GUARD } = await import('./lang.mjs');
+  const support = readFileSync(join(opsRoot, 'agents', 'support', 'skill.md'), 'utf8');
+  const cfg = JSON.parse(readFileSync(join(opsRoot, 'agents', 'support', 'config.json'), 'utf8'));
+  const cat = CAT_LABEL[inquiry.category] || inquiry.category;
+  const out = await router.complete({
+    provider: cfg.model.provider, model: cfg.model.name,
+    system: LANG_GUARD + support
+      + '\n\n지금은 회원의 1:1 문의에 대한 **작업 완료 안내** 답변 초안을 쓴다. 요청한 개선/수정이 실제로 반영·완료되었다.'
+      + '\n[출력 규칙] 회원에게 그대로 보낼 본문만(내부 라벨/머리말 금지). 존댓말·간결·정확·겸손.'
+      + ' 완료 사실을 1~2문장으로 담백하게 알리고 의견에 감사를 표하라. **이미 완료된 것만** 말하고, 새 기능·일정·가격을 추가로 약속하지 마라. 과장 금지.\n\n'
+      + APP_GROUNDING,
+    messages: [{ role: 'user', content: `[문의 카테고리] ${cat}\n[회원 문의]\n${inquiry.text}\n\n[완료된 작업]\n${devTask || '요청하신 개선을 반영'}\n\n완료 안내 답변 초안만 출력(머리말 없이).` }],
+  });
+  return out.text.trim();
+}
+
+// CEO 검토 — support 완료 안내 초안 승인/수정. {approved, answer(최종), reason} JSON.
+// (완료 안내는 "반영했습니다"가 정상이라 overPromises 가드 미적용 — 대신 CEO가 과장/허위 범위를 검수.)
+export async function ceoReviewCompletion({ inquiry, draft, router, opsRoot }) {
+  const { LANG_GUARD } = await import('./lang.mjs');
+  const ceo = readFileSync(join(opsRoot, 'ceo', 'ceo.md'), 'utf8');
+  const cfg = JSON.parse(readFileSync(join(opsRoot, 'ceo', 'config.json'), 'utf8'));
+  const cat = CAT_LABEL[inquiry.category] || inquiry.category;
+  const out = await router.complete({
+    provider: cfg.model.provider, model: cfg.model.name,
+    system: LANG_GUARD + ceo + '\n\n지금은 support가 쓴 "작업 완료 안내" 답변 초안을 CEO로서 검토·승인하는 일이다. 실제 완료 범위를 넘어서는 과장/허위, 무례, 부정확을 고친다. 담백한 완료 안내면 승인.',
+    messages: [{ role: 'user', content:
+      `[문의 카테고리] ${cat}\n[회원 문의]\n${inquiry.text}\n\n[support 완료 안내 초안]\n${draft}\n\n`
+      + `반드시 JSON만 출력: {"approved": true/false, "answer": "게시할 최종 완료 안내(존댓말·본문만)", "reason": "간단 사유"}` }],
+  });
+  return extractJson(out.text);
+}
+
 const BACKLOG_HEADER = '# dev 백로그 — 1:1 문의(개선/버그)에서 CEO가 발행한 태스크';
 
 // 개선/버그 문의 → dev 백로그(tasks/dev-backlog.md)에 CEO 발행 태스크 추가(문의 id로 중복 방지).
@@ -107,6 +144,17 @@ export function parseBacklog(md) {
     } else if (p.trim()) { header = p.replace(/\s+$/, ''); }
   }
   return { header: header || BACKLOG_HEADER, entries };
+}
+
+// 백로그에서 특정 문의 항목 파싱 → {id, category, categoryLabel, text, devTask, status} | null. (순수)
+export function backlogEntry(md, inquiryId) {
+  const { entries } = parseBacklog(md);
+  const e = entries.find((x) => x.id === inquiryId);
+  if (!e) return null;
+  const categoryLabel = (/##\s*\[([^\]]+)\]/.exec(e.text) || [])[1] || '';
+  const text = (/-\s*원문:\s*([\s\S]*?)\n-\s*dev 지시:/.exec(e.text) || [])[1]?.trim() || '';
+  const devTask = (/-\s*dev 지시:\s*([\s\S]*)$/.exec(e.text) || [])[1]?.trim() || '';
+  return { id: inquiryId, category: LABEL_CAT[categoryLabel] || categoryLabel, categoryLabel, text, devTask, status: e.status };
 }
 
 // dev 컨텍스트용 — 대기(미완료) 항목만. (순수)
@@ -149,6 +197,41 @@ export function archiveDone({ opsRoot, now = () => new Date() }) {
   return done.length;
 }
 
+// dev 태스크 완료 → (1) 백로그 완료·아카이브 + (2) support가 "작업 완료 안내" 답변 초안 작성 →
+// CEO 검토(무조건) → 통과분만 draftAnswer 저장(DRAFTED) → 어드민에서 운영자가 게시(ANSWERED).
+// 자격증명/Ollama 없으면 완료 안내는 건너뛰고 백로그 완료·아카이브만 수행(오프라인 안전).
+export async function completeInquiry({ opsRoot, projectId, credentialJson, inquiryId, router, draftFn, reviewFn, saveDraftFn, now = () => new Date() }) {
+  const p = join(opsRoot, 'tasks', 'dev-backlog.md');
+  const md = existsSync(p) ? readFileSync(p, 'utf8') : '';
+  const entry = backlogEntry(md, inquiryId);
+  const found = markDone({ opsRoot, inquiryId });
+  let answer = '', drafted = false, reason = '';
+  if (!entry) {
+    reason = '백로그에서 문의 항목 못 찾음(완료 안내 생략)';
+  } else if (!router) {
+    reason = 'router 없음(완료 안내 생략)';
+  } else {
+    const inquiry = { id: inquiryId, category: entry.category, text: entry.text };
+    try {
+      const draft = draftFn ? await draftFn(inquiry, entry.devTask)
+        : await draftCompletionAnswer({ inquiry, devTask: entry.devTask, router, opsRoot });
+      const review = reviewFn ? await reviewFn(inquiry, draft)
+        : await ceoReviewCompletion({ inquiry, draft, router, opsRoot });
+      const finalAnswer = review && typeof review.answer === 'string' ? review.answer.trim() : '';
+      if (review && review.approved === true && finalAnswer) {
+        const conn = await import('../connectors/inquiries.mjs');
+        const r = await (saveDraftFn || conn.saveDraft)({ projectId, credentialJson, inquiryId, draftAnswer: finalAnswer });
+        if (r.ok) { answer = finalAnswer; drafted = true; }
+        else reason = r.reason || '초안 저장 실패';
+      } else {
+        reason = (review && review.reason) ? `CEO 미승인: ${review.reason}` : 'CEO 미승인/파싱 실패';
+      }
+    } catch (e) { reason = e.message || String(e); }
+  }
+  const archived = archiveDone({ opsRoot, now });
+  return { found, drafted, answer, archived, reason };
+}
+
 // pending 문의 → support 초안 → CEO 검토(+개선/버그면 dev 태스크 발행) → 통과분만 draftAnswer 저장(DRAFTED).
 // 답변에 결정적 허위약속 가드(overPromises) 적용 — 지어낸 조치/일정이면 저장 안 함.
 export async function draftPendingInquiries({ opsRoot, projectId, credentialJson, router, fetchFn, draftFn, reviewFn, saveDraftFn, appendDevTaskFn, now = () => new Date() }) {
@@ -178,17 +261,33 @@ export async function draftPendingInquiries({ opsRoot, projectId, credentialJson
 }
 
 // CLI: node inquiry-flow.mjs             → pending 문의 초안(→CEO검토→Firestore draftAnswer)
-//      node inquiry-flow.mjs done <id>   → dev 백로그 태스크 완료→아카이브
+//      node inquiry-flow.mjs done <id>   → dev 백로그 완료·아카이브 + support 완료 안내 초안(→CEO→draftAnswer)
 //      node inquiry-flow.mjs done        → 파일에서 수동 "완료" 표시분 아카이브
+function loadFirebase(opsRoot) {
+  const conf = JSON.parse(readFileSync(join(opsRoot, 'connectors', 'config.json'), 'utf8'));
+  const projectId = conf.firebase?.projectId;
+  const credRaw = process.env[conf.firebase?.credEnv || 'FIREBASE_SERVICE_ACCOUNT'] || '';
+  const cred = credRaw && existsSync(credRaw) ? readFileSync(credRaw, 'utf8') : credRaw;
+  return { projectId, cred };
+}
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
   const opsRoot = process.env.OPS_ROOT || join(here, '..');
-  if (process.argv.includes('done')) {
-    const id = process.argv[process.argv.indexOf('done') + 1];
+  const doneIdx = process.argv.indexOf('done');
+  if (doneIdx >= 0) {
+    const id = process.argv[doneIdx + 1];
     if (id) {
-      const found = markDone({ opsRoot, inquiryId: id });
-      const n = archiveDone({ opsRoot });
-      console.log(found ? `완료 처리: 문의 ${id} → 아카이브 ${n}건` : `문의 ${id} 를 백로그에서 못 찾음`);
+      const { loadEnv } = await import('./env.mjs');
+      loadEnv(opsRoot);
+      const { createRouter } = await import('./router.mjs');
+      const { projectId, cred } = loadFirebase(opsRoot);
+      let router = null;
+      try { router = createRouter(); } catch { /* Ollama 미가동 — 완료 안내 생략 */ }
+      const r = await completeInquiry({ opsRoot, projectId, credentialJson: cred, inquiryId: id, router });
+      console.log(r.found ? `완료 처리: 문의 ${id} → 아카이브 ${r.archived}건` : `문의 ${id} 를 백로그에서 못 찾음(아카이브 ${r.archived}건)`);
+      console.log(r.drafted
+        ? `작업 완료 안내 초안(CEO 통과) 저장 → 어드민 답변창에서 게시 대기:\n  "${r.answer}"`
+        : `완료 안내 초안 미저장 (${r.reason})`);
     } else {
       console.log(`수동 '완료' 표시분 아카이브: ${archiveDone({ opsRoot })}건`);
     }
@@ -197,10 +296,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { loadEnv } = await import('./env.mjs');
   loadEnv(opsRoot);
   const { createRouter } = await import('./router.mjs');
-  const conf = JSON.parse(readFileSync(join(opsRoot, 'connectors', 'config.json'), 'utf8'));
-  const projectId = conf.firebase?.projectId;
-  const credRaw = process.env[conf.firebase?.credEnv || 'FIREBASE_SERVICE_ACCOUNT'] || '';
-  const cred = credRaw && existsSync(credRaw) ? readFileSync(credRaw, 'utf8') : credRaw;
+  const { projectId, cred } = loadFirebase(opsRoot);
   const r = await draftPendingInquiries({ opsRoot, projectId, credentialJson: cred, router: createRouter() });
   console.log(`문의 초안(CEO 통과 저장): ${r.drafted}건 · 미승인/차단 보류 ${r.skipped}건 · dev 태스크 발행 ${r.devTasks}건${r.reason ? ` (${r.reason})` : ''}`);
 }

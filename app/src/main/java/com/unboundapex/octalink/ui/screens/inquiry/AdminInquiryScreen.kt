@@ -93,8 +93,14 @@ private fun AdminInquiryCard(
     inq: InquiryDoc,
     onPost: (answer: String, onDone: () -> Unit, onError: (String) -> Unit) -> Unit,
 ) {
-    // 사전 입력: 게시된 답변 있으면 그것, 없으면 CEO 검토 완료 초안(draftAnswer)을 바로 채움.
-    var answer by remember(inq.id) { mutableStateOf(inq.answer ?: inq.draftAnswer ?: "") }
+    // 사전 입력: DRAFTED(막 올라온 CEO 검토 완료 초안 — 최초 답변 또는 '작업 완료 안내')면 그 초안을
+    // 우선 채운다. 그 외(ANSWERED 등)엔 게시된 답변을 보여준다. status 가 바뀌면 다시 채움.
+    var answer by remember(inq.id, inq.status) {
+        mutableStateOf(
+            if (inq.status == InquiryStatus.DRAFTED) (inq.draftAnswer ?: inq.answer ?: "")
+            else (inq.answer ?: inq.draftAnswer ?: ""),
+        )
+    }
     var sending by remember(inq.id) { mutableStateOf(false) }
     var error by remember(inq.id) { mutableStateOf<String?>(null) }
 
@@ -135,9 +141,12 @@ private fun AdminInquiryCard(
         Spacer(Modifier.height(6.dp))
         Text(inq.text, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(10.dp))
-        if (!inq.draftAnswer.isNullOrBlank() && inq.status != InquiryStatus.ANSWERED) {
+        if (!inq.draftAnswer.isNullOrBlank() && inq.status == InquiryStatus.DRAFTED) {
+            // 이미 답변이 게시된 뒤 다시 DRAFTED 면 = dev 작업 완료 후 support 가 올린 '완료 안내' 초안.
+            val isCompletion = !inq.answer.isNullOrBlank()
             Text(
-                "CEO 검토 완료 초안이 입력되어 있어요 — 수정 후 게시하세요.",
+                if (isCompletion) "작업 완료 안내 초안이 준비됐어요 (CEO 검토 완료) — 수정 후 게시하세요."
+                else "CEO 검토 완료 초안이 입력되어 있어요 — 수정 후 게시하세요.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )

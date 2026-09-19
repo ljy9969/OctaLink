@@ -18,19 +18,24 @@
 - **개선/버그 → dev 지시**: CEO 검토가 `devTask`(구체 지시)를 발행 → `tasks/dev-backlog.md`(문의 id로 중복 방지) → `defaultRefresh`가 dev 컨텍스트('문의 개선·버그 백로그' 구획)로 주입해 **dev가 CEO 통해 태스크 수령**.
   - **UI/화면/디자인/테마 변경**이면 devTask가 자동으로 **"① 선(先) 디자인 — Claude Design으로 as-is/to-be(개선 전·후) 목업 작성 → CEO 검토 → ② 후(後) 구현 — 승인 목업대로 반영"** 순서로 발행(ceoReview 규칙). 로컬 design 에이전트는 두지 않고, 목업은 Claude Design(Opus) 온디맨드로 생성.
 
-## dev 백로그 생애주기 (수동 완료)
+## dev 백로그 생애주기 (수동 완료) + 작업 완료 안내
 `tasks/dev-backlog.md`는 **누적**(append). 각 항목은 `- 상태: 대기`. dev 컨텍스트에는 **대기 항목만** 주입(완료분 제외 → 누적 방지).
 - **완료 처리**: 작업이 끝나면(운영자가 dev의 gated PR 승인·머지 후) 수동으로:
   ```
   node ops/engine/inquiry-flow.mjs done <문의id>
   ```
-  → 해당 항목 `상태: 완료` + `tasks/dev-backlog-done.md` 로 아카이브 + 활성 백로그에서 제거.
-- 또는 `tasks/dev-backlog.md`에서 직접 `상태: 대기`→`완료`로 고친 뒤 `node ops/engine/inquiry-flow.mjs done`(인자 없이) 실행 → 완료 표시분 일괄 아카이브.
+  → 다음이 한 번에 실행됨:
+  1. 해당 백로그 항목 `상태: 완료` + `tasks/dev-backlog-done.md` 아카이브 + 활성 백로그에서 제거.
+  2. **작업 완료 안내 답변**: support 에이전트가 "요청하신 개선을 반영했습니다" 류의 완료 안내 초안 작성 → **CEO 검토(무조건)** → 통과분만 Firestore `inquiries.draftAnswer` 저장(status=DRAFTED). 어드민 "1:1 문의 관리"에 **"작업 완료 안내 초안이 준비됐어요"** 로 뜸 → 운영자가 검토/수정 후 **게시**(ANSWERED).
+     - 완료 안내는 "반영했습니다"가 정상이라 `overPromises` 결정적 가드는 **미적용** — 대신 CEO가 실제 완료 범위를 넘는 과장/허위를 검수(게이트 유지).
+     - 자격증명/Ollama 미가동이면 완료 안내는 **건너뛰고** 백로그 완료·아카이브만 수행(오프라인 안전). 출력에 사유 표기.
+     - 이미 최초 답변이 게시(ANSWERED)된 문의도 status가 DRAFTED로 되돌아가 어드민 미답변 배지에 다시 잡힘 → 운영자가 완료 안내를 게시하도록 유도.
+- 또는 `tasks/dev-backlog.md`에서 직접 `상태: 대기`→`완료`로 고친 뒤 `node ops/engine/inquiry-flow.mjs done`(인자 없이) 실행 → 완료 표시분 일괄 아카이브(이 경우 완료 안내 초안은 만들지 않음 — id 지정분만).
 - (dev-backlog*.md는 gitignore 런타임 파일.)
 
 ## 구성 (ops)
 - `connectors/inquiries.mjs` — `fetchPending`(PENDING) · `saveDraft`(draftAnswer+DRAFTED) · `postAnswer`(ANSWERED) · `setStatus`. no-op 가드.
-- `engine/inquiry-flow.mjs` — `draftAnswer`(support) · `ceoReview`(CEO 승인/수정) · `draftPendingInquiries`(fetch→draft→CEO→save) + CLI.
+- `engine/inquiry-flow.mjs` — `draftAnswer`(support) · `ceoReview`(CEO 승인/수정 + devTask) · `draftPendingInquiries`(fetch→draft→CEO→save) · **`draftCompletionAnswer`**(support 완료 안내) · **`ceoReviewCompletion`**(CEO 검토) · **`completeInquiry`**(백로그 완료+완료안내 초안 오케스트레이션) · `backlogEntry`(백로그 항목 파싱) + CLI.
 - `engine/dispatch.mjs` — **support 잡이 cron 발화할 때마다** `draftPendingInquiries` 자동 실행(`defaultDraftInquiries`). 자격증명 없으면 no-op.
 
 ## 수동 실행(선택)
