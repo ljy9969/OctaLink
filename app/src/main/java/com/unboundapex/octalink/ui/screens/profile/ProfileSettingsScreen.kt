@@ -338,6 +338,7 @@ fun ProfileSettingsScreen(
                         NotificationType.NEW_NOTICE,
                         NotificationType.NEW_POST_COMMENT,
                         NotificationType.MENTION,
+                        NotificationType.INQUIRY_ANSWERED,
                         NotificationType.CLASS_REMINDER,
                     )
                     val adminTypes = if (session.role.isMaster) listOf(

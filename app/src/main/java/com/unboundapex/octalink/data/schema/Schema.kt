@@ -195,6 +195,13 @@ enum class NotificationType(
         channelName = "@멘션 / 공개 승인",
         channelDescription = "글 멘션 및 사진/영상 공개 승인 요청",
     ),
+    INQUIRY_ANSWERED(
+        displayName = "1:1 문의 답변",
+        description = "내가 남긴 1:1 문의에 운영진이 답변을 등록했을 때",
+        channelId = "octalink_inquiry_answered",
+        channelName = "1:1 문의 답변",
+        channelDescription = "내 1:1 문의에 대한 운영진 답변 알림",
+    ),
     // 운영진(MASTER/CREATOR) 전용 — 검토 큐 신규 항목 알림. COACH 는 대상 아님(rules 가 isMaster() 강제).
     // 클라이언트는 모든 회원에게 채널을 등록하지만 서버가 MASTER/CREATOR 에게만 발송 → 일반 회원은 못 받음.
     // ProfileSettingsScreen 의 토글은 session.role.isMaster 일 때만 노출 (회원에게 무의미).

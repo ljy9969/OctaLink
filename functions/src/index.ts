@@ -988,6 +988,7 @@ type NotificationTypeKey =
   | "SKILL_UPDATED"
   | "NEW_POST_COMMENT"
   | "MENTION"
+  | "INQUIRY_ANSWERED"
   // 운영진(MASTER/CREATOR) 전용 — 검토 큐 신규 항목 알림.
   | "NEW_SIGNUP_PENDING"
   | "NEW_SKILL_PROPOSAL"
@@ -1004,6 +1005,7 @@ const DEFAULT_ENABLED: Record<NotificationTypeKey, boolean> = {
   SKILL_UPDATED: true,
   NEW_POST_COMMENT: true,
   MENTION: true,
+  INQUIRY_ANSWERED: true,
   NEW_SIGNUP_PENDING: true,
   NEW_SKILL_PROPOSAL: true,
   DUEL_REQUESTED: true,
@@ -1023,6 +1025,7 @@ const CHANNEL_ID: Record<NotificationTypeKey, string> = {
   SKILL_UPDATED: "octalink_skill",
   NEW_POST_COMMENT: "octalink_post_comment",
   MENTION: "octalink_mention",
+  INQUIRY_ANSWERED: "octalink_inquiry_answered",
   NEW_SIGNUP_PENDING: "octalink_admin_signup_pending",
   NEW_SKILL_PROPOSAL: "octalink_admin_skill_proposal",
   DUEL_REQUESTED: "octalink_duel",
@@ -1267,6 +1270,35 @@ export const notifyOnSkillsUpdated = onDocumentUpdated(
       "SKILL_UPDATED",
       "스킬 점수 갱신됨",
       "프로필에서 새 스킬 차트를 확인해보세요.",
+    );
+  },
+);
+
+/**
+ * 1:1 문의 답변 — `inquiries/{inquiryId}` 의 status 가 ANSWERED 로 전이될 때 문의 작성자에게 알림.
+ * 운영자가 어드민에서 답변 게시(postAnswer)하면 status: *→ANSWERED 로 바뀌는 그 전이를 트리거.
+ * (draftAnswer 저장(DRAFTED)/완료 안내 초안(다시 DRAFTED)에는 발송 안 함 — 실제 게시 시점만.)
+ */
+export const notifyOnInquiryAnswered = onDocumentUpdated(
+  {
+    document: "inquiries/{inquiryId}",
+    region: "asia-northeast3",
+  },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+    if (before.status === "ANSWERED" || after.status !== "ANSWERED") return;
+
+    const authorId = after.authorId as string | undefined;
+    if (!authorId) return;
+    const answer = (after.answer as string | undefined) ?? "";
+    const snippet = answer.length > 60 ? `${answer.substring(0, 60)}…` : answer;
+    await sendNotificationTo(
+      [authorId],
+      "INQUIRY_ANSWERED",
+      "1:1 문의 답변 등록",
+      snippet || "남기신 1:1 문의에 답변이 등록되었습니다.",
     );
   },
 );
