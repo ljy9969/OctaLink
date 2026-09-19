@@ -12,6 +12,12 @@ val Bone = Color(0xFFF5F2EC)      // onBackground / onSurface — 본문 텍스�
 val Blood = Color(0xFFC8102E)     // primary — 브랜드 빨강 (양 테마 공통)
 val Mist = Color(0xFF8A8A93)      // onSurfaceVariant — 보조 텍스트
 
+// 다크 테마 카드(블럭) 구분 개선 — surface(Canvas)는 배경(Ink)과 명도차 ≈4%뿐이라
+// 카드가 배경에 묻힘. PosseCard 는 아래 상향 surface + 헤어라인 보더로 블럭을 분리한다.
+// (라이트 테마는 흰 카드로 이미 구분되므로 미적용 — Theme/PosseCard 에서 다크일 때만 사용.)
+val CanvasCard = Color(0xFF1E212B)  // PosseCard surface — Canvas 대비 명도 상향
+val Hairline = Color(0x17F5F2EC)    // PosseCard 1dp 헤어라인 보더 — Bone(#F5F2EC) alpha ≈ .09
+
 // ─────────────────────────────────────
 // Light 팔레트 — Apple iOS systemGroupedBackground / Notion 풍.
 // 핵심: 배경 < surfaceVariant < surface 단계로 명도 분리. 균일 화이트면 카드 구분 안 됨.

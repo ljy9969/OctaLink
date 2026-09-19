@@ -1,5 +1,6 @@
 package com.unboundapex.octalink.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,11 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -33,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.unboundapex.octalink.ui.theme.CanvasCard
+import com.unboundapex.octalink.ui.theme.Hairline
 
 @Composable
 fun PosseScreen(
@@ -176,12 +179,20 @@ fun PosseCard(
     leftStripeBrush: androidx.compose.ui.graphics.Brush? = null,
     content: @Composable () -> Unit
 ) {
+    // 다크 테마 카드 블럭 구분 개선 (회원 개선제안발, CEO 검토 승인):
+    //   surface Canvas(#15161B) → CanvasCard(#1E212B) 로 명도 상향 + 1dp 헤어라인 보더
+    //   + 옅은 그림자(shadowElevation). 배경(Ink #0B0B0F) 과의 명도차가 커져 카드가 또렷이 분리됨.
+    //   라이트 테마는 흰 카드로 이미 구분되므로 기존 그대로(surface=Paper, 보더/그림자 없음).
+    // shape 는 Surface 에 직접 지정 — 과거 modifier.clip 은 Surface 밖으로 나가는 그림자까지
+    //   잘라내므로, Surface 자체 shape 로 콘텐츠 clip + 보더 + 그림자를 일관되게 처리한다.
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isDark) CanvasCard else MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = if (isDark) 3.dp else 0.dp,
+        border = if (isDark) BorderStroke(1.dp, Hairline) else null,
     ) {
         // 좌측 stripe 는 Column 의 측정 높이를 따라가야 함. 과거 구조는 `Row(IntrinsicSize.Min)` +
         // `Box.fillMaxHeight` 였는데, 자식이 `Modifier.aspectRatio(...)` 같이 intrinsic 쿼리에
