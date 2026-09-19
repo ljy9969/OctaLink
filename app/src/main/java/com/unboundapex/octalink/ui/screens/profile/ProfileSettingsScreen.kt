@@ -332,6 +332,7 @@ fun ProfileSettingsScreen(
                     // 표시 순서 — 사용 빈도/중요도 기준. SIGNUP_RESULT 는 PENDING 단계 전용이라 제외.
                     // 운영진(MASTER/CREATOR) 전용 알림 2종은 isMaster 일 때만 노출 — 회원에게 무의미.
                     val baseTypes = listOf(
+                        NotificationType.CLASS_REMINDER,
                         NotificationType.COMMENT,
                         NotificationType.SKILL_UPDATED,
                         NotificationType.TOURNAMENT_DRAWN,
@@ -339,7 +340,6 @@ fun ProfileSettingsScreen(
                         NotificationType.NEW_POST_COMMENT,
                         NotificationType.MENTION,
                         NotificationType.INQUIRY_ANSWERED,
-                        NotificationType.CLASS_REMINDER,
                     )
                     val adminTypes = if (session.role.isMaster) listOf(
                         NotificationType.NEW_SIGNUP_PENDING,
