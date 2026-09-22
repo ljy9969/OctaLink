@@ -89,7 +89,8 @@ export async function draftCompletionAnswer({ inquiry, devTask, router, opsRoot 
     system: LANG_GUARD + support
       + '\n\n지금은 회원의 1:1 문의에 대한 **작업 완료 안내** 답변 초안을 쓴다. 요청한 개선/수정이 실제로 반영·완료되었다.'
       + '\n[출력 규칙] 회원에게 그대로 보낼 본문만(내부 라벨/머리말 금지). 존댓말·간결·정확·겸손.'
-      + ' 완료 사실을 1~2문장으로 담백하게 알리고 의견에 감사를 표하라. **이미 완료된 것만** 말하고, 새 기능·일정·가격을 추가로 약속하지 마라. 과장 금지.\n\n'
+      + ' 완료 사실을 1~2문장으로 담백하게 알리고 의견에 감사를 표하라. **이미 완료된 것만** 말하고, 새 기능·일정·가격을 추가로 약속하지 마라. 과장 금지.'
+      + ' "디자인 팀/개발 팀" 같은 없는 조직을 지어내지 마라(개인 개발이다). 개선은 반영됐으나 배포 대기 중일 수 있으니, 가용성은 "다음 업데이트에서 반영/만나보실 수 있습니다"처럼 표현하고 "지금 바로 이용해 보세요"처럼 즉시 가용을 단정하지 마라.\n\n'
       + APP_GROUNDING,
     messages: [{ role: 'user', content: `[문의 카테고리] ${cat}\n[회원 문의]\n${inquiry.text}\n\n[완료된 작업]\n${devTask || '요청하신 개선을 반영'}\n\n완료 안내 답변 초안만 출력(머리말 없이).` }],
   });
@@ -192,44 +193,85 @@ export function archiveDone({ opsRoot, now = () => new Date() }) {
   if (!done.length) return 0;
   const arch = join(opsRoot, 'tasks', 'dev-backlog-done.md');
   const ah = existsSync(arch) ? '' : '# dev 백로그 — 완료 아카이브\n\n';
-  appendFileSync(arch, ah + done.map((e) => `${e.text}\n- 완료처리: ${now().toISOString()}`).join('\n\n') + '\n\n');
+  // 완료안내: 대기 — support 스케줄 sweep 이 완료 안내 답변 초안을 작성할 대상 표시(작성되면 '완료'로 전환).
+  appendFileSync(arch, ah + done.map((e) => `${e.text}\n- 완료처리: ${now().toISOString()}\n- 완료안내: 대기`).join('\n\n') + '\n\n');
   writeFileSync(p, `${header}\n\n${open.map((e) => e.text).join('\n\n') || '(대기 중인 태스크 없음)'}\n`);
   return done.length;
 }
 
-// dev 태스크 완료 → (1) 백로그 완료·아카이브 + (2) support가 "작업 완료 안내" 답변 초안 작성 →
-// CEO 검토(무조건) → 통과분만 draftAnswer 저장(DRAFTED) → 어드민에서 운영자가 게시(ANSWERED).
-// 자격증명/Ollama 없으면 완료 안내는 건너뛰고 백로그 완료·아카이브만 수행(오프라인 안전).
-export async function completeInquiry({ opsRoot, projectId, credentialJson, inquiryId, router, draftFn, reviewFn, saveDraftFn, now = () => new Date() }) {
-  const p = join(opsRoot, 'tasks', 'dev-backlog.md');
-  const md = existsSync(p) ? readFileSync(p, 'utf8') : '';
-  const entry = backlogEntry(md, inquiryId);
-  const found = markDone({ opsRoot, inquiryId });
-  let answer = '', drafted = false, reason = '';
-  if (!entry) {
-    reason = '백로그에서 문의 항목 못 찾음(완료 안내 생략)';
-  } else if (!router) {
-    reason = 'router 없음(완료 안내 생략)';
-  } else {
-    const inquiry = { id: inquiryId, category: entry.category, text: entry.text };
+// 완료 아카이브(dev-backlog-done.md) 파싱 → {header, entries:[{id, category, categoryLabel, text, devTask, notice, raw}]}. (순수)
+// notice(완료안내): '대기'=완료 안내 초안 미작성(sweep 대상), '완료'=작성됨, '해당없음', null=레거시(마커 없음, 건너뜀).
+export function parseDoneArchive(md) {
+  const parts = (md || '').split(/\n(?=## )/);
+  let header = '';
+  const entries = [];
+  for (const p of parts) {
+    if (p.startsWith('## ')) {
+      const raw = p.replace(/\s+$/, '');
+      const id = (/문의\s+(\S+)/.exec(raw) || [])[1] || null;
+      const categoryLabel = (/##\s*\[([^\]]+)\]/.exec(raw) || [])[1] || '';
+      const text = (/-\s*원문:\s*([\s\S]*?)\n-\s*dev 지시:/.exec(raw) || [])[1]?.trim() || '';
+      const devTask = (/-\s*dev 지시:\s*([\s\S]*?)(?:\n-\s*(?:완료처리|완료안내):|$)/.exec(raw) || [])[1]?.trim() || '';
+      const notice = (/-\s*완료안내:\s*(\S+)/.exec(raw) || [])[1] || null;
+      entries.push({ id, category: LABEL_CAT[categoryLabel] || categoryLabel, categoryLabel, text, devTask, notice, raw });
+    } else if (p.trim()) { header = p.replace(/\s+$/, ''); }
+  }
+  return { header: header || '# dev 백로그 — 완료 아카이브', entries };
+}
+
+// 아카이브 항목 raw 의 '완료안내' 마커 갱신(없으면 끝에 추가). (내부)
+function setNotice(e, val) {
+  e.raw = /-\s*완료안내:\s*\S+/.test(e.raw)
+    ? e.raw.replace(/-\s*완료안내:\s*\S+/, `- 완료안내: ${val}`)
+    : `${e.raw}\n- 완료안내: ${val}`;
+}
+
+// support 스케줄 훅 — dev 완료 아카이브에서 '완료안내: 대기' 인 개선/버그 문의에 대해
+// support 완료 안내 초안 작성 → CEO 검토(무조건) → 통과분 draftAnswer 저장(DRAFTED) → 마커 '완료'로 전환.
+// onlyId 주면 그 문의만. router/자격증명 없으면 해당 건은 '대기' 유지(다음 주기 재시도).
+export async function sweepCompletions({ opsRoot, projectId, credentialJson, router, draftFn, reviewFn, saveDraftFn, onlyId } = {}) {
+  const p = join(opsRoot, 'tasks', 'dev-backlog-done.md');
+  if (!existsSync(p)) return { drafted: 0, skipped: 0, answers: {}, reasons: {} };
+  const { header, entries } = parseDoneArchive(readFileSync(p, 'utf8'));
+  let drafted = 0, skipped = 0, changed = false;
+  const answers = {}, reasons = {};
+  for (const e of entries) {
+    if (e.notice !== '대기') continue;             // 대기 건만(레거시/완료/해당없음 제외)
+    if (onlyId && e.id !== onlyId) continue;
+    if (!e.id || !(e.category === 'IMPROVEMENT' || e.category === 'BUG')) { setNotice(e, '해당없음'); changed = true; continue; }
+    if (!router) { skipped++; reasons[e.id] = 'router 없음(대기 유지)'; continue; }
     try {
-      const draft = draftFn ? await draftFn(inquiry, entry.devTask)
-        : await draftCompletionAnswer({ inquiry, devTask: entry.devTask, router, opsRoot });
+      const inquiry = { id: e.id, category: e.category, text: e.text };
+      const draft = draftFn ? await draftFn(inquiry, e.devTask)
+        : await draftCompletionAnswer({ inquiry, devTask: e.devTask, router, opsRoot });
       const review = reviewFn ? await reviewFn(inquiry, draft)
         : await ceoReviewCompletion({ inquiry, draft, router, opsRoot });
       const finalAnswer = review && typeof review.answer === 'string' ? review.answer.trim() : '';
       if (review && review.approved === true && finalAnswer) {
         const conn = await import('../connectors/inquiries.mjs');
-        const r = await (saveDraftFn || conn.saveDraft)({ projectId, credentialJson, inquiryId, draftAnswer: finalAnswer });
-        if (r.ok) { answer = finalAnswer; drafted = true; }
-        else reason = r.reason || '초안 저장 실패';
-      } else {
-        reason = (review && review.reason) ? `CEO 미승인: ${review.reason}` : 'CEO 미승인/파싱 실패';
-      }
-    } catch (e) { reason = e.message || String(e); }
+        const r = await (saveDraftFn || conn.saveDraft)({ projectId, credentialJson, inquiryId: e.id, draftAnswer: finalAnswer });
+        if (r.ok) { setNotice(e, '완료'); answers[e.id] = finalAnswer; drafted++; changed = true; }
+        else { skipped++; reasons[e.id] = r.reason || '초안 저장 실패(대기 유지)'; }
+      } else { skipped++; reasons[e.id] = (review && review.reason) ? `CEO 미승인: ${review.reason}` : 'CEO 미승인/파싱 실패'; }
+    } catch (err) { skipped++; reasons[e.id] = err.message || String(err); }
   }
+  if (changed) writeFileSync(p, `${header}\n\n${entries.map((e) => e.raw).join('\n\n')}\n`);
+  return { drafted, skipped, answers, reasons };
+}
+
+// dev 태스크 완료 처리 — 백로그 완료·아카이브(완료안내: 대기 표시) → 곧바로 sweepCompletions 로
+// 해당 문의의 완료 안내 초안 작성(support→CEO→draftAnswer). 스케줄 sweep 과 동일 경로(중복 방지 마커).
+// 자격증명/Ollama 없으면 완료 안내는 '대기'로 남아 다음 support 주기에 자동 작성됨(오프라인 안전).
+export async function completeInquiry({ opsRoot, projectId, credentialJson, inquiryId, router, draftFn, reviewFn, saveDraftFn, now = () => new Date() }) {
+  const found = markDone({ opsRoot, inquiryId });
   const archived = archiveDone({ opsRoot, now });
-  return { found, drafted, answer, archived, reason };
+  const sweep = await sweepCompletions({ opsRoot, projectId, credentialJson, router, draftFn, reviewFn, saveDraftFn, onlyId: inquiryId });
+  const drafted = Object.prototype.hasOwnProperty.call(sweep.answers, inquiryId);
+  return {
+    found, archived, drafted,
+    answer: sweep.answers[inquiryId] || '',
+    reason: drafted ? '' : (sweep.reasons[inquiryId] || (found ? '백로그에 대기 항목 없음' : '백로그에서 문의 항목 못 찾음')),
+  };
 }
 
 // pending 문의 → support 초안 → CEO 검토(+개선/버그면 dev 태스크 발행) → 통과분만 draftAnswer 저장(DRAFTED).

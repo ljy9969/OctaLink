@@ -24,19 +24,18 @@
   ```
   node ops/engine/inquiry-flow.mjs done <문의id>
   ```
-  → 다음이 한 번에 실행됨:
-  1. 해당 백로그 항목 `상태: 완료` + `tasks/dev-backlog-done.md` 아카이브 + 활성 백로그에서 제거.
-  2. **작업 완료 안내 답변**: support 에이전트가 "요청하신 개선을 반영했습니다" 류의 완료 안내 초안 작성 → **CEO 검토(무조건)** → 통과분만 Firestore `inquiries.draftAnswer` 저장(status=DRAFTED). 어드민 "1:1 문의 관리"에 **"작업 완료 안내 초안이 준비됐어요"** 로 뜸 → 운영자가 검토/수정 후 **게시**(ANSWERED).
-     - 완료 안내는 "반영했습니다"가 정상이라 `overPromises` 결정적 가드는 **미적용** — 대신 CEO가 실제 완료 범위를 넘는 과장/허위를 검수(게이트 유지).
-     - 자격증명/Ollama 미가동이면 완료 안내는 **건너뛰고** 백로그 완료·아카이브만 수행(오프라인 안전). 출력에 사유 표기.
-     - 이미 최초 답변이 게시(ANSWERED)된 문의도 status가 DRAFTED로 되돌아가 어드민 미답변 배지에 다시 잡힘 → 운영자가 완료 안내를 게시하도록 유도.
-- 또는 `tasks/dev-backlog.md`에서 직접 `상태: 대기`→`완료`로 고친 뒤 `node ops/engine/inquiry-flow.mjs done`(인자 없이) 실행 → 완료 표시분 일괄 아카이브(이 경우 완료 안내 초안은 만들지 않음 — id 지정분만).
+  → 백로그 항목 `상태: 완료` + `tasks/dev-backlog-done.md` 아카이브(각 항목에 **`- 완료안내: 대기`** 마커) + 활성 백로그에서 제거, 이어서 그 문의의 완료 안내 초안 작성(아래 sweep 과 동일 경로).
+- **작업 완료 안내 답변(자동, 매 support 주기)**: dev 완료 아카이브에서 **`완료안내: 대기`** 인 개선/버그 문의를 **support cron(매일 10·13·17시)이 돌 때마다** 자동 sweep — support 에이전트가 "요청하신 개선을 반영했습니다" 류 완료 안내 초안 작성 → **CEO 검토(무조건)** → 통과분만 Firestore `inquiries.draftAnswer` 저장(status=DRAFTED) → 아카이브 마커를 **`완료`**로 전환(중복 방지). 어드민 "1:1 문의 관리"에 **"작업 완료 안내 초안이 준비됐어요"** 로 뜸 → 운영자가 검토/수정 후 **게시**(ANSWERED).
+  - 완료 안내는 "반영했습니다"가 정상이라 `overPromises` 결정적 가드는 **미적용** — 대신 CEO가 실제 완료 범위를 넘는 과장/허위를 검수. 없는 "디자인/개발 팀" 언급·즉시 가용 단정도 프롬프트에서 차단("다음 업데이트에서 반영" 표현).
+  - **경로 통일**: `done <id>`(즉시)와 스케줄 sweep 모두 같은 `sweepCompletions`를 탄다. `done <id>`는 아카이브 직후 그 건만 즉시 sweep. 파일에서 `상태: 완료`로 고친 뒤 `done`(인자 없이) 실행하면 아카이브만 되고 초안은 **다음 support 주기 sweep**이 자동 작성.
+  - 자격증명/Ollama 미가동이면 그 건은 `완료안내: 대기`로 **남아** 다음 주기 재시도(오프라인 안전). 마커 없는 레거시 아카이브 항목은 sweep이 건드리지 않음.
+  - 이미 최초 답변이 게시(ANSWERED)된 문의도 완료 안내가 저장되면 status가 DRAFTED로 되돌아가 어드민 미답변 배지에 다시 잡힘 → 운영자가 완료 안내를 게시하도록 유도.
 - (dev-backlog*.md는 gitignore 런타임 파일.)
 
 ## 구성 (ops)
 - `connectors/inquiries.mjs` — `fetchPending`(PENDING) · `saveDraft`(draftAnswer+DRAFTED) · `postAnswer`(ANSWERED) · `setStatus`. no-op 가드.
-- `engine/inquiry-flow.mjs` — `draftAnswer`(support) · `ceoReview`(CEO 승인/수정 + devTask) · `draftPendingInquiries`(fetch→draft→CEO→save) · **`draftCompletionAnswer`**(support 완료 안내) · **`ceoReviewCompletion`**(CEO 검토) · **`completeInquiry`**(백로그 완료+완료안내 초안 오케스트레이션) · `backlogEntry`(백로그 항목 파싱) + CLI.
-- `engine/dispatch.mjs` — **support 잡이 cron 발화할 때마다** `draftPendingInquiries` 자동 실행(`defaultDraftInquiries`). 자격증명 없으면 no-op.
+- `engine/inquiry-flow.mjs` — `draftAnswer`(support) · `ceoReview`(CEO 승인/수정 + devTask) · `draftPendingInquiries`(fetch→draft→CEO→save) · **`draftCompletionAnswer`**(support 완료 안내) · **`ceoReviewCompletion`**(CEO 검토) · **`sweepCompletions`**(완료 아카이브의 `완료안내: 대기` 건 자동 초안화) · **`completeInquiry`**(done: 백로그 완료·아카이브 + 즉시 sweep) · `parseDoneArchive`/`backlogEntry`(파싱) + CLI.
+- `engine/dispatch.mjs` — **support 잡이 cron 발화할 때마다** `draftPendingInquiries`(PENDING 초안) + **`sweepCompletions`**(완료된 개선/버그 → 완료 안내 초안) 자동 실행(`defaultDraftInquiries`). 자격증명 없으면 no-op.
 
 ## 수동 실행(선택)
 ```

@@ -59,8 +59,10 @@ async function defaultDraftInquiries({ opsRoot, router, env }) {
   const raw = env[fb.credEnv || 'FIREBASE_SERVICE_ACCOUNT'];
   if (!raw) return;
   const cred = existsSync(raw) ? readFileSync(raw, 'utf8') : raw;
-  const { draftPendingInquiries } = await import('./inquiry-flow.mjs');
+  const { draftPendingInquiries, sweepCompletions } = await import('./inquiry-flow.mjs');
   await draftPendingInquiries({ opsRoot, projectId: fb.projectId, credentialJson: cred, router });
+  // 개발 완료(백로그 done)된 개선/버그 문의 → 완료 안내 초안 자동 작성(→CEO→draftAnswer). '완료안내: 대기' 건만.
+  await sweepCompletions({ opsRoot, projectId: fb.projectId, credentialJson: cred, router });
 }
 
 export function readEventAgents(opsRoot) {
