@@ -575,16 +575,21 @@ data class WeeklyMissionDoc(
  * 경로: `members/{memberId}/weeklyRoutines/{yyyy-W##}` (예: `2026-W22`).
  *
  * 생성 정책:
- *  - Cloud Function `generateWeeklyRoutine` 가 주1회 (일요일 23시 KST batch) 또는 수동 호출 시 작성.
- *  - 같은 `weekId` 로 재호출 시 덮어쓰기 (idempotent).
+ *  - 회원이 "이번 주 루틴 받기"를 눌러 Cloud Function `generateWeeklyRoutine`(onCall)을 호출할 때만
+ *    생성된다. CREATOR 는 다른 회원 대신 호출 가능(역시 수동). **자동 생성(스케줄 배치)은 없음** —
+ *    Cloud Scheduler 주간 배치는 Phase 2 예정 항목(README).
+ *  - 같은 `weekId` 문서가 이미 있으면 LLM 호출 없이 저장된 문서를 그대로 반환(캐시). 서버의
+ *    `force=true` 만 덮어쓰지만 클라이언트에는 그 경로가 없음 → 회원당 주 1회 생성(비용 통제).
  *  - LLM 입력: 6축 점수 + 최근 5건 한 줄 코멘트 + belt / 체급 / 입관기간 + 성별 + 사용자 선택 난이도.
- *  - LLM 출력: 드릴별 [RoutineDrill.youtubeQuery] (영문 검색어). 외부 매핑 호출 없음.
+ *  - LLM 출력: 드릴별 [RoutineDrill.youtubeQuery] (영문 검색어). 서버가 YouTube `search.list` 로
+ *    검색어마다 상위 1개 영상을 찾아 [RoutineDrill.videoId] 를 채움.
  *
- * 시각 요소: 클라이언트가 [RoutineDrill.youtubeQuery] 로 YouTube 검색 화면 진입.
+ * 시각 요소: [RoutineDrill.videoId] 가 있으면 썸네일 + 영상 진입, 없으면 [RoutineDrill.youtubeQuery]
+ * 로 YouTube 검색 화면 진입(폴백).
  * Phase 4 에 자체 도장 GIF/일러스트 라이브러리 도입 예정 — 그때 RoutineDrill 에 추가 필드.
  */
 data class WeeklyRoutineDoc(
-    /** ISO week key — 예: "2026-W22". 일요일 23시 KST 기준 다음 주의 weekId 사용. */
+    /** ISO week key — 예: "2026-W22". 호출 시점의 KST 날짜 기준 ISO 주(월요일 시작). */
     val weekId: String,
     val generatedAt: Instant,
     /** 하위 2축 자동 추출 — 헥사곤 차트에서 빨강 highlight 대상. enum 키 (`STRIKING` 등). */
@@ -610,7 +615,7 @@ data class RoutineDay(
 )
 
 /**
- * 개별 드릴. 시각 자료는 [youtubeQuery] 로 YouTube 검색 진입 (Phase 1).
+ * 개별 드릴. 시각 자료는 서버가 채운 [videoId] 썸네일, 없으면 [youtubeQuery] 로 YouTube 검색 진입.
  * Phase 4 자체 GIF 라이브러리 도입 시 [gymGifUrl] 등 필드 추가 예정.
  */
 data class RoutineDrill(
