@@ -19,15 +19,17 @@ const YOUTUBE_API_KEY = defineSecret("YOUTUBE_API_KEY");
 admin.initializeApp();
 
 /**
- * Google Gen AI SDK (Vertex 모드) — Gemini 3.1 Flash Lite 로 주간 보강 루틴 생성.
+ * Google Gen AI SDK (Vertex 모드) — Gemini 3.8 Flash 로 주간 보강 루틴 생성.
  *
  * 권역 global — Gemini 3.x GA 모델은 us-central1/asia-northeast3 등 리전 엔드포인트엔
  * 게시되지 않고 global 엔드포인트에서만 서빙됨(2026-08 확인). 리전 지정 시 404 NOT_FOUND.
  * Firebase 프로젝트 ID 는 GCLOUD_PROJECT 환경변수에서 자동 주입.
  *
  * 2026-07: 폐기된 @google-cloud/vertexai(VertexAI) 를 @google/genai 로 이관.
- * 모델 gemini-3.1-flash-lite (GA 경량 등급, 비용 최적 — 2.5 Flash Lite 의 GA 후속). 단발
- * (single-turn) generateContent 호출이라 Gemini 3 의 thought-signature 순환은 불필요.
+ * 2026-10: gemini-3.1-flash-lite → gemini-3.8-flash. Google 지원 중단 공지(3.6 Flash 2026-11-19,
+ * 3.7 Flash 2027-01-28 → 권장 대상 3.8 Flash)에 따라 최신 GA 로 이전. 운영 설정(global ·
+ * thinkingBudget 0 · JSON 응답) 그대로 1회 핑 검증(HTTP 200). 단발(single-turn) generateContent
+ * 호출이라 Gemini 3 의 thought-signature 순환은 불필요.
  */
 const ai = new GoogleGenAI({
   vertexai: true,
@@ -35,7 +37,7 @@ const ai = new GoogleGenAI({
   location: "global",
 });
 
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
+const GEMINI_MODEL = "gemini-3.8-flash";
 // thinkingBudget=0 : thinking 토큰이 maxOutputTokens 를 먼저 소비해 응답이 잘리는 것 방지.
 // maxOutputTokens=8192 : 한국어 6일×3드릴 + feedback ≒ 4~5k 토큰 예상, 여유 잡음.
 const GEMINI_CONFIG = {
