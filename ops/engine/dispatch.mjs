@@ -110,15 +110,13 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
     results.push({ job: j.name, ran: due, status });
   }
 
-  // --- 유지보수: approvals/ 는 최근 7일치만 보존. 하루 1회(KST 날짜 기준). 실패해도 디스패치는 진행 ---
-  const kstDay = new Date(nowMs + 9 * 3600 * 1000).toISOString().slice(0, 10);
-  if (st.lastPruneDay !== kstDay) {
-    try {
-      const r = pruneFn({ dir: join(opsRoot, 'approvals'), now: at, keepDays: 7 });
-      if (r.removed.length) results.push({ job: 'prune-approvals', ran: true, status: `removed ${r.removed.length}` });
-      st.lastPruneDay = kstDay;
-    } catch (e) { results.push({ job: 'prune-approvals', ran: false, status: 'error', error: e.message }); }
-  }
+  // --- 유지보수: approvals/ 는 에이전트별 최신 3개만 보존. 매 디스패치 실행(파일 수십 개라 가벼움) →
+  //     support 처럼 하루 여러 번 쓰는 에이전트도 항상 3개 이하. 실패해도 디스패치는 진행(다음 실행 재시도) ---
+  delete st.lastPruneDay; // 이전 '하루 1회·7일 보존' 방식의 상태 키 정리
+  try {
+    const r = pruneFn({ dir: join(opsRoot, 'approvals'), keepPerAgent: 3 });
+    if (r.removed.length) results.push({ job: 'prune-approvals', ran: true, status: `removed ${r.removed.length}` });
+  } catch (e) { results.push({ job: 'prune-approvals', ran: false, status: 'error', error: e.message }); }
 
   // --- 이벤트 트리거 (dev issue.assigned): 새 배정 이슈면 태스크 발행 + 실행(이슈번호로 중복 방지) ---
   const gh = loadConnectors(opsRoot).github;

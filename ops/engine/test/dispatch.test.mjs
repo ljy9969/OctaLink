@@ -56,31 +56,31 @@ test('lastRun 없던 잡도 다음 디스패치에서 창이 전진해 발화(�
   assert.deepEqual(ran.sort(), ['a', 'ceo']);
 });
 
-test('approvals 정리는 KST 하루 1회만 실행(같은 날 재디스패치 시 생략, 다음 날 다시)', async () => {
+test('approvals 정리는 매 디스패치마다 에이전트별 최신 3개 기준으로 실행', async () => {
   const ops = makeOps();
   const calls = [];
-  const pruneFn = ({ dir, keepDays }) => { calls.push([basename(dir), keepDays]); return { removed: ['x.md'], kept: 0 }; };
-  const noop = async () => ({ status: 'done' });
-  const run = (iso) => runDispatch({ opsRoot: ops, router: {}, now: () => new Date(iso), runAgentFn: noop, runCeoFn: noop, pruneFn });
-  const r1 = await run('2026-10-15T00:05:00Z');   // KST 10-15 09:05
-  assert.deepEqual(calls, [['approvals', 7]]);
-  assert.ok(r1.some((x) => x.job === 'prune-approvals' && x.ran));
-  await run('2026-10-15T14:50:00Z');              // KST 10-15 23:50 — 같은 날
-  assert.equal(calls.length, 1);
-  await run('2026-10-15T15:05:00Z');              // KST 10-16 00:05 — 다음 날
-  assert.equal(calls.length, 2);
-});
-
-test('approvals 정리 실패해도 디스패치는 진행, 다음 디스패치에서 재시도', async () => {
-  const ops = makeOps();
-  let n = 0;
-  const pruneFn = () => { n++; if (n === 1) throw new Error('EBUSY'); return { removed: [], kept: 0 }; };
+  const pruneFn = ({ dir, keepPerAgent }) => { calls.push([basename(dir), keepPerAgent]); return { removed: calls.length === 1 ? ['x.md'] : [], kept: 0 }; };
   const noop = async () => ({ status: 'done' });
   const run = (iso) => runDispatch({ opsRoot: ops, router: {}, now: () => new Date(iso), runAgentFn: noop, runCeoFn: noop, pruneFn });
   const r1 = await run('2026-10-15T00:05:00Z');
-  assert.ok(r1.some((x) => x.job === 'prune-approvals' && x.status === 'error'));
-  await run('2026-10-15T00:20:00Z');              // 같은 날이지만 실패했으니 재시도
-  assert.equal(n, 2);
+  assert.deepEqual(calls, [['approvals', 3]]);
+  assert.ok(r1.some((x) => x.job === 'prune-approvals' && x.ran && x.status === 'removed 1'));
+  const r2 = await run('2026-10-15T00:20:00Z');   // 같은 날 다음 디스패치에서도 실행
+  assert.equal(calls.length, 2);
+  assert.ok(!r2.some((x) => x.job === 'prune-approvals')); // 지운 게 없으면 결과에 안 남김
+});
+
+test('approvals 정리 실패해도 디스패치는 진행(에이전트 발화 영향 없음)', async () => {
+  const ops = makeOps();
+  saveState(join(ops, 'state'), 'dispatch', { lastRun: { a: '2026-09-07T23:50:00Z', ceo: '2026-09-07T23:50:00Z', b: '2026-09-07T23:50:00Z' }, lastPruneDay: '2026-09-07' });
+  const ran = [];
+  const pruneFn = () => { throw new Error('EBUSY'); };
+  const runAgentFn = async ({ agentDir }) => { ran.push(basename(agentDir)); return { status: 'done' }; };
+  const runCeoFn = async () => { ran.push('ceo'); return { status: 'done' }; };
+  const res = await runDispatch({ opsRoot: ops, router: {}, now: () => new Date('2026-09-08T00:05:00Z'), runAgentFn, runCeoFn, pruneFn });
+  assert.deepEqual(ran.sort(), ['a', 'ceo']);
+  assert.ok(res.some((x) => x.job === 'prune-approvals' && x.status === 'error'));
+  assert.equal(loadState(join(ops, 'state'), 'dispatch').lastPruneDay, undefined); // 옛 상태 키 정리됨
 });
 
 test('이벤트: 새 배정 이슈 → dev 발화 + tasks/dev.md, 같은 이슈는 중복 방지', async () => {
