@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, existsSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pruneApprovals, stampTime, agentOf } from '../prune.mjs';
+import { pruneByAgent, stampTime, agentOf, RETENTION } from '../prune.mjs';
 
 function makeDir() {
   const dir = mkdtempSync(join(tmpdir(), 'ops-prune-'));
@@ -30,9 +30,9 @@ test('stampTime / agentOf: gate.mjs 파일명에서 시각·에이전트 추출'
   assert.equal(agentOf('inquiry-j7HHQWKDcnXr20LwZ7YJ.md'), 'inquiry');
 });
 
-test('pruneApprovals: 에이전트별 최신 3개만 보존, 3개 이하 에이전트는 그대로', () => {
+test('pruneByAgent: 에이전트별 최신 3개만 보존, 3개 이하 에이전트는 그대로', () => {
   const dir = makeDir();
-  const r = pruneApprovals({ dir, keepPerAgent: 3 });
+  const r = pruneByAgent({ dir, keepPerAgent: 3 });
   assert.deepEqual(r.removed, ['inquiry-a.md', 'support-20261010-010301.md', 'support-20261012-040302.md']);
   assert.equal(r.kept, 10); // support 3 + social 3 + ads 1 + inquiry 3
   for (const n of r.removed) assert.equal(existsSync(join(dir, n)), false, n);
@@ -42,21 +42,32 @@ test('pruneApprovals: 에이전트별 최신 3개만 보존, 3개 이하 에이�
   }
 });
 
-test('pruneApprovals: dryRun 은 목록만, 파일은 그대로', () => {
+test('pruneByAgent: dryRun 은 목록만, 파일은 그대로', () => {
   const dir = makeDir();
-  const r = pruneApprovals({ dir, keepPerAgent: 3, dryRun: true });
+  const r = pruneByAgent({ dir, keepPerAgent: 3, dryRun: true });
   assert.equal(r.removed.length, 3);
   assert.equal(existsSync(join(dir, 'support-20261010-010301.md')), true);
 });
 
-test('pruneApprovals: keepPerAgent 가 0·음수·NaN 이면 아무것도 지우지 않고 거부', () => {
+test('pruneByAgent: keepPerAgent 가 0·음수·NaN 이면 아무것도 지우지 않고 거부', () => {
   const dir = makeDir();
   for (const bad of [0, -1, NaN, 2.5]) {
-    assert.throws(() => pruneApprovals({ dir, keepPerAgent: bad }), /keepPerAgent/);
+    assert.throws(() => pruneByAgent({ dir, keepPerAgent: bad }), /keepPerAgent/);
   }
   assert.equal(existsSync(join(dir, 'support-20261010-010301.md')), true);
 });
 
-test('pruneApprovals: 폴더 없으면 no-op', () => {
-  assert.deepEqual(pruneApprovals({ dir: join(tmpdir(), 'no-such-approvals-dir') }), { removed: [], kept: 0 });
+test('pruneByAgent: 폴더 없으면 no-op', () => {
+  assert.deepEqual(pruneByAgent({ dir: join(tmpdir(), 'no-such-approvals-dir'), keepPerAgent: 3 }), { removed: [], kept: 0 });
+});
+
+test('RETENTION: approvals 3개 · reports 5개, keepPerAgent 누락 시 거부(기본값 없음)', () => {
+  assert.deepEqual(RETENTION, { approvals: 3, reports: 5 });
+  assert.throws(() => pruneByAgent({ dir: tmpdir() }), /keepPerAgent/);
+});
+
+test('pruneByAgent: reports 처럼 keep 5 면 5개 보존(support 5개 전부 유지)', () => {
+  const dir = makeDir();
+  const r = pruneByAgent({ dir, keepPerAgent: 5 });
+  assert.deepEqual(r.removed, []); // support 5 · social 3 · ads 1 · inquiry 4 모두 5 이하
 });

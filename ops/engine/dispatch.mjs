@@ -14,7 +14,7 @@ import { buildYoutubeContext } from '../connectors/youtube.mjs';
 import { refreshContext as refreshFirebase } from '../connectors/firebase.mjs';
 import { writeContextSection } from '../connectors/context-file.mjs';
 import { loadEnv } from './env.mjs';
-import { pruneApprovals } from './prune.mjs';
+import { pruneByAgent, RETENTION } from './prune.mjs';
 
 function cronOf(trigger) { const m = /cron:\s*([^|]+)/.exec(trigger || ''); return m ? m[1].trim() : null; }
 function loadConnectors(opsRoot) { const p = join(opsRoot, 'connectors', 'config.json'); return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {}; }
@@ -88,7 +88,7 @@ export function readJobs(opsRoot) {
   return jobs;
 }
 
-export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, refreshContextFn = defaultRefresh, draftInquiriesFn = defaultDraftInquiries, pruneFn = pruneApprovals, env = process.env }) {
+export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, refreshContextFn = defaultRefresh, draftInquiriesFn = defaultDraftInquiries, pruneFn = pruneByAgent, env = process.env }) {
   const at = now(); const nowMs = at.getTime();
   const stateDir = join(opsRoot, 'state');
   const st = loadState(stateDir, 'dispatch'); st.lastRun = st.lastRun || {};
@@ -110,14 +110,6 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
     results.push({ job: j.name, ran: due, status });
   }
 
-  // --- 유지보수: approvals/ 는 에이전트별 최신 3개만 보존. 매 디스패치 실행(파일 수십 개라 가벼움) →
-  //     support 처럼 하루 여러 번 쓰는 에이전트도 항상 3개 이하. 실패해도 디스패치는 진행(다음 실행 재시도) ---
-  delete st.lastPruneDay; // 이전 '하루 1회·7일 보존' 방식의 상태 키 정리
-  try {
-    const r = pruneFn({ dir: join(opsRoot, 'approvals'), keepPerAgent: 3 });
-    if (r.removed.length) results.push({ job: 'prune-approvals', ran: true, status: `removed ${r.removed.length}` });
-  } catch (e) { results.push({ job: 'prune-approvals', ran: false, status: 'error', error: e.message }); }
-
   // --- 이벤트 트리거 (dev issue.assigned): 새 배정 이슈면 태스크 발행 + 실행(이슈번호로 중복 방지) ---
   const gh = loadConnectors(opsRoot).github;
   if (gh?.repo) {
@@ -137,6 +129,17 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
       }
       st.lastEventIssue[name] = r.issue.number;
     }
+  }
+
+  // --- 유지보수: 에이전트별 최신 N개만 보존(approvals 3 · reports 5, prune.mjs RETENTION).
+  //     이번 디스패치에서 쓴 파일까지 반영되도록 맨 끝에서 매번 실행(파일 수백 개 이하라 가벼움) →
+  //     support 처럼 하루 여러 번 쓰는 에이전트도 항상 N개 이하. 폴더별로 독립 — 실패해도 디스패치 진행 ---
+  delete st.lastPruneDay; // 이전 '하루 1회·7일 보존' 방식의 상태 키 정리
+  for (const [sub, keepPerAgent] of Object.entries(RETENTION)) {
+    try {
+      const r = pruneFn({ dir: join(opsRoot, sub), keepPerAgent });
+      if (r.removed.length) results.push({ job: `prune-${sub}`, ran: true, status: `removed ${r.removed.length}` });
+    } catch (e) { results.push({ job: `prune-${sub}`, ran: false, status: 'error', error: e.message }); }
   }
 
   saveState(stateDir, 'dispatch', st);
