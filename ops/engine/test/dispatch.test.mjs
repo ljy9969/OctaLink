@@ -56,6 +56,33 @@ test('lastRun 없던 잡도 다음 디스패치에서 창이 전진해 발화(�
   assert.deepEqual(ran.sort(), ['a', 'ceo']);
 });
 
+test('approvals 정리는 KST 하루 1회만 실행(같은 날 재디스패치 시 생략, 다음 날 다시)', async () => {
+  const ops = makeOps();
+  const calls = [];
+  const pruneFn = ({ dir, keepDays }) => { calls.push([basename(dir), keepDays]); return { removed: ['x.md'], kept: 0 }; };
+  const noop = async () => ({ status: 'done' });
+  const run = (iso) => runDispatch({ opsRoot: ops, router: {}, now: () => new Date(iso), runAgentFn: noop, runCeoFn: noop, pruneFn });
+  const r1 = await run('2026-10-15T00:05:00Z');   // KST 10-15 09:05
+  assert.deepEqual(calls, [['approvals', 7]]);
+  assert.ok(r1.some((x) => x.job === 'prune-approvals' && x.ran));
+  await run('2026-10-15T14:50:00Z');              // KST 10-15 23:50 — 같은 날
+  assert.equal(calls.length, 1);
+  await run('2026-10-15T15:05:00Z');              // KST 10-16 00:05 — 다음 날
+  assert.equal(calls.length, 2);
+});
+
+test('approvals 정리 실패해도 디스패치는 진행, 다음 디스패치에서 재시도', async () => {
+  const ops = makeOps();
+  let n = 0;
+  const pruneFn = () => { n++; if (n === 1) throw new Error('EBUSY'); return { removed: [], kept: 0 }; };
+  const noop = async () => ({ status: 'done' });
+  const run = (iso) => runDispatch({ opsRoot: ops, router: {}, now: () => new Date(iso), runAgentFn: noop, runCeoFn: noop, pruneFn });
+  const r1 = await run('2026-10-15T00:05:00Z');
+  assert.ok(r1.some((x) => x.job === 'prune-approvals' && x.status === 'error'));
+  await run('2026-10-15T00:20:00Z');              // 같은 날이지만 실패했으니 재시도
+  assert.equal(n, 2);
+});
+
 test('이벤트: 새 배정 이슈 → dev 발화 + tasks/dev.md, 같은 이슈는 중복 방지', async () => {
   const ops = mkdtempSync(join(tmpdir(), 'ops-ev-'));
   mkdirSync(join(ops, 'agents', 'dev'), { recursive: true });

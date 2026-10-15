@@ -14,6 +14,7 @@ import { buildYoutubeContext } from '../connectors/youtube.mjs';
 import { refreshContext as refreshFirebase } from '../connectors/firebase.mjs';
 import { writeContextSection } from '../connectors/context-file.mjs';
 import { loadEnv } from './env.mjs';
+import { pruneApprovals } from './prune.mjs';
 
 function cronOf(trigger) { const m = /cron:\s*([^|]+)/.exec(trigger || ''); return m ? m[1].trim() : null; }
 function loadConnectors(opsRoot) { const p = join(opsRoot, 'connectors', 'config.json'); return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {}; }
@@ -87,7 +88,7 @@ export function readJobs(opsRoot) {
   return jobs;
 }
 
-export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, refreshContextFn = defaultRefresh, draftInquiriesFn = defaultDraftInquiries, env = process.env }) {
+export async function runDispatch({ opsRoot, router, now = () => new Date(), runAgentFn = runAgent, runCeoFn = runCeo, githubCheckFn = checkAssignedIssue, refreshContextFn = defaultRefresh, draftInquiriesFn = defaultDraftInquiries, pruneFn = pruneApprovals, env = process.env }) {
   const at = now(); const nowMs = at.getTime();
   const stateDir = join(opsRoot, 'state');
   const st = loadState(stateDir, 'dispatch'); st.lastRun = st.lastRun || {};
@@ -107,6 +108,16 @@ export async function runDispatch({ opsRoot, router, now = () => new Date(), run
     }
     st.lastRun[j.name] = at.toISOString(); // 발화 여부와 무관하게 항상 갱신 → 다음 창이 전진
     results.push({ job: j.name, ran: due, status });
+  }
+
+  // --- 유지보수: approvals/ 는 최근 7일치만 보존. 하루 1회(KST 날짜 기준). 실패해도 디스패치는 진행 ---
+  const kstDay = new Date(nowMs + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  if (st.lastPruneDay !== kstDay) {
+    try {
+      const r = pruneFn({ dir: join(opsRoot, 'approvals'), now: at, keepDays: 7 });
+      if (r.removed.length) results.push({ job: 'prune-approvals', ran: true, status: `removed ${r.removed.length}` });
+      st.lastPruneDay = kstDay;
+    } catch (e) { results.push({ job: 'prune-approvals', ran: false, status: 'error', error: e.message }); }
   }
 
   // --- 이벤트 트리거 (dev issue.assigned): 새 배정 이슈면 태스크 발행 + 실행(이슈번호로 중복 방지) ---

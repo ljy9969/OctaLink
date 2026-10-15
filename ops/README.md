@@ -10,7 +10,7 @@ CEO 루프(Claude) 아래 8개 전담 에이전트가 실행·검증을 반복�
 - `state/` — 지표·이력·비용 원장(ledger.jsonl) *(런타임 생성)*
 - `tasks/` — CEO→에이전트 지시(`<agent>.md`) *(런타임 생성)*
 - `reports/` — 에이전트→CEO 보고 *(런타임 생성)*
-- `approvals/` — gated 제안서(사람 승인 대기) *(런타임 생성)*
+- `approvals/` — gated 제안서(사람 승인 대기) *(런타임 생성)* — **최근 7일치만 보존**: 디스패처가 하루 1회(KST) 파일명 생성시각 기준 7일 지난 `.md` 를 삭제(`engine/prune.mjs`, 수동: `node engine/prune.mjs [--dry-run] [--days N]`). gitignore 파일이라 삭제는 영구.
 - `mcp/` — 커넥터 설정 + `.env`(자격증명, git 제외)
 - `runbooks/` — 서버·결제·API 가입 런북(사용자가 수행)
 
