@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseDdg, buildResearchContext, search, extractApps, extractLeads } from '../../connectors/websearch.mjs';
+import { parseDdg, buildResearchContext, search, extractApps, extractLeads, queryTokens, relevanceScore, looksIrrelevant } from '../../connectors/websearch.mjs';
 
 test('extractApps: 스토어 링크만 추출·중복제거·카테고리 분류 (LLM 없음)', () => {
   const results = [
@@ -121,4 +121,66 @@ test('buildResearchContext: sales 리드 0건이면 이유를 적은 빈 인벤�
   const ops = mkdtempSync(join(tmpdir(), 'ops-ws-sales0-'));
   await buildResearchContext({ opsRoot: ops, agent: 'sales', queries: ['q'], searchFn: async () => [LEAD_RESULTS[11]], delayMs: 0 });
   assert.match(readFileSync(join(ops, 'context', 'sales.md'), 'utf8'), /확인된 체육관 리드 없음/);
+});
+
+// 실제 SearXNG 가 '강남 킥복싱 무에타이 체육관' 에 돌려준 엉뚱한 결과(2026-10-16 probe).
+const JUNK = [
+  { title: '40+ Top Computer Vision Projects [2025 Updated] - GeeksforGeeks', url: 'https://www.geeksforgeeks.org/x', snippet: '' },
+  { title: '19 Computer Vision Projects From Beginner to Advanced', url: 'https://www.datacamp.com/x', snippet: '' },
+  { title: 'computer-vision-projects · GitHub Topics', url: 'https://github.com/x', snippet: '' },
+];
+const DAUM_OK = { documents: [
+  { title: '강남 <b>킥복싱</b> <b>무에타이</b> 체육관 추천', url: 'https://blog.example/1', contents: '강남역 <b>체육관</b> 후기' },
+  { title: '<b>무에타이</b> 강남점', url: 'https://gym.example', contents: '킥복싱 무에타이 수업' },
+] };
+const q = '강남 킥복싱 무에타이 체육관';
+
+test('queryTokens·relevanceScore·looksIrrelevant: site: 연산자·1글자 제외, 절반 이상 포함해야 관련', () => {
+  assert.deepEqual(queryTokens('주짓수 체육관 site:instagram.com 앱'), ['주짓수', '체육관']);
+  assert.equal(relevanceScore(q, JUNK), 0);
+  assert.equal(looksIrrelevant(q, JUNK), true);
+  assert.equal(looksIrrelevant(q, []), true);
+  assert.equal(looksIrrelevant(q, [{ title: '강남 킥복싱 체육관', url: 'u' }, ...JUNK]), false); // 4개 중 1개(25%) 관련
+});
+
+// URL 로 라우팅하는 가짜 transport: SearXNG 는 주어진 결과, Daum 은 주어진 응답(또는 실패).
+function routed({ searx, daum, onDaum }) {
+  return async (url) => {
+    if (url.includes('dapi.kakao.com/v2/search/web')) { onDaum && onDaum(); return daum ? { ok: true, status: 200, async json() { return daum; }, async text() { return ''; } } : { ok: false, status: 401, async text() { return 'no'; } }; }
+    if (url.includes('format=json')) return { ok: true, status: 200, async json() { return { results: searx.map((r) => ({ title: r.title, url: r.url, content: r.snippet })) }; }, async text() { return ''; } };
+    return { ok: false, status: 404, async text() { return ''; } };
+  };
+}
+
+test('search: 기본 검색이 엉뚱하면 다음 웹 검색으로 대체(fallback 표시, <b> 제거)', async () => {
+  const r = await search(q, { transport: routed({ searx: JUNK, daum: DAUM_OK }), env: { SEARXNG_URL: 'http://localhost:8888', KAKAO_REST_API_KEY: 'k' } });
+  assert.equal(r.fallback, 'daum');
+  assert.equal(r[0].title, '강남 킥복싱 무에타이 체육관 추천');
+  assert.equal(r[0].snippet, '강남역 체육관 후기');
+});
+
+test('search: 기본 검색이 관련 있으면 다음 검색을 부르지 않음', async () => {
+  let called = false;
+  const good = [{ title: '강남 킥복싱 무에타이 체육관', url: 'https://g', snippet: '' }];
+  const r = await search(q, { transport: routed({ searx: good, daum: DAUM_OK, onDaum: () => { called = true; } }), env: { SEARXNG_URL: 'http://x', KAKAO_REST_API_KEY: 'k' } });
+  assert.equal(called, false);
+  assert.equal(r[0].url, 'https://g');
+});
+
+test('search: 다음 결과가 더 낫지 않거나 실패하면 기본 결과 유지, 키 없으면 대체 안 함', async () => {
+  const worse = { documents: [{ title: '전혀 무관', url: 'https://n', contents: '' }] };
+  const r1 = await search(q, { transport: routed({ searx: JUNK, daum: worse }), env: { SEARXNG_URL: 'http://x', KAKAO_REST_API_KEY: 'k' } });
+  assert.equal(r1.fallback, undefined); assert.equal(r1.length, 3);
+  const r2 = await search(q, { transport: routed({ searx: JUNK, daum: null }), env: { SEARXNG_URL: 'http://x', KAKAO_REST_API_KEY: 'k' } });
+  assert.equal(r2.length, 3);
+  let called = false;
+  await search(q, { transport: routed({ searx: JUNK, daum: DAUM_OK, onDaum: () => { called = true; } }), env: { SEARXNG_URL: 'http://x' } });
+  assert.equal(called, false);
+});
+
+test('buildResearchContext: 대체된 쿼리는 웹 검색 구획에 출처 표시', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-ws-fb-'));
+  const searchFn = async () => Object.assign([{ title: 'T', url: 'https://t', snippet: '' }], { fallback: 'daum' });
+  await buildResearchContext({ opsRoot: ops, agent: 'social', queries: ['q1'], searchFn, delayMs: 0 });
+  assert.match(readFileSync(join(ops, 'context', 'social.md'), 'utf8'), /### q1 \(기본 검색이 엉뚱해 다음 검색으로 대체\)/);
 });

@@ -59,17 +59,59 @@ async function googleCse(query, transport, key, cx) {
   return (j.items || []).slice(0, 8).map((i) => ({ title: i.title, url: i.link, snippet: i.snippet || '' }));
 }
 
-// 우선순위: 로컬 SearXNG(self-host·키 불필요·가장 안정) → Google CSE(키+cx) → Brave(키)
+// 다음(Daum) 웹문서 검색 — 카카오 REST API 키(KAKAO_REST_API_KEY) 재사용. 제목·본문의 <b> 강조 태그 제거.
+async function daumWeb(query, transport, key) {
+  const res = await transport(`https://dapi.kakao.com/v2/search/web?size=8&query=${encodeURIComponent(query)}`,
+    { headers: { Authorization: `KakaoAK ${key}` } });
+  if (!res.ok) throw new Error(`Daum ${res.status}: ${(await res.text().catch(() => '')).slice(0, 150)}`);
+  const j = await res.json();
+  return (j.documents || []).slice(0, 8).map((d) => ({ title: stripTags(d.title || ''), url: d.url, snippet: stripTags(d.contents || '') }));
+}
+
+// 관련도 판정(결정적): 검색어 토큰(연산자 'site:' 등·1글자 제외)의 절반 이상을 제목·스니펫에 담은 결과 수.
+export function queryTokens(query) {
+  return query.toLowerCase().replace(/"/g, ' ').split(/\s+/).filter((t) => t && !/^[a-z]+:/.test(t) && Array.from(t).length >= 2);
+}
+export function relevanceScore(query, results) {
+  const toks = queryTokens(query);
+  if (!toks.length) return results.length;
+  const need = Math.ceil(toks.length / 2);
+  return results.filter((r) => {
+    const text = `${r.title || ''} ${r.snippet || ''}`.toLowerCase();
+    return toks.filter((k) => text.includes(k)).length >= need;
+  }).length;
+}
+// 결과 없음 또는 '엉뚱함'(관련 결과가 1개 미만이거나 25% 미만) — 예: 킥복싱 체육관 검색에 컴퓨터비전 글만.
+export const looksIrrelevant = (query, results) =>
+  !results.length || relevanceScore(query, results) < Math.max(1, Math.ceil(results.length * 0.25));
+
+// 기본 체인 — 로컬 SearXNG(self-host·키 불필요·가장 안정) → Google CSE(키+cx) → Brave(키)
 //           → DuckDuckGo(재시도) → 공개 SearXNG. 첫 결과 반환.
 // 참고: Google Custom Search JSON API는 신규 고객 발급 중단(403 PERMISSION_DENIED)이라 사실상 막힘.
 //       공개 SearXNG 인스턴스는 대부분 JSON 비활성/429 → self-host(SEARXNG_URL) 권장.
-export async function search(query, { transport = globalThis.fetch, env = process.env } = {}) {
+async function primarySearch(query, transport, env) {
   if (env.SEARXNG_URL) { const r = await searxSearch(query, transport, [env.SEARXNG_URL.replace(/\/$/, '')]); if (r.length) return r; }
   const gkey = env.GOOGLE_API_KEY || env.YOUTUBE_API_KEY; // 같은 프로젝트 API 키 재사용 가능
   if (env.GOOGLE_CSE_ID && gkey) return googleCse(query, transport, gkey, env.GOOGLE_CSE_ID);
   if (env.BRAVE_API_KEY) return braveSearch(query, transport, env.BRAVE_API_KEY);
-  let r = await ddgSearch(query, transport); if (r.length) return r;
+  const r = await ddgSearch(query, transport); if (r.length) return r;
   return searxSearch(query, transport);
+}
+
+// 기본 체인 결과가 없거나 엉뚱하면 다음 웹 검색으로 대체 — 단, 다음 결과가 '더 관련 있을 때만' 바꿈(나빠지지 않게).
+// 대체된 결과 배열에는 fallback='daum' 표시(컨텍스트에 출처 명시용).
+export async function search(query, { transport = globalThis.fetch, env = process.env } = {}) {
+  let r = [], err = null;
+  try { r = await primarySearch(query, transport, env); } catch (e) { err = e; }
+  const key = env.KAKAO_REST_API_KEY;
+  if (key && looksIrrelevant(query, r)) {
+    try {
+      const d = await daumWeb(query, transport, key);
+      if (d.length && (!r.length || relevanceScore(query, d) > relevanceScore(query, r))) { d.fallback = 'daum'; return d; }
+    } catch { /* 다음 검색 실패 → 기본 결과 유지 */ }
+  }
+  if (err && !r.length) throw err;
+  return r;
 }
 
 // 결정적 앱 추출: 검색 결과에서 스토어 링크만 골라 중복제거·카테고리 분류. LLM 미사용 → 환각 불가.
@@ -152,7 +194,7 @@ export async function buildResearchContext({ opsRoot, agent = 'research', querie
     try { results = await searchFn(q, { env }); } catch (e) { blocks.push(`## ${q}\n(검색 실패: ${e.message})`); continue; }
     allResults.push(...results.map((r) => ({ ...r, query: q })));
     const lines = results.map((r) => `- [${r.title}](${r.url})${r.snippet ? ` — ${r.snippet.slice(0, 180)}` : ''}`);
-    blocks.push(`### ${q}\n${lines.join('\n') || '(결과 없음)'}`);
+    blocks.push(`### ${q}${results.fallback === 'daum' ? ' (기본 검색이 엉뚱해 다음 검색으로 대체)' : ''}\n${lines.join('\n') || '(결과 없음)'}`);
   }
   writeContextSection({ opsRoot, agent, section: '웹 검색', body: blocks.join('\n\n'), now });
   const inv = INVENTORIES[agent] || INVENTORIES.default;
