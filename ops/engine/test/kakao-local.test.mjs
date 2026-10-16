@@ -9,7 +9,7 @@ import { parseContextSection } from '../../connectors/context-file.mjs';
 // 실제 응답(2026-10-16 probe)의 업종 분류 형태 그대로.
 const doc = (id, name, category, address) => ({
   id, place_name: name, category_name: `스포츠,레저 > ${category}`, address_name: address,
-  road_address_name: `${address} 도로명`, place_url: `http://place.map.kakao.com/${id}`, phone: '02-000-0000',
+  road_address_name: `${address} 도로명`, place_url: `http://place.map.kakao.com/${id}`, phone: '02-000-0000', x: '126.9', y: '37.5',
 });
 
 test('isCombatGym: 격투 업종 통과, 일반 체육관·헬스는 이름에 격투 단어 있을 때만, 태권도·합기도·검도 제외', () => {
@@ -28,7 +28,7 @@ test('isCombatGym: 격투 업종 통과, 일반 체육관·헬스는 이름에 �
 test('toLead: 전화번호 미포함, 구·업종(끝 2단계)·https 링크', () => {
   const l = toLead(doc(330735267, '바디킥짐', '무예 > 격투기 > 무에타이', '서울 강서구 등촌동 1'));
   assert.deepEqual(l, { id: '330735267', name: '바디킥짐', category: '격투기 > 무에타이', district: '강서구',
-    address: '서울 강서구 등촌동 1 도로명', url: 'https://place.map.kakao.com/330735267' });
+    address: '서울 강서구 등촌동 1 도로명', url: 'https://place.map.kakao.com/330735267', lon: 126.9, lat: 37.5 });
   assert.equal('phone' in l, false);
 });
 
@@ -90,7 +90,7 @@ test('buildLeadsContext: 누적 저장 → 2회차에 신규·미확인 표시, 
 
   const csv = readFileSync(join(ops, 'exports', 'sales-leads-seoul.csv'), 'utf8');
   assert.equal(csv.charCodeAt(0), 0xFEFF);
-  assert.match(csv, /"마포구","새복싱","복싱,권투 > 복싱,권투장",.*"Y"/);
+  assert.match(csv, /"마포구","새복싱","복싱,권투 > 복싱,권투장",.*"126.9","37.5","Y"/);
   assert.doesNotMatch(csv, /02-000-0000/);                               // 전화번호 미수집
 
   const sec = parseContextSection(readFileSync(join(ops, 'context', 'sales.md'), 'utf8'), '리드 인벤토리');

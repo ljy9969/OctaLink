@@ -59,6 +59,7 @@ export function isCombatGym(doc) {
 
 export function toLead(doc) {
   const address = doc.road_address_name || doc.address_name || '';
+  const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
   return {
     id: String(doc.id),
     name: doc.place_name,
@@ -66,6 +67,8 @@ export function toLead(doc) {
     district: (doc.address_name || address).split(' ')[1] || '',
     address,
     url: (doc.place_url || `https://place.map.kakao.com/${doc.id}`).replace(/^http:/, 'https:'),
+    lon: num(doc.x), // 카카오가 주는 장소 좌표(WGS84) — 지도 시각화용(업체 위치 = 공개 정보)
+    lat: num(doc.y),
   };
 }
 
@@ -116,8 +119,8 @@ export async function buildLeadsContext({ opsRoot, agent = 'sales', key, region,
   const exportDir = join(opsRoot, 'exports');
   if (!existsSync(exportDir)) mkdirSync(exportDir, { recursive: true });
   const csvName = `${agent}-leads-${region.slug || 'region'}.csv`;
-  const csv = ['구,체육관,업종,주소,카카오맵,신규,처음 발견,마지막 확인',
-    ...current.map((l) => [l.district, l.name, l.category, l.address, l.url, isNew.has(l.id) ? 'Y' : '', l.firstSeen.slice(0, 10), l.lastSeen.slice(0, 10)].map(csvCell).join(','))];
+  const csv = ['구,체육관,업종,주소,카카오맵,경도,위도,신규,처음 발견,마지막 확인',
+    ...current.map((l) => [l.district, l.name, l.category, l.address, l.url, l.lon ?? '', l.lat ?? '', isNew.has(l.id) ? 'Y' : '', l.firstSeen.slice(0, 10), l.lastSeen.slice(0, 10)].map(csvCell).join(','))];
   writeFileSync(join(exportDir, csvName), '﻿' + csv.join('\r\n') + '\r\n'); // BOM: 엑셀 한글 깨짐 방지
 
   const byDistrict = new Map();
