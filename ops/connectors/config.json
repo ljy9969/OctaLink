@@ -34,6 +34,16 @@
         "격투기 선수 유튜브 채널 체육관",
         "korean MMA fighter gym owner instagram youtube",
         "종합격투기 체육관 관장 유튜버"
+      ],
+      "_sales_note": "체육관 리드(sales): 결과에서 인스타그램 계정·Tapology 체육관·지도 장소 링크만 코드가 추출(extractLeads). 일반 지역 검색은 SearXNG에서 관광·위키만 나와 계정/디렉터리 지향 쿼리 사용.",
+      "sales": [
+        "주짓수 체육관 site:instagram.com",
+        "MMA 체육관 site:instagram.com",
+        "복싱 킥복싱 체육관 site:instagram.com",
+        "무에타이 체육관 site:instagram.com",
+        "종합격투기 팀 체육관 인스타그램",
+        "tapology gyms South Korea",
+        "MMA gym Seoul"
       ]
     }
   },

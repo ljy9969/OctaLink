@@ -1,4 +1,4 @@
-// 웹 검색 커넥터 → research 컨텍스트(context/research.md)에 실데이터+출처 주입.
+// 웹 검색 커넥터 → 에이전트 컨텍스트(context/<agent>.md)에 실데이터+출처 + 결정적 인벤토리(research·social=앱, sales=체육관 리드) 주입.
 // 기본: DuckDuckGo HTML(무료·키 불필요). BRAVE_API_KEY 있으면 Brave Search(JSON, 안정적).
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -91,6 +91,58 @@ export function extractApps(results) {
   return out;
 }
 
+// 결정적 체육관 리드 추출(sales): "실제 체육관"임이 링크 형태로 분명한 결과만 — 인스타그램 계정,
+// Tapology 체육관 페이지, 카카오맵·네이버 지도 장소 페이지. 이름에 격투/체육관 단어가 있어야 함.
+// 뉴스·위키·블로그·디렉터리·일반 웹사이트는 전부 제외(정확도 우선). LLM 미사용 → 지어낼 수 없음.
+const GYM_KW = /주짓수|MMA|종합격투|격투|복싱|킥복싱|무에타이|레슬링|유도|BJJ|jiu.?jitsu|boxing|kickbox|muay|fight|gym|짐|도장|체육관|top team/i;
+const IG_RESERVED = new Set(['p', 'reel', 'reels', 'explore', 'stories', 'accounts', 'tv', 'tags', 'direct', 'about', 'developer', 'legal']);
+
+export function extractLeads(results) {
+  const seen = new Set(); const out = [];
+  for (const r of results) {
+    const url = (r.url || '').trim(); const title = (r.title || '').trim(); let m, lead = null;
+    if ((m = /^https?:\/\/(?:www\.)?instagram\.com\/([A-Za-z0-9._]+)\/?(?:\?.*)?$/.exec(url)) && !IG_RESERVED.has(m[1].toLowerCase())) {
+      const name = title.replace(/\s*\(@[^)]*\)[\s\S]*$/, '').replace(/\s*(?:[•|·-]\s*)?Instagram[\s\S]*$/i, '').trim();
+      lead = { name, source: `인스타그램 @${m[1]}`, url: `https://www.instagram.com/${m[1]}/`, key: `ig:${m[1].toLowerCase()}` };
+    } else if ((m = /^https?:\/\/(?:www\.)?tapology\.com\/gyms\/(\d+)-[\w-]+/.exec(url))) {
+      lead = { name: title.replace(/\s*\|\s*Gym Page[\s\S]*$/i, '').trim(), source: 'Tapology', url: m[0], key: `tap:${m[1]}` };
+    } else if ((m = /^https?:\/\/place\.map\.kakao\.com\/(\d+)/.exec(url))) {
+      lead = { name: title.replace(/\s*[|-]\s*카카오맵[\s\S]*$/, '').trim(), source: '카카오맵', url: m[0], key: `kakao:${m[1]}` };
+    } else if ((m = /^https?:\/\/(?:m\.|pcmap\.)?(?:place\.naver\.com\/[a-z]+|map\.naver\.com\/[\s\S]*?place)\/(\d+)/.exec(url))) {
+      lead = { name: title.replace(/\s*[:|-]\s*네이버[\s\S]*$/, '').trim(), source: '네이버 지도', url: url.split('?')[0], key: `naver:${m[1]}` };
+    }
+    if (!lead || !lead.name || !GYM_KW.test(lead.name)) continue;
+    if (seen.has(lead.key)) continue; seen.add(lead.key);
+    out.push({ name: lead.name, source: lead.source, url: lead.url, query: r.query || '' });
+  }
+  return out;
+}
+
+const cell = (s) => String(s).replace(/\|/g, '/').replace(/\s+/g, ' ').trim(); // 표 깨짐 방지
+
+// 에이전트별 결정적 인벤토리(코드 추출) — Opus 분석·CEO 판단이 참고하는 신뢰 가능한 목록.
+const INVENTORIES = {
+  sales: {
+    section: '리드 인벤토리',
+    render(results) {
+      const leads = extractLeads(results);
+      if (!leads.length) return '(확인된 체육관 리드 없음 — 이번 검색 결과에 인스타그램 계정·Tapology·지도 장소 링크가 없음)';
+      const rows = leads.map((l) => `| ${cell(l.name)} | ${l.source} | [열기](${l.url}) | ${cell(l.query)} |`);
+      return `실제 검색 결과에서 결정적 추출(중복제거) — 총 ${leads.length}곳. 출처는 인스타그램 계정·Tapology 체육관 페이지·지도 장소 페이지만(뉴스·위키·블로그·일반 웹 제외).\n\n| 체육관 | 출처 | 링크 | 찾은 검색어 |\n|---|---|---|---|\n${rows.join('\n')}`;
+    },
+  },
+  default: {
+    section: '앱 인벤토리',
+    render(results) {
+      const apps = extractApps(results);
+      const rows = apps.map((a) => `| ${a.name} | ${a.category} | ${a.store} | [열기](${a.url}) | ${a.snippet} |`);
+      return apps.length
+        ? `실제 검색 결과에서 결정적 추출(중복제거) — 총 ${apps.length}개.\n\n| 앱 | 카테고리 | 스토어 | 링크 | 스니펫 |\n|---|---|---|---|---|\n${rows.join('\n')}`
+        : '(스토어 앱 링크 없음)';
+    },
+  },
+};
+
 export async function buildResearchContext({ opsRoot, agent = 'research', queries, searchFn = search, env, delayMs = 1500, now = () => new Date() }) {
   const blocks = []; const allResults = [];
   for (let qi = 0; qi < queries.length; qi++) {
@@ -98,26 +150,22 @@ export async function buildResearchContext({ opsRoot, agent = 'research', querie
     if (qi > 0 && delayMs) await new Promise((r) => setTimeout(r, delayMs)); // DDG 연속요청 스로틀링 완화
     let results = [];
     try { results = await searchFn(q, { env }); } catch (e) { blocks.push(`## ${q}\n(검색 실패: ${e.message})`); continue; }
-    allResults.push(...results);
+    allResults.push(...results.map((r) => ({ ...r, query: q })));
     const lines = results.map((r) => `- [${r.title}](${r.url})${r.snippet ? ` — ${r.snippet.slice(0, 180)}` : ''}`);
     blocks.push(`### ${q}\n${lines.join('\n') || '(결과 없음)'}`);
   }
   writeContextSection({ opsRoot, agent, section: '웹 검색', body: blocks.join('\n\n'), now });
-  // 결정적 앱 인벤토리(코드 추출) — Opus 분석·CEO 판단이 참고하는 신뢰 가능한 목록.
-  const apps = extractApps(allResults);
-  const rows = apps.map((a) => `| ${a.name} | ${a.category} | ${a.store} | [열기](${a.url}) | ${a.snippet} |`);
-  const inv = apps.length
-    ? `실제 검색 결과에서 결정적 추출(중복제거) — 총 ${apps.length}개.\n\n| 앱 | 카테고리 | 스토어 | 링크 | 스니펫 |\n|---|---|---|---|---|\n${rows.join('\n')}`
-    : '(스토어 앱 링크 없음)';
-  writeContextSection({ opsRoot, agent, section: '앱 인벤토리', body: inv, now });
+  const inv = INVENTORIES[agent] || INVENTORIES.default;
+  writeContextSection({ opsRoot, agent, section: inv.section, body: inv.render(allResults), now });
   return blocks.length;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const here = dirname(fileURLToPath(import.meta.url));
   const opsRoot = process.env.OPS_ROOT || join(here, '..');
   const conf = JSON.parse(readFileSync(join(opsRoot, 'connectors', 'config.json'), 'utf8')).websearch || {};
   for (const [agent, queries] of Object.entries(conf.queries || {})) {
+    if (!Array.isArray(queries)) continue; // "_social_note" 같은 설명 키 건너뜀
     const n = await buildResearchContext({ opsRoot, agent, queries });
     const prov = process.env.SEARXNG_URL ? 'SearXNG(self-host)' : process.env.GOOGLE_CSE_ID ? 'Google CSE' : process.env.BRAVE_API_KEY ? 'Brave' : 'DuckDuckGo';
     console.log(`context/${agent}.md ← ${n} 쿼리 (${prov})`);

@@ -5,6 +5,33 @@ import { runVerifier } from './verifier.mjs';
 import { applyGate } from './gate.mjs';
 import { loadState, saveState, appendLedger, spendSince } from './state.mjs';
 import { LANG_GUARD } from './lang.mjs';
+import { parseContextSection } from '../connectors/context-file.mjs';
+
+// 마크다운 표의 데이터 행 수(머리·구분선 제외).
+function tableRows(body) {
+  const lines = body.split('\n').filter((l) => l.trim().startsWith('|'));
+  return Math.max(0, lines.length - 2);
+}
+
+// 결정적(extract) 모드: LLM 없이 커넥터가 코드로 추출한 context 구획을 그대로 산출물로 쓴다 → 지어낼 단계가 없음.
+// 검증도 코드: 구획이 있고, 이번 주기에 갱신됐고(maxAgeHours 이내), 표에 1건 이상.
+function extractArtifact({ context, extract, at }) {
+  const { section, maxAgeHours = 6 } = extract;
+  const sec = parseContextSection(context, section);
+  const n = sec ? tableRows(sec.body) : 0;
+  let reason = null;
+  if (!sec) reason = `context 에 '${section}' 구획 없음(검색 갱신 전)`;
+  else if (sec.updatedAt == null || at.getTime() - sec.updatedAt > maxAgeHours * 3600 * 1000) {
+    reason = `'${section}' 이 ${maxAgeHours}시간보다 오래됨 — 이번 주기 검색 갱신 실패로 보고 재사용 안 함`;
+  } else if (n < 1) reason = '확인된 항목 0건';
+  const pass = !reason;
+  const fresh = sec && !(reason && reason.includes('오래됨'));
+  const artifact = `### ${section} (코드 추출 · LLM 미사용)\n\n${fresh ? sec.body : `(${reason})`}`;
+  return {
+    artifact,
+    verifier: { pass, checks: [{ name: 'extract', pass, reason: pass ? `${n}건 · 갱신 ${new Date(sec.updatedAt).toISOString()}` : reason }] },
+  };
+}
 
 function stamp(d) {
   const p = (n) => String(n).padStart(2, '0');
@@ -27,21 +54,26 @@ export async function runAgent({ agentDir, opsRoot, router, now = () => new Date
   const prev = loadState(stateDir, cfg.name);
 
   let artifact = '', verifier = { pass: false, checks: [] }, cost = 0, iterations = 0, feedback = '';
-  for (let i = 0; i < cfg.budget.maxRetries + 1; i++) {
-    iterations = i + 1;
-    const out = await router.complete({
-      provider: cfg.model.provider, model: cfg.model.name,
-      system: LANG_GUARD + cfg.skill,
-      messages: [{ role: 'user', content: `TASK:\n${task}\n${context ? `\nAPP DATA(참고):\n${context}\n` : ''}\nPREVIOUS STATE:\n${JSON.stringify(prev)}\n${feedback ? `\nFIX THIS:\n${feedback}` : ''}` }],
-    });
-    artifact = out.text; cost += out.usage.costUsd;
-    verifier = await runVerifier({ router, provider: cfg.model.provider, model: cfg.model.name, verifierPrompt: cfg.verifier, artifact });
-    cost += verifier.usage?.costUsd || 0;
-    if (verifier.pass) break;
-    feedback = verifier.checks.map((c) => c.reason).join('; ');
-    if (cost > cfg.budget.maxUsd) {
-      appendLedger(stateDir, { ts: at.toISOString(), agent: cfg.name, costUsd: cost });
-      return { status: 'budget_exceeded', iterations, costUsd: cost, artifact, verifier, gate: null, reportPath: null };
+  if (cfg.extract) {
+    ({ artifact, verifier } = extractArtifact({ context, extract: cfg.extract, at }));
+    iterations = 1;
+  } else {
+    for (let i = 0; i < cfg.budget.maxRetries + 1; i++) {
+      iterations = i + 1;
+      const out = await router.complete({
+        provider: cfg.model.provider, model: cfg.model.name,
+        system: LANG_GUARD + cfg.skill,
+        messages: [{ role: 'user', content: `TASK:\n${task}\n${context ? `\nAPP DATA(참고):\n${context}\n` : ''}\nPREVIOUS STATE:\n${JSON.stringify(prev)}\n${feedback ? `\nFIX THIS:\n${feedback}` : ''}` }],
+      });
+      artifact = out.text; cost += out.usage.costUsd;
+      verifier = await runVerifier({ router, provider: cfg.model.provider, model: cfg.model.name, verifierPrompt: cfg.verifier, artifact });
+      cost += verifier.usage?.costUsd || 0;
+      if (verifier.pass) break;
+      feedback = verifier.checks.map((c) => c.reason).join('; ');
+      if (cost > cfg.budget.maxUsd) {
+        appendLedger(stateDir, { ts: at.toISOString(), agent: cfg.name, costUsd: cost });
+        return { status: 'budget_exceeded', iterations, costUsd: cost, artifact, verifier, gate: null, reportPath: null };
+      }
     }
   }
 

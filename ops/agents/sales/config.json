@@ -11,5 +11,9 @@
     "maxUsd": 0.3
   },
   "stop": "verifier_pass",
-  "isolate": false
+  "isolate": false,
+  "extract": {
+    "section": "리드 인벤토리",
+    "maxAgeHours": 6
+  }
 }

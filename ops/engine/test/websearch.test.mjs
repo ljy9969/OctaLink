@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseDdg, buildResearchContext, search, extractApps } from '../../connectors/websearch.mjs';
+import { parseDdg, buildResearchContext, search, extractApps, extractLeads } from '../../connectors/websearch.mjs';
 
 test('extractApps: 스토어 링크만 추출·중복제거·카테고리 분류 (LLM 없음)', () => {
   const results = [
@@ -70,4 +70,55 @@ test('buildResearchContext: 주입 searchFn → context/research.md에 출처 �
   const md = readFileSync(join(ops, 'context', 'research.md'), 'utf8');
   assert.match(md, /\[Membo\]\(https:\/\/play\.google\.com/);
   assert.match(md, /MMA gym app/);
+});
+
+// 실제 SearXNG 결과(2026-10-16 probe)에서 가져온 형태 그대로.
+const LEAD_RESULTS = [
+  { title: '팀유짐 영등포점 (@ydp_ugym) - Instagram', url: 'https://www.instagram.com/ydp_ugym/', query: '복싱 킥복싱 체육관 site:instagram.com' },
+  { title: '정진체육관 (@jungjingym) • Instagram photos and videos', url: 'https://www.instagram.com/jungjingym/', query: 'q' },
+  { title: '랑 무에타이 체육관 (서울대입구역점) (@rang_muaythai) - Instagram', url: 'https://www.instagram.com/rang_muaythai/', query: 'q' },
+  { title: '정진체육관 중복', url: 'https://instagram.com/JungJinGym', query: 'q' },                 // 대소문자·www 다른 중복
+  { title: 'ALLSTADIUM 올스타디움 본점 (@allstadium_korea) - Instagram', url: 'https://www.instagram.com/allstadium_korea/' }, // 격투 단어 없음
+  { title: 'MMA 하이라이트 게시물', url: 'https://www.instagram.com/p/Cxyz123/' },               // 게시물(계정 아님)
+  { title: 'Korean Top Team | Gym Page - Tapology', url: 'https://www.tapology.com/gyms/4-korean-top-team' },
+  { title: 'South Korea MMA Gyms - Tapology', url: 'https://www.tapology.com/gyms/country/kr' },   // 디렉터리
+  { title: '홍대 주짓수 아카데미 | 카카오맵', url: 'https://place.map.kakao.com/123456789' },
+  { title: '강남 MMA 짐 : 네이버 플레이스', url: 'https://m.place.naver.com/place/987654321/home?entry=pll' },
+  { title: '네이버 지도', url: 'https://map.naver.com/p/' },                                       // 장소 아님
+  { title: '결의 다지는 종합격투기 부산 팀매드 - 연합뉴스', url: 'https://www.yna.co.kr/view/PYH20161025171200051' }, // 뉴스
+  { title: 'MMA Fighting', url: 'https://www.mmafighting.com/' },                                   // 일반 웹
+  { title: '종합격투기 - 나무위키', url: 'https://namu.wiki/w/x' },
+];
+
+test('extractLeads: 인스타 계정·Tapology 체육관·지도 장소만, 이름에 격투/체육관 단어, 중복 제거', () => {
+  const leads = extractLeads(LEAD_RESULTS);
+  assert.deepEqual(leads.map((l) => l.name), [
+    '팀유짐 영등포점', '정진체육관', '랑 무에타이 체육관 (서울대입구역점)', 'Korean Top Team', '홍대 주짓수 아카데미', '강남 MMA 짐',
+  ]);
+  assert.deepEqual(leads.map((l) => l.source), [
+    '인스타그램 @ydp_ugym', '인스타그램 @jungjingym', '인스타그램 @rang_muaythai', 'Tapology', '카카오맵', '네이버 지도',
+  ]);
+  assert.equal(leads[0].url, 'https://www.instagram.com/ydp_ugym/');
+  assert.equal(leads[0].query, '복싱 킥복싱 체육관 site:instagram.com');            // 찾은 검색어 보존
+  assert.equal(leads[5].url, 'https://m.place.naver.com/place/987654321/home');      // 쿼리스트링 제거
+});
+
+test('buildResearchContext: sales 는 리드 인벤토리, research 는 기존 앱 인벤토리 유지', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-ws-sales-'));
+  const searchFn = async () => LEAD_RESULTS;
+  const now = () => new Date('2026-10-16T02:00:00Z');
+  await buildResearchContext({ opsRoot: ops, agent: 'sales', queries: ['q1'], searchFn, delayMs: 0, now });
+  const sales = readFileSync(join(ops, 'context', 'sales.md'), 'utf8');
+  assert.match(sales, /<!-- sec:리드 인벤토리 -->/);
+  assert.match(sales, /총 6곳/);
+  assert.match(sales, /\| 팀유짐 영등포점 \| 인스타그램 @ydp_ugym \| \[열기\]\(https:\/\/www\.instagram\.com\/ydp_ugym\/\) \| q1 \|/);
+  assert.doesNotMatch(sales, /sec:앱 인벤토리/);
+  await buildResearchContext({ opsRoot: ops, agent: 'research', queries: ['q1'], searchFn, delayMs: 0, now });
+  assert.match(readFileSync(join(ops, 'context', 'research.md'), 'utf8'), /<!-- sec:앱 인벤토리 -->/);
+});
+
+test('buildResearchContext: sales 리드 0건이면 이유를 적은 빈 인벤토리', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-ws-sales0-'));
+  await buildResearchContext({ opsRoot: ops, agent: 'sales', queries: ['q'], searchFn: async () => [LEAD_RESULTS[11]], delayMs: 0 });
+  assert.match(readFileSync(join(ops, 'context', 'sales.md'), 'utf8'), /확인된 체육관 리드 없음/);
 });

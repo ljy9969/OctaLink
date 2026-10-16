@@ -1,7 +1,7 @@
 // ops/engine/test/run-agent.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, cpSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, cpSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,4 +76,56 @@ test('agent system prompt carries the Korean language guard', async () => {
   await runAgent({ agentDir, opsRoot: ops, router, now: () => new Date('2026-09-08T00:00:00Z') });
   assert.match(agentSystem, /반드시 한국어로만/);   // 언어 가드가 스킬 앞에 붙는다
   assert.match(agentSystem, /DUMMY SKILL/);        // 원래 skill 도 유지
+});
+
+// extract(결정적) 모드: LLM 호출 없이 context 구획을 그대로 산출물로.
+function opsWithExtractAgent({ body, updatedIso }) {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-extract-'));
+  const agentDir = join(ops, 'agents', 'sales');
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(join(agentDir, 'config.json'), JSON.stringify({
+    name: 'sales', risk: 'gated', trigger: 'cron:0 11 * * 1', model: { provider: 'ollama', name: 'x' },
+    budget: { maxRetries: 3, maxUsd: 0.3 }, stop: 'verifier_pass', extract: { section: '리드 인벤토리', maxAgeHours: 6 } }));
+  writeFileSync(join(agentDir, 'skill.md'), 'doc'); writeFileSync(join(agentDir, 'verifier.md'), 'unused');
+  if (body != null) {
+    mkdirSync(join(ops, 'context'));
+    writeFileSync(join(ops, 'context', 'sales.md'),
+      `# sales 컨텍스트\n\n<!-- sec:리드 인벤토리 -->\n## 리드 인벤토리 (${updatedIso})\n\n${body}\n<!-- /sec:리드 인벤토리 -->\n`);
+  }
+  return { ops, agentDir };
+}
+const noLlm = { complete: async () => { throw new Error('extract 모드에서 LLM 호출 금지'); } };
+const TABLE = '총 2곳.\n\n| 체육관 | 출처 | 링크 | 찾은 검색어 |\n|---|---|---|---|\n| 팀유짐 영등포점 | 인스타그램 @ydp_ugym | [열기](https://www.instagram.com/ydp_ugym/) | q |\n| Korean Top Team | Tapology | [열기](https://www.tapology.com/gyms/4-korean-top-team) | q |';
+
+test('extract 모드: LLM 없이 구획을 산출물로, 검증 통과 → gated 승인대기 + 리포트', async () => {
+  const { ops, agentDir } = opsWithExtractAgent({ body: TABLE, updatedIso: '2026-10-16T02:00:00.000Z' });
+  const r = await runAgent({ agentDir, opsRoot: ops, router: noLlm, now: () => new Date('2026-10-16T02:00:30Z') });
+  assert.equal(r.status, 'queued');
+  assert.equal(r.iterations, 1);
+  assert.equal(r.costUsd, 0);
+  assert.match(r.artifact, /코드 추출 · LLM 미사용/);
+  assert.match(r.artifact, /팀유짐 영등포점/);
+  assert.match(r.verifier.checks[0].reason, /^2건/);
+  assert.ok(existsSync(r.gate.path));
+  assert.match(readFileSync(r.gate.path, 'utf8'), /Korean Top Team/);
+});
+
+test('extract 모드: 구획이 6시간보다 오래되면(검색 갱신 실패) 실패, 옛 표 재사용 안 함', async () => {
+  const { ops, agentDir } = opsWithExtractAgent({ body: TABLE, updatedIso: '2026-10-15T18:00:00.000Z' });
+  const r = await runAgent({ agentDir, opsRoot: ops, router: noLlm, now: () => new Date('2026-10-16T02:00:00Z') });
+  assert.equal(r.status, 'verify_failed');
+  assert.match(r.verifier.checks[0].reason, /오래됨/);
+  assert.doesNotMatch(r.artifact, /팀유짐/);
+  assert.equal(r.gate.action, 'none');
+});
+
+test('extract 모드: 리드 0건·구획 없음이면 실패(승인대기 안 만듦)', async () => {
+  const empty = opsWithExtractAgent({ body: '(확인된 체육관 리드 없음 — 이번 검색 결과에 …)', updatedIso: '2026-10-16T02:00:00.000Z' });
+  const r0 = await runAgent({ agentDir: empty.agentDir, opsRoot: empty.ops, router: noLlm, now: () => new Date('2026-10-16T02:00:10Z') });
+  assert.equal(r0.status, 'verify_failed');
+  assert.match(r0.verifier.checks[0].reason, /0건/);
+  const none = opsWithExtractAgent({ body: null });
+  const r1 = await runAgent({ agentDir: none.agentDir, opsRoot: none.ops, router: noLlm, now: () => new Date('2026-10-16T02:00:10Z') });
+  assert.equal(r1.status, 'verify_failed');
+  assert.match(r1.verifier.checks[0].reason, /구획 없음/);
 });
