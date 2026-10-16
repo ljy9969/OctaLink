@@ -36,3 +36,4 @@ ops/approvals/*.md
 ops/tasks/*.md
 ops/state/*.log
 ops/context/*.md
+ops/exports/

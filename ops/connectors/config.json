@@ -47,6 +47,15 @@
       ]
     }
   },
+  "leads": {
+    "_note": "sales 체육관 리드 = 카카오 로컬 장소 검색(코드 추출·LLM 미사용). 키 없거나 실패 시 websearch.queries.sales 로 폴백. rect 는 '좌하단경도,위도,우상단경도,위도' — 결과는 주소 접두사로 지역 확정.",
+    "sales": {
+      "provider": "kakao",
+      "keyEnv": "KAKAO_REST_API_KEY",
+      "region": { "name": "서울", "slug": "seoul", "addressPrefix": "서울", "rect": "126.734,37.413,127.269,37.715" },
+      "keywords": ["주짓수", "종합격투기", "MMA", "복싱", "킥복싱", "무에타이", "격투기"]
+    }
+  },
   "instagram": {
     "handle": "octalink_mma",
     "tokenEnv": "INSTAGRAM_TOKEN",

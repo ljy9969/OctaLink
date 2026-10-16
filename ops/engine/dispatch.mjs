@@ -10,6 +10,7 @@ import { runCeo } from './ceo-run.mjs';
 import { createRouter } from './router.mjs';
 import { checkAssignedIssue } from '../connectors/github-issues.mjs';
 import { buildResearchContext } from '../connectors/websearch.mjs';
+import { buildLeadsContext } from '../connectors/kakao-local.mjs';
 import { buildYoutubeContext } from '../connectors/youtube.mjs';
 import { refreshContext as refreshFirebase } from '../connectors/firebase.mjs';
 import { writeContextSection } from '../connectors/context-file.mjs';
@@ -22,8 +23,18 @@ function loadConnectors(opsRoot) { const p = join(opsRoot, 'connectors', 'config
 // 에이전트 실행 전 웹 검색 컨텍스트 갱신(websearch.queries[agent] 있으면). 실패해도 진행.
 async function defaultRefresh({ opsRoot, agent, env }) {
   const conn = loadConnectors(opsRoot);
+  // sales 리드: 카카오 로컬 키가 있으면 우선(실제 등록 업체). 실패하면 아래 웹 검색 리드 추출로 폴백.
+  const leadsCfg = conn.leads?.[agent];
+  const leadKey = leadsCfg && env[leadsCfg.keyEnv || 'KAKAO_REST_API_KEY'];
+  let leadsDone = false;
+  if (leadKey) {
+    try {
+      await buildLeadsContext({ opsRoot, agent, key: leadKey, region: leadsCfg.region, keywords: leadsCfg.keywords });
+      leadsDone = true;
+    } catch { /* 웹 검색 폴백 */ }
+  }
   const queries = conn.websearch?.queries?.[agent];
-  if (queries?.length) { try { await buildResearchContext({ opsRoot, agent, queries, env }); } catch { /* stale로 진행 */ } }
+  if (queries?.length && !leadsDone) { try { await buildResearchContext({ opsRoot, agent, queries, env }); } catch { /* stale로 진행 */ } }
   const yt = conn.youtube; // social: 선수/관장 유튜브 채널 발굴 → social 컨텍스트(앱추출 research는 오염 안 되게 분리)
   if (agent === 'social' && yt?.channelQueries?.length && env.YOUTUBE_API_KEY) {
     try { await buildYoutubeContext({ opsRoot, agent, queries: yt.channelQueries, apiKey: env.YOUTUBE_API_KEY }); } catch { /* skip */ }
