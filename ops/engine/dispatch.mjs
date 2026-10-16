@@ -11,6 +11,7 @@ import { createRouter } from './router.mjs';
 import { checkAssignedIssue } from '../connectors/github-issues.mjs';
 import { buildResearchContext } from '../connectors/websearch.mjs';
 import { buildLeadsContext } from '../connectors/kakao-local.mjs';
+import { writeLeadsMap } from './leads-map.mjs';
 import { buildYoutubeContext } from '../connectors/youtube.mjs';
 import { refreshContext as refreshFirebase } from '../connectors/firebase.mjs';
 import { writeContextSection } from '../connectors/context-file.mjs';
@@ -31,6 +32,8 @@ async function defaultRefresh({ opsRoot, agent, env }) {
     try {
       await buildLeadsContext({ opsRoot, agent, key: leadKey, region: leadsCfg.region, keywords: leadsCfg.keywords });
       leadsDone = true;
+      // 카카오맵 위 체육관 지도도 최신 리드로 다시 생성(exports/gym-map-<지역>.html, KAKAO_JS_KEY 있을 때).
+      try { writeLeadsMap({ opsRoot, agent, jsKey: env.KAKAO_JS_KEY, region: leadsCfg.region }); } catch { /* 지도는 부가 */ }
     } catch { /* 웹 검색 폴백 */ }
   }
   const queries = conn.websearch?.queries?.[agent];
