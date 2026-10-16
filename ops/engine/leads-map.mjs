@@ -1,5 +1,5 @@
 // sales 리드 → 카카오맵 위 체육관 지도(로컬 페이지). exports/gym-map-<지역>.html 생성.
-// 카카오 지도 JS SDK 는 등록된 도메인에서만 동작 → `node engine/serve-exports.mjs` 로 http://localhost:8790 에서 연다.
+// 카카오 지도 JS SDK 는 등록된 도메인에서만 동작 → `node engine/serve-exports.mjs` 로 http://127.0.0.1:8790 에서 연다(카카오 Web 도메인에 등록된 주소. localhost 는 다른 출처라 거부됨).
 // 키: KAKAO_JS_KEY(카카오 개발자 앱의 JavaScript 키, 공개용·도메인 제한). 페이지는 gitignore 폴더에만 쓴다.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -232,5 +232,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const { loadEnv } = await import('./env.mjs'); loadEnv(opsRoot);
   const conf = JSON.parse(readFileSync(join(opsRoot, 'connectors', 'config.json'), 'utf8')).leads?.sales;
   const r = writeLeadsMap({ opsRoot, jsKey: process.env.KAKAO_JS_KEY, region: conf?.region });
-  console.log(r ? `지도 생성: ${r.file} (${r.count}곳) → node engine/serve-exports.mjs 후 http://localhost:8790/${r.file.split(/[\\/]/).pop()}` : 'KAKAO_JS_KEY 또는 리드 저장소 없음');
+  console.log(r ? `지도 생성: ${r.file} (${r.count}곳) → node engine/serve-exports.mjs 후 http://127.0.0.1:8790/${r.file.split(/[\\/]/).pop()}` : 'KAKAO_JS_KEY 또는 리드 저장소 없음');
 }

@@ -1,5 +1,5 @@
-// exports/ 를 http://localhost:8790 으로 서빙(카카오 지도 JS SDK 는 등록 도메인에서만 동작 → file:// 불가).
-// 사용: node engine/serve-exports.mjs [--port 8790]  → 브라우저에서 http://localhost:8790/gym-map-seoul.html
+// exports/ 를 http://127.0.0.1:8790 으로 서빙(카카오 지도 JS SDK 는 등록 도메인에서만 동작 → file:// 불가).
+// 사용: node engine/serve-exports.mjs [--port 8790]  → 브라우저에서 http://127.0.0.1:8790/gym-map-seoul.html (카카오에 등록된 도메인 — localhost 는 미등록이라 지도 SDK 거부)
 // 로컬 전용: IPv4·IPv6 루프백(127.0.0.1, ::1) 둘 다 바인딩 — 'localhost' 가 어느 쪽으로 풀려도 이 서버로.
 // (5173 은 Vite 기본 포트라 다른 개발 서버와 겹쳐 'localhost' 가 그 앱으로 열리는 사고가 있었음 → 8790.)
 // 포트가 이미 쓰이면 조용히 넘어가지 않고 실패. 읽기 전용, exports/ 밖 경로 차단.
@@ -54,6 +54,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const port = pi >= 0 ? Number(process.argv[pi + 1]) : DEFAULT_PORT;
   try {
     await startServer({ root: join(opsRoot, 'exports'), port });
-    console.log(`서빙 중: http://localhost:${port}/  (exports/) — 종료: Ctrl+C`);
+    console.log(`서빙 중: http://127.0.0.1:${port}/  (exports/) — 종료: Ctrl+C`);
   } catch (e) { console.error(e.message); process.exit(1); }
 }
