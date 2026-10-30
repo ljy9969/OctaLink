@@ -865,10 +865,11 @@ function matchRole(name: string): "CREATOR" | "MASTER" | "COACH" | "MEMBER" {
 }
 
 /**
- * 카카오 OctaLink 앱 ID — 콘솔 [내 애플리케이션 → 앱 설정 → 일반 → 앱 ID] 에 표시.
- * SET 의 `aud` claim 검증용 (스푸핑 요청 차단). 0 이면 검증 skip.
+ * 카카오 앱 ID — 콘솔 [내 애플리케이션 → 앱 설정 → 일반 → 앱 ID] 에 표시. SET 의 `aud` claim 검증용.
+ * 1453976 = OctaLink 운영 앱(앱 로그인 네이티브 키·카카오맵 무료 쿼터), 1455062 = 테스트 앱.
+ * 2026-10: 로그인이 운영 앱으로 옮겨졌는데 테스트 앱만 허용하고 있어 운영 이벤트가 무시될 상태였음 → 둘 다 허용.
  */
-const KAKAO_APP_ID = 1455062;
+const KAKAO_APP_IDS = [1453976, 1455062];
 
 /**
  * 카카오 이벤트 스키마 URI prefix — Security Event Token (SET, RFC 8417) 표준.
@@ -899,7 +900,7 @@ const KAKAO_EVENT_PREFIX = "https://schemas.openid.net/secevent/oauth/event-type
  *   - 기타 → 로깅만
  *
  * 보안 노트: 현재는 JWT 서명 검증 skip — 운영 환경에선 https://kauth.kakao.com/.well-known/jwks.json
- * 로 JWKS 받아 signature 검증 필요. `aud` claim + `KAKAO_APP_ID` 검증으로 1차 방어.
+ * 로 JWKS 받아 signature 검증 필요. `aud` claim + `KAKAO_APP_IDS` 검증으로 1차 방어.
  */
 export const kakaoAccountWebhook = onRequest(
   { region: "asia-northeast3", invoker: "public" },
@@ -927,9 +928,9 @@ export const kakaoAccountWebhook = onRequest(
       eventKeys: Object.keys(claims.events ?? {}),
     });
 
-    // aud (앱 ID) 검증
-    if (KAKAO_APP_ID && claims.aud && Number(claims.aud) !== KAKAO_APP_ID) {
-      logger.warn(`[kakaoWebhook] aud mismatch: expected ${KAKAO_APP_ID}, got ${claims.aud}`);
+    // aud (앱 ID) 검증 — 없거나 우리 앱이 아니면 무시(이전엔 aud 가 없으면 통과했음).
+    if (!KAKAO_APP_IDS.includes(Number(claims.aud))) {
+      logger.warn(`[kakaoWebhook] aud mismatch: expected ${KAKAO_APP_IDS.join("|")}, got ${claims.aud}`);
       res.status(200).send("ok");
       return;
     }
