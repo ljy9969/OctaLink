@@ -41,20 +41,25 @@ test('mergePlaces: id 중복 제거, 비격투·제외 id·좌표 없음 제거,
   });
 });
 
-test('searchNearbyGyms: 키워드마다 반경·거리순 검색, is_end 까지 최대 3페이지', async () => {
+test('searchNearbyGyms: 키워드마다 반경·거리순 검색, is_end 까지 최대 3페이지, 복싱만 하는 곳 제외', async () => {
   const urls = [];
   const fetchFn = async (url, init) => {
     urls.push(url);
     assert.equal(init.headers.Authorization, 'KakaoAK K');
     const u = new URL(url);
     const q = u.searchParams.get('query'), page = Number(u.searchParams.get('page'));
+    const pages = {
+      1: [doc({ id: 'k1', place_name: '바디킥복싱', distance: '100' }), doc({ id: 'x1', place_name: '강남복싱', distance: '50' })],
+      2: [doc({ id: 'm2', place_name: '강남 MMA', distance: '200' })],
+    };
     const body = q === '복싱'
-      ? { documents: [doc({ id: `b${page}`, distance: String(page * 100) })], meta: { is_end: page >= 2 } }
+      ? { documents: pages[page], meta: { is_end: page >= 2 } }
       : { documents: [], meta: { is_end: true } };
     return { ok: true, status: 200, json: async () => body, text: async () => '' };
   };
   const out = await searchNearbyGyms({ lat: 37.5, lng: 127.0, radiusKm: 1, key: 'K', fetchFn });
-  assert.deepEqual(out.map((p) => p.placeId), ['b1', 'b2']);
+  // MMA 체육관 앱 — 대표 종목이 복싱(복싱만 하는 곳)은 교류전 대상에서 뺀다. 킥복싱은 남김.
+  assert.deepEqual(out.map((p) => p.placeId), ['k1', 'm2']);
   const first = new URL(urls[0]);
   assert.equal(first.origin + first.pathname, 'https://dapi.kakao.com/v2/local/search/keyword.json');
   assert.equal(first.searchParams.get('x'), '127');

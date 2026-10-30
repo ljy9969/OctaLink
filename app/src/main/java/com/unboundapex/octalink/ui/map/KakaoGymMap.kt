@@ -46,6 +46,7 @@ import com.kakao.vectormap.shape.DotPoints
 import com.kakao.vectormap.shape.PolygonOptions
 import com.kakao.vectormap.shape.PolygonStyles
 import kotlin.math.cos
+import kotlin.math.roundToInt
 
 /** 지도 위 점 종류 — 색은 한 가지 뜻: 빨강 우리 체육관 · 파랑 신청 가능(가입) · 회색 아직 OctaLink 전. */
 enum class PinKind { MY_GYM, MEMBER_GYM, OTHER_GYM }
@@ -84,6 +85,7 @@ fun KakaoGymMap(
     }
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val density = LocalDensity.current.density
     val paddingPx = with(LocalDensity.current) { 28.dp.roundToPx() }
     val latestOnPinClick by rememberUpdatedState(onPinClick)
     var kakaoMap by remember { mutableStateOf<KakaoMap?>(null) }
@@ -138,7 +140,7 @@ fun KakaoGymMap(
     // 데이터·반경이 바뀔 때마다 다시 그림(점 수십 개 수준이라 전체 교체).
     LaunchedEffect(kakaoMap, pins, radiusKm, centerLat, centerLng) {
         val map = kakaoMap ?: return@LaunchedEffect
-        drawGyms(map, centerLat, centerLng, radiusKm, pins, primary, paddingPx)
+        drawGyms(map, centerLat, centerLng, radiusKm, pins, primary, paddingPx, density)
     }
 
     if (failed) {
@@ -156,6 +158,7 @@ private fun drawGyms(
     pins: List<MapPin>,
     primary: Color,
     paddingPx: Int,
+    density: Float,
 ) {
     val center = LatLng.from(lat, lng)
     val radiusM = radiusKm * 1000.0
@@ -172,9 +175,9 @@ private fun drawGyms(
 
     val labels = map.labelManager ?: return
     val styles = mapOf(
-        PinKind.MY_GYM to dotStyle(22, primary),
-        PinKind.MEMBER_GYM to dotStyle(18, GymMapColors.MemberBlue),
-        PinKind.OTHER_GYM to dotStyle(13, GymMapColors.OtherGrayOnMap),
+        PinKind.MY_GYM to dotStyle(18, primary, density),
+        PinKind.MEMBER_GYM to dotStyle(15, GymMapColors.MemberBlue, density),
+        PinKind.OTHER_GYM to dotStyle(11, GymMapColors.OtherGrayOnMap, density),
     ).mapValues { (_, s) -> labels.addLabelStyles(LabelStyles.from(s)) }
     val rank = mapOf(PinKind.MY_GYM to 3L, PinKind.MEMBER_GYM to 2L, PinKind.OTHER_GYM to 1L)
     val layer = labels.layer ?: return
@@ -203,16 +206,20 @@ private fun drawGyms(
     )
 }
 
-/** 흰 테두리 원 점 — 지도 이미지 크기는 dp 로 적용되므로 [sizeDp] 픽셀로 그린다(SDK 가 dp 배율 적용). */
-private fun dotStyle(sizeDp: Int, fill: Color): LabelStyle {
-    val bmp = Bitmap.createBitmap(sizeDp, sizeDp, Bitmap.Config.ARGB_8888)
+/**
+ * 흰 테두리 원 점. 실기기(Galaxy A34)에서 비트맵이 dp 배율 없이 픽셀 그대로 그려져
+ * 화면 밀도([density])를 곱한 픽셀로 만든다.
+ */
+private fun dotStyle(sizeDp: Int, fill: Color, density: Float): LabelStyle {
+    val px = (sizeDp * density).roundToInt().coerceAtLeast(4)
+    val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
-    val r = sizeDp / 2f
+    val r = px / 2f
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     paint.color = android.graphics.Color.WHITE
     canvas.drawCircle(r, r, r, paint)
     paint.color = fill.toArgb()
-    canvas.drawCircle(r, r, r - 2f, paint)
+    canvas.drawCircle(r, r, r - 2f * density, paint)
     return LabelStyle.from(bmp).setAnchorPoint(0.5f, 0.5f)
 }
 

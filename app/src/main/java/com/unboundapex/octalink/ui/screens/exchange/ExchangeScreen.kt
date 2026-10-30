@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -167,7 +168,10 @@ fun ExchangeScreen(
                     TextButton(onClick = vm::retryNearby) { Text("다시 시도") }
                 }
                 is NearbyState.Loaded -> if (places.isEmpty()) {
-                    Hint("${radiusKm}km 안에 다른 격투기 체육관이 없어요.")
+                    Hint(
+                        if (radiusKm < RADIUS_OPTIONS_KM.last()) "${radiusKm}km 안에 교류할 체육관이 없어요. 반경을 넓혀 보세요."
+                        else "${radiusKm}km 안에 교류할 체육관이 없어요.",
+                    )
                 } else {
                     PosseCard(padding = PaddingValues(0.dp)) {
                         Column {
@@ -387,7 +391,13 @@ private fun MemberGymItem(row: MemberGymRow, onClick: () -> Unit) {
                 )
             }
             Spacer(Modifier.width(8.dp))
-            FilledTonalButton(onClick = onClick) { Text("관원 보기") }
+            FilledTonalButton(
+                onClick = onClick,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = GymMapColors.MemberBlue.copy(alpha = 0.16f),
+                    contentColor = GymMapColors.MemberBlue,
+                ),
+            ) { Text("관원 보기") }
         }
     }
 }
@@ -418,7 +428,15 @@ private fun NearbyGymItem(place: NearbyGym, onOpen: () -> Unit, onToggle: () -> 
         val small = Modifier.height(34.dp)
         val pad = PaddingValues(horizontal = 12.dp)
         if (place.requestedByMe) {
-            FilledTonalButton(onClick = onToggle, modifier = small, contentPadding = pad) { Text("요청함") }
+            FilledTonalButton(
+                onClick = onToggle,
+                modifier = small,
+                contentPadding = pad,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                ),
+            ) { Text("요청함") }
         } else {
             OutlinedButton(onClick = onToggle, modifier = small, contentPadding = pad) { Text("교류 요청") }
         }
@@ -429,7 +447,8 @@ private fun nearbyMeta(p: NearbyGym): String = buildString {
     append(p.sportLabel)
     append(" · ")
     append(GeoDistance.label(p.distanceM.toDouble()))
-    if (p.myGymRequestCount > 0) append(" · 우리 체육관 ${p.myGymRequestCount}명 요청")
+    // 우리 체육관 회원의 요청 수(전체·우리 체육관 구분은 상세 시트에서).
+    if (p.myGymRequestCount > 0) append(" · 요청 ${p.myGymRequestCount}명")
 }
 
 /** 아직 OctaLink 전인 체육관 상세 — 교류 요청(익명 집계) · 카카오맵 장소 페이지. */

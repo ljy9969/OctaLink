@@ -133,20 +133,20 @@
   <div class="eyebrow">OctaLink · 교류전 · 디자인 시안 · 2026-10-30</div>
   <h1>교류전 상대 찾기 지도</h1>
   <p class="lede">우리 체육관에서 1·2·3km 안의 체육관을 지도로 봅니다. OctaLink에 가입한 체육관이면 관원에게 바로 교류전을 신청하고, 아직 가입 전인 체육관에는 “교류 요청”을 남겨 영입으로 이어지게 합니다.</p>
-  <p class="fine">지도 위 체육관 점은 카카오 로컬 실데이터(강남역 반경), 우리 체육관 위치·가입 체육관 거리·관원 정보는 예시입니다. 폰 화면은 앱 기본(다크) 테마입니다.</p>
+  <p class="fine">지도 점 배치는 예시(강남역 주변 실데이터 모양), 목록 체육관·거리는 팀파시 강남 기준 실데이터, 관원 정보는 예시입니다. 폰 화면은 앱 기본(다크) 테마입니다.</p>
 
   <div class="top" style="margin-top:24px">
     <section class="panel" aria-labelledby="r-h">
       <h2 id="r-h">반경 1·2·3km는 적당한가</h2>
       <table>
-        <thead><tr><th>반경</th><th>서울 중앙값</th><th>적은 동네(하위 10%)</th><th>강남역 기준</th></tr></thead>
+        <thead><tr><th>반경</th><th>서울 중앙값</th><th>적은 동네(하위 10%)</th><th>팀파시 강남</th></tr></thead>
         <tbody>
-          <tr class="pick"><td>1km</td><td>8곳</td><td>3곳</td><td>20곳</td></tr>
-          <tr><td>2km</td><td>25곳</td><td>15곳</td><td>52곳</td></tr>
-          <tr><td>3km</td><td>50곳</td><td>31곳</td><td>88곳</td></tr>
+          <tr class="pick"><td>1km</td><td>3곳</td><td>1곳</td><td>7곳</td></tr>
+          <tr><td>2km</td><td>11곳</td><td>6곳</td><td>15곳</td></tr>
+          <tr><td>3km</td><td>22곳</td><td>13곳</td><td>35곳</td></tr>
         </tbody>
       </table>
-      <p>서울 890곳 각각을 ‘우리 체육관’으로 놓고 반경 안 다른 체육관 수를 셌습니다. 1km는 종로·용산·금천처럼 3~4곳만 잡히는 동네가 있고, 3km는 강남에서 80곳이 넘어 점이 빽빽합니다. 기본은 걸어서 갈 수 있는 1km로 두고, 체육관이 적은 동네에서는 2·3km로 넓혀 봅니다.</p>
+      <p>서울 893곳 각각을 ‘우리 체육관’으로 놓고, 반경 안의 교류 후보(복싱만 하는 체육관 제외 384곳) 수를 셌습니다. 1km는 주변에 후보가 없는 체육관이 47곳(5%)이라, 결과가 없으면 “반경을 넓혀 보세요”로 안내합니다.</p>
     </section>
     <section class="panel" aria-labelledby="n-h">
       <h2 id="n-h">설계 원칙</h2>
@@ -154,6 +154,7 @@
         <li>기준점은 <b>우리 체육관 위치</b> — 내 GPS를 쓰지 않아 위치 권한이 필요 없습니다.</li>
         <li><b>가입 체육관은 반경과 상관없이 항상 맨 위</b>에 거리와 함께 보입니다. 지금 가입 2곳은 약 11km 떨어져 있어, 반경만 쓰면 신청할 상대가 0곳으로 나옵니다.</li>
         <li>점 색은 한 가지씩만 뜻합니다 — <b>빨강 = 우리 체육관</b>, <b>파랑 = 교류전 신청 가능</b>(가입), 회색 = 아직 OctaLink 전.</li>
+        <li><b>복싱만 하는 체육관은 교류 후보에서 뺍니다</b>(MMA 체육관 앱) — 이름·업종에 MMA·주짓수·킥복싱 등 다른 종목 단서가 없는 복싱장.</li>
         <li>관원 목록·신청·3자 승인 흐름은 지금 것을 그대로 씁니다.</li>
       </ul>
     </section>
@@ -200,14 +201,14 @@
           <div class="sec">신청 가능한 체육관 <small>반경 밖 포함 · 1곳</small></div>
           <div class="card gym">
             <span class="dot" style="background:#3987e5"></span>
-            <div class="t"><b>Octagon MMA · 홍대점</b><div class="m">MMA · 11.2km · 반경 밖 · 관원 6명</div></div>
+            <div class="t"><b>Octagon MMA · 홍대점</b><div class="m">MMA · 12km · 반경 밖 · 관원 6명</div></div>
             <button class="btn ton" type="button" style="height:34px;padding:0 14px;font-size:13px">관원 보기</button>
           </div>
-          <div class="sec">1km 안 체육관 <small>20곳 · 가까운 순</small></div>
+          <div class="sec">1km 안 체육관 <small>7곳 · 가까운 순</small></div>
           <div class="card list">
-            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>강남파이터스클럽</b><div class="m">복싱 · 360m</div></div><button class="btn out" type="button">교류 요청</button></div>
-            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>팀에이치짐</b><div class="m">복싱 · 510m</div></div><button class="btn out" type="button">교류 요청</button></div>
-            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>코리안좀비MMA</b><div class="m">MMA · 630m · 우리 체육관 3명 요청</div></div><button class="btn done" type="button">요청함</button></div>
+            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>케이레슬링 강남선릉점</b><div class="m">MMA·격투기 · 390m</div></div><button class="btn out" type="button">교류 요청</button></div>
+            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>울프킥복싱</b><div class="m">MMA·격투기 · 600m</div></div><button class="btn out" type="button">교류 요청</button></div>
+            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>대치 주짓수</b><div class="m">주짓수·유도 · 720m · 요청 3명</div></div><button class="btn done" type="button">요청함</button></div>
           </div>
         </div>
       </div>
@@ -229,9 +230,9 @@
         <div class="chip-on-map"><div class="seg"><span class="on">1km</span><span>2km</span><span>3km</span></div></div>
         <div class="sheet">
           <div class="handle"></div>
-          <h4>강남파이터스클럽</h4>
-          <div class="m">복싱 · 서초구 · 우리 체육관에서 360m</div>
-          <div class="m" style="font-size:12.5px">서울 서초구 서초대로 389</div>
+          <h4>케이레슬링 강남선릉점</h4>
+          <div class="m">MMA·격투기 · 강남구 · 우리 체육관에서 390m</div>
+          <div class="m" style="font-size:12.5px">서울 강남구 테헤란로55길 21</div>
           <div class="note">
             <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="#8a8a93" stroke-width="1.5" fill="none"/><path d="M8 7v4.5M8 4.6v.1" stroke="#8a8a93" stroke-width="1.6" stroke-linecap="round"/></svg>
             <span>아직 OctaLink를 쓰지 않는 체육관이에요. 교류를 요청한 회원이 모이면 OctaLink 팀이 이 체육관에 소개할게요.</span>
@@ -256,7 +257,7 @@
         <div class="sb" data-sb></div>
         <div class="ttl" style="justify-content:space-between;align-items:center"><h3>교류 신청</h3><svg width="22" height="22" viewBox="0 0 22 22"><path d="M19 11H4M10 5l-6 6 6 6" stroke="#f5f2ec" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <div class="body">
-          <div style="padding:0 4px"><div style="font-size:21px;font-weight:700;letter-spacing:-0.01em">Octagon MMA · 홍대점</div><div class="mist" style="font-size:13px">마포구 · 우리 체육관에서 11km · 관원 6명</div></div>
+          <div style="padding:0 4px"><div style="font-size:21px;font-weight:700;letter-spacing:-0.01em">Octagon MMA · 홍대점</div><div class="mist" style="font-size:13px">마포구 · 우리 체육관에서 12km · 관원 6명</div></div>
           <div style="display:flex;flex-direction:column;gap:10px" data-profiles="tobe"></div>
           <div class="mist" style="font-size:11.5px;padding:0 4px">신청하면 상대 본인과 양쪽 운영진이 모두 승인해야 확정돼요.</div>
         </div>

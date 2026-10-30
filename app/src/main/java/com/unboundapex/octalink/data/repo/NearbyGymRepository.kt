@@ -9,7 +9,7 @@ data class NearbyGym(
     val name: String,
     /** 업종 끝 두 단계 (예: "복싱,권투 > 복싱,권투장"). */
     val category: String,
-    /** 대표 종목 — 0 복싱, 1 주짓수·유도, 2 MMA·킥복싱. */
+    /** 대표 종목 — 0 복싱, 1 주짓수·유도, 2 MMA·격투기(킥복싱·무에타이·레슬링 등). */
     val sportGroup: Int,
     val district: String,
     val address: String,
@@ -28,7 +28,7 @@ data class NearbyGym(
     val kakaoMapUrl: String get() = "https://place.map.kakao.com/$placeId"
 
     companion object {
-        val SPORT_LABELS = listOf("복싱", "주짓수·유도", "MMA·킥복싱")
+        val SPORT_LABELS = listOf("복싱", "주짓수·유도", "MMA·격투기")
     }
 }
 
