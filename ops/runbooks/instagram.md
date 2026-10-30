@@ -35,3 +35,4 @@ social 에이전트 초안 → `approvals/` 제안 → **사람 승인** → 게
 
 ## 검증 이력
 2026-09-14 스토리 테스트 게시 성공(media_product_type=STORY). recruit_story.jpg(1080×1920).
+2026-10-30 교류전 지도 홍보 — 스토리(STORY) + 피드(FEED, 캡션·해시태그) 게시 성공. 1080×1920·1080×1350 JPEG, `publishLocal` 그대로(컨테이너 생성 직후 publish 문제없음). 소스 `docs/promo/exchange-map/`(로컬).
