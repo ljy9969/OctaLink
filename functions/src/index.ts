@@ -12,6 +12,7 @@ import {
   ALLOWED_RADIUS_KM, NearbyPlace, Requesters, TtlCache,
   interestSummary, searchNearbyGyms, toggleRequester,
 } from "./nearbyGyms";
+import { JwksCache, SetVerifyResult, kakaoUserIdOf, scopesOf, verifySet } from "./kakaoSet";
 
 /**
  * YouTube Data API v3 key — `search.list` 호출용. Secret Manager 에 미리 저장 필요:
@@ -865,78 +866,66 @@ function matchRole(name: string): "CREATOR" | "MASTER" | "COACH" | "MEMBER" {
 }
 
 /**
- * 카카오 앱 ID — 콘솔 [내 애플리케이션 → 앱 설정 → 일반 → 앱 ID] 에 표시. SET 의 `aud` claim 검증용.
- * 1453976 = OctaLink 운영 앱(앱 로그인 네이티브 키·카카오맵 무료 쿼터), 1455062 = 테스트 앱.
- * 2026-10: 로그인이 운영 앱으로 옮겨졌는데 테스트 앱만 허용하고 있어 운영 이벤트가 무시될 상태였음 → 둘 다 허용.
- */
-const KAKAO_APP_IDS = [1453976, 1455062];
-
-/**
  * 카카오 이벤트 스키마 URI prefix — Security Event Token (SET, RFC 8417) 표준.
  * 카카오 콘솔에 표시되는 풀 URI: `https://schemas.openid.net/secevent/oauth/event-type/{name}`.
  * 핸들러는 prefix 제거 후 마지막 segment(`user-unlinked`, `user-scope-withdraw` 등) 로 분기.
  */
 const KAKAO_EVENT_PREFIX = "https://schemas.openid.net/secevent/oauth/event-type/";
 
+/** 카카오 SET 서명 공개키 캐시(인스턴스 단위, 6시간). */
+const kakaoJwks = new JwksCache(fetch);
+
 /**
- * 카카오 계정 상태 변경 웹훅 핸들러 — 카카오가 HTTP POST 로 **JWT 본문 (SET 형식)** 전송.
+ * 카카오 계정 상태 변경 웹훅 핸들러 — 카카오가 HTTP POST 로 **SET(JWT) 본문** 전송.
  *
- * Body 형식 (RFC 8417 Security Event Token):
- *   - Content-Type: `application/secevent+jwt`
- *   - Body: JWT 문자열 (header.payload.signature 의 base64url 3 분할)
- *   - Payload claims:
- *     - `iss`, `aud`, `iat`, `jti`: 표준 JWT 클레임 (aud = 카카오 앱 ID)
- *     - `events`: `{ "<schema URI>": { ...event-specific data... } }` 형태
- *     - `sub_id` / `subject`: 영향 받는 사용자 식별자 (Kakao user_id)
+ * 규격(카카오 문서 '계정 상태 변경 웹훅', kakaoSet.ts):
+ *   - Content-Type `application/secevent+jwt`, 본문 = JWT(헤더 alg=RS256·kid / 페이로드 / 서명)
+ *   - 페이로드: iss=https://kauth.kakao.com, aud=앱 대표 REST API 키, sub=회원번호, app_id, jti,
+ *     events: `{ "<schema URI>": { subject: { subject_type, iss, sub }, ... } }`
+ *   - 응답(3초 안): 검증 성공 202(본문 없음) / 실패 400 + `{err, description}`.
+ *     규격 밖 응답은 카카오가 실패로 보고 재전송, 계속 실패하면 웹훅이 비활성화될 수 있음.
  *
- * 카카오 콘솔 등록 절차:
- *   1. 콘솔 → 내 애플리케이션 → 카카오 로그인 → 계정 상태 변경 웹훅 설정
- *   2. 상태: 사용함, 웹훅 URL: 본 함수 배포 URL
- *   3. 변경 이벤트 (OAuth 탭) — 최소 **User Unlinked** + 권장 **User Scope Withdraw**
+ * 카카오 콘솔: 운영 앱(1453976) → 카카오 로그인 → 계정 상태 변경 웹훅 — URL = 본 함수,
+ * 이벤트 최소 **User Unlinked** + 권장 **User Scope Withdraw**.
  *
- * 처리:
+ * 처리(서명·iss·aud 검증 통과 후에만):
  *   - `user-unlinked` → MemberDoc status=LEFT 전환 + PII 필드 즉시 삭제
- *   - `user-scope-withdraw` → 철회된 scope 에 매핑된 필드만 삭제 (status 유지)
+ *   - `user-scope-withdraw` → 철회된 scope(공백 구분 문자열)에 매핑된 필드만 삭제 (status 유지)
  *   - 기타 → 로깅만
- *
- * 보안 노트: 현재는 JWT 서명 검증 skip — 운영 환경에선 https://kauth.kakao.com/.well-known/jwks.json
- * 로 JWKS 받아 signature 검증 필요. `aud` claim + `KAKAO_APP_IDS` 검증으로 1차 방어.
+ * 같은 이벤트가 재전송돼도 결과가 같도록(멱등) 처리한다.
  */
 export const kakaoAccountWebhook = onRequest(
-  { region: "asia-northeast3", invoker: "public" },
+  { region: "asia-northeast3", invoker: "public", secrets: [KAKAO_REST_API_KEY] },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");
       return;
     }
 
-    const contentType = req.get("content-type") ?? "";
-    // rawBody 우선 — `application/secevent+jwt` 는 Express body parser 가 처리 안 함.
-    // JSON 직접 전송 시 req.body 가 이미 객체.
-    const raw = req.rawBody?.toString("utf8") ?? "";
-    const claims = parseSetPayload(raw, req.body, contentType);
-    if (!claims) {
-      logger.warn(`[kakaoWebhook] SET 파싱 실패 — content-type=${contentType}, raw.len=${raw.length}`);
-      res.status(200).send("ok");
+    let result: SetVerifyResult;
+    try {
+      result = await verifySet(req.rawBody?.toString("utf8") ?? "", {
+        restApiKey: KAKAO_REST_API_KEY.value(),
+        getKey: (kid) => kakaoJwks.getKey(kid),
+      });
+    } catch (e) {
+      // 공개키 조회 실패 등 일시 장애 — 규격 밖(5xx) 응답으로 카카오가 재전송하게 해 이벤트 유실 방지.
+      logger.error("[kakaoWebhook] SET 검증 중 오류(재전송 대기)", e);
+      res.status(503).send("retry later");
       return;
     }
-    logger.info("[kakaoWebhook] SET claims", {
-      iss: claims.iss,
-      aud: claims.aud,
-      iat: claims.iat,
+    if (!result.ok) {
+      logger.warn(`[kakaoWebhook] SET 검증 실패 ${result.error.err}: ${result.error.description}`);
+      res.status(400).json(result.error);
+      return;
+    }
+    const claims = result.claims;
+    logger.info("[kakaoWebhook] SET verified", {
+      app_id: claims.app_id,
       jti: claims.jti,
+      iat: claims.iat,
       eventKeys: Object.keys(claims.events ?? {}),
     });
-
-    // aud (앱 ID) 검증 — 없거나 우리 앱이 아니면 무시(이전엔 aud 가 없으면 통과했음).
-    if (!KAKAO_APP_IDS.includes(Number(claims.aud))) {
-      logger.warn(`[kakaoWebhook] aud mismatch: expected ${KAKAO_APP_IDS.join("|")}, got ${claims.aud}`);
-      res.status(200).send("ok");
-      return;
-    }
-
-    // 페이로드 root 의 sub_id / subject 에서 사용자 id 추출 (이벤트별 subject 가 더 우선)
-    const rootUserId = extractKakaoUserId(claims.sub_id ?? claims.subject);
 
     const events = (claims.events ?? {}) as Record<string, unknown>;
     for (const [eventUri, rawData] of Object.entries(events)) {
@@ -944,77 +933,29 @@ export const kakaoAccountWebhook = onRequest(
         ? eventUri.slice(KAKAO_EVENT_PREFIX.length)
         : eventUri;
       const data = (rawData ?? {}) as Record<string, unknown>;
-      const eventUserId = extractKakaoUserId(data.subject) ?? rootUserId;
-      if (!eventUserId) {
-        logger.warn(`[kakaoWebhook] ${eventName}: user id 추출 실패`, data);
+      const kakaoUserId = kakaoUserIdOf(claims, data);
+      if (!kakaoUserId) {
+        logger.warn(`[kakaoWebhook] ${eventName}: user id 추출 실패`);
         continue;
       }
-      const uid = `kakao:${eventUserId}`;
+      const uid = `kakao:${kakaoUserId}`;
 
       try {
         if (eventName === "user-unlinked") {
           await handleUserUnlinked(uid);
         } else if (eventName === "user-scope-withdraw") {
-          const scopes = Array.isArray(data.scopes) ? (data.scopes as string[]) : [];
-          await handleScopeWithdraw(uid, scopes);
+          await handleScopeWithdraw(uid, scopesOf(data));
         } else {
-          logger.info(`[kakaoWebhook] ${eventName} uid=${uid}: no-op`);
+          logger.info(`[kakaoWebhook] ${eventName} uid=${maskId(uid)}: no-op`);
         }
       } catch (e) {
-        logger.error(`[kakaoWebhook] ${eventName} uid=${uid}: handler failed`, e);
+        logger.error(`[kakaoWebhook] ${eventName} uid=${maskId(uid)}: handler failed`, e);
       }
     }
 
-    res.status(200).send("ok");
+    res.status(202).send();
   },
 );
-
-/**
- * SET 페이로드 추출 — JWT (Content-Type `application/secevent+jwt`) 또는 JSON 양쪽 지원.
- * JWT 서명 검증은 별도 (현재 skip).
- */
-function parseSetPayload(
-  raw: string,
-  parsedBody: unknown,
-  contentType: string,
-): Record<string, any> | null {
-  // 1) JWT (Content-Type: application/secevent+jwt) — raw 가 `xxx.yyy.zzz` 형식
-  if (raw && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(raw.trim())) {
-    try {
-      const payload = raw.trim().split(".")[1];
-      const json = Buffer.from(payload, "base64url").toString("utf8");
-      return JSON.parse(json);
-    } catch (e) {
-      logger.error("[kakaoWebhook] JWT decode 실패", e);
-      return null;
-    }
-  }
-  // 2) JSON 본문 (Express body parser 가 이미 파싱)
-  if (parsedBody && typeof parsedBody === "object" && !Buffer.isBuffer(parsedBody)) {
-    return parsedBody as Record<string, any>;
-  }
-  // 3) JSON 문자열 (raw)
-  if (raw) {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      logger.warn(`[kakaoWebhook] raw JSON parse 실패 — content-type=${contentType}`);
-    }
-  }
-  return null;
-}
-
-/**
- * SET subject 객체에서 카카오 user_id 추출.
- * 표준 형식: `{ format: "iss_sub" or "opaque", iss: ..., sub: "<kakao user id>" }`
- * 또는 단순히 `{ sub: "..." }`.
- */
-function extractKakaoUserId(subject: unknown): string | null {
-  if (!subject || typeof subject !== "object") return null;
-  const s = subject as Record<string, unknown>;
-  const candidate = s.sub ?? s.user_id ?? s.id;
-  return candidate == null ? null : String(candidate);
-}
 
 /**
  * 카카오 연결 해제 — 회원 doc 을 LEFT 로 전환하고 PII 필드 즉시 삭제.
