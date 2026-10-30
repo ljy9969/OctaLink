@@ -127,10 +127,21 @@ async function searchKeyword(args: {
 
 /** 대표 종목 0 = 복싱만 하는 곳(이름·업종에 MMA·주짓수·킥복싱 등 다른 종목 단서 없음). */
 const BOXING_ONLY = 0;
+/** 크라브마가(호신술) — 카카오 업종은 일반 '무예 > 격투기'라 이름으로 가려낸다. */
+const KRAV_MAGA = /크라브\s*마가|krav\s*maga/i;
 
 /**
- * (lat,lng) 반경 [radiusKm] 안의 격투기 체육관 — 교류전 상대 후보. 키워드 7개를 동시에 검색(키워드당 최대 3회 호출).
- * OctaLink 는 MMA 체육관용이라 복싱만 하는 체육관은 뺀다('복싱' 키워드는 킥복싱 체육관을 찾는 데 필요해 유지).
+ * 교류전 상대 후보인지 — OctaLink 는 MMA 체육관용이라 복싱만 하는 곳과 크라브마가는 뺀다.
+ * 킥복싱·무에타이·레슬링·주짓수·유도는 후보.
+ */
+export function isExchangeCandidate(p: Pick<NearbyPlace, "name" | "category" | "sportGroup">): boolean {
+  if (p.sportGroup === BOXING_ONLY) return false;
+  return !KRAV_MAGA.test(p.name) && !KRAV_MAGA.test(p.category);
+}
+
+/**
+ * (lat,lng) 반경 [radiusKm] 안의 격투기 체육관 중 교류전 상대 후보([isExchangeCandidate]).
+ * 키워드 7개를 동시에 검색(키워드당 최대 3회 호출) — '복싱' 키워드는 킥복싱 체육관을 찾는 데 필요해 유지.
  * 한 키워드 결과가 45곳을 넘으면 먼 곳부터 빠질 수 있음(API 한계, 3km·강남 수준에서만 해당).
  */
 export async function searchNearbyGyms(args: {
@@ -141,7 +152,7 @@ export async function searchNearbyGyms(args: {
   const radiusM = args.radiusKm * 1000;
   const lists = await Promise.all((args.keywords || NEARBY_KEYWORDS).map((query) =>
     searchKeyword({ query, lat: args.lat, lng: args.lng, radiusM, key: args.key, fetchFn: args.fetchFn })));
-  return mergePlaces(lists.flat(), args.excludePlaceId).filter((p) => p.sportGroup !== BOXING_ONLY);
+  return mergePlaces(lists.flat(), args.excludePlaceId).filter(isExchangeCandidate);
 }
 
 /** 인스턴스 메모리 캐시(사용자 경험용 짧은 캐시 — 카카오 정책상 영구 저장 금지). */

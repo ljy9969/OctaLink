@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isCombatGym, sportGroup, mergePlaces, searchNearbyGyms, TtlCache,
+  isCombatGym, sportGroup, mergePlaces, searchNearbyGyms, isExchangeCandidate, TtlCache,
   interestSummary, toggleRequester, NEARBY_KEYWORDS,
 } from '../lib/nearbyGyms.js';
 
@@ -49,7 +49,8 @@ test('searchNearbyGyms: 키워드마다 반경·거리순 검색, is_end 까지 
     const u = new URL(url);
     const q = u.searchParams.get('query'), page = Number(u.searchParams.get('page'));
     const pages = {
-      1: [doc({ id: 'k1', place_name: '바디킥복싱', distance: '100' }), doc({ id: 'x1', place_name: '강남복싱', distance: '50' })],
+      1: [doc({ id: 'k1', place_name: '바디킥복싱', distance: '100' }), doc({ id: 'x1', place_name: '강남복싱', distance: '50' }),
+        doc({ id: 'kv', place_name: 'KKM크라브마가 강남센터', category_name: '스포츠,레저 > 무예 > 격투기', distance: '70' })],
       2: [doc({ id: 'm2', place_name: '강남 MMA', distance: '200' })],
     };
     const body = q === '복싱'
@@ -58,7 +59,7 @@ test('searchNearbyGyms: 키워드마다 반경·거리순 검색, is_end 까지 
     return { ok: true, status: 200, json: async () => body, text: async () => '' };
   };
   const out = await searchNearbyGyms({ lat: 37.5, lng: 127.0, radiusKm: 1, key: 'K', fetchFn });
-  // MMA 체육관 앱 — 대표 종목이 복싱(복싱만 하는 곳)은 교류전 대상에서 뺀다. 킥복싱은 남김.
+  // MMA 체육관 앱 — 대표 종목이 복싱(복싱만 하는 곳)·크라브마가는 교류전 대상에서 뺀다. 킥복싱은 남김.
   assert.deepEqual(out.map((p) => p.placeId), ['k1', 'm2']);
   const first = new URL(urls[0]);
   assert.equal(first.origin + first.pathname, 'https://dapi.kakao.com/v2/local/search/keyword.json');
@@ -74,6 +75,17 @@ test('searchNearbyGyms: 반경은 1·2·3km 만, 카카오 오류는 그대로 �
   await assert.rejects(() => searchNearbyGyms({ lat: 37.5, lng: 127, radiusKm: 5, key: 'K', fetchFn: async () => ({}) }), /반경/);
   const bad = async () => ({ ok: false, status: 401, json: async () => ({}), text: async () => 'denied' });
   await assert.rejects(() => searchNearbyGyms({ lat: 37.5, lng: 127, radiusKm: 2, key: 'K', fetchFn: bad }), /Kakao Local 401/);
+});
+
+test('isExchangeCandidate: 복싱만 하는 곳·크라브마가 제외, 킥복싱·레슬링·주짓수는 후보', () => {
+  const p = (name, category, sportGroup) => ({ name, category, sportGroup });
+  assert.equal(isExchangeCandidate(p('강남복싱', '복싱,권투 > 복싱,권투장', 0)), false);
+  assert.equal(isExchangeCandidate(p('더벙커 크라브마가 상암점', '무예 > 격투기', 2)), false);
+  assert.equal(isExchangeCandidate(p('크라브 마가 노원', '무예 > 격투기', 2)), false);
+  assert.equal(isExchangeCandidate(p('Krav Maga Seoul', '무예 > 격투기', 2)), false);
+  assert.equal(isExchangeCandidate(p('울프킥복싱', '무예 > 격투기', 2)), true);
+  assert.equal(isExchangeCandidate(p('케이레슬링 강남선릉점', '무예 > 레슬링', 2)), true);
+  assert.equal(isExchangeCandidate(p('대치 주짓수', '무예 > 주짓수', 1)), true);
 });
 
 test('TtlCache: 유효 시간 안에서만 돌려줌', () => {
