@@ -17,6 +17,10 @@ internal fun GymDoc.toFirestoreMap(): Map<String, Any?> = mapOf(
     "joinCode" to joinCode,
     "staffMemberIds" to staffMemberIds,
     "createdAt" to Timestamp(createdAt.epochSecond, createdAt.nano),
+    "address" to address,
+    "lat" to lat,
+    "lng" to lng,
+    "kakaoPlaceId" to kakaoPlaceId,
 )
 
 internal fun DocumentSnapshot.toGymDoc(): GymDoc? {
@@ -30,5 +34,9 @@ internal fun DocumentSnapshot.toGymDoc(): GymDoc? {
         createdAt = (get("createdAt") as? Timestamp)
             ?.let { Instant.ofEpochSecond(it.seconds, it.nanoseconds.toLong()) }
             ?: Instant.EPOCH,
+        address = getString("address"),
+        lat = (get("lat") as? Number)?.toDouble(),
+        lng = (get("lng") as? Number)?.toDouble(),
+        kakaoPlaceId = getString("kakaoPlaceId"),
     )
 }

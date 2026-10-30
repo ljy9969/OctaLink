@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>교류전 상대 찾기 지도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  /* 페이지(검토용 바탕)는 라이트/다크 대응, 폰 화면은 앱 기본(다크) 테마 그대로 고정. */
+  :root {
+    --bg: #f2f1ee; --surface: #ffffff; --ink: #17171b; --muted: #62626a; --line: #dad8d3;
+    --accent: #c8102e; --tag: #eceae5;
+    --sans: "Noto Sans KR", system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #101114; --surface: #17181d; --ink: #ece9e3; --muted: #9c9ca5; --line: #2b2d34; --accent: #e5404c; --tag: #22242b; }
+  }
+  :root[data-theme="dark"] { --bg: #101114; --surface: #17181d; --ink: #ece9e3; --muted: #9c9ca5; --line: #2b2d34; --accent: #e5404c; --tag: #22242b; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .wrap { max-width: 1640px; margin: 0 auto; padding: 36px 24px 56px; }
+  .eyebrow { font-size: 12.5px; letter-spacing: 0.04em; color: var(--muted); }
+  h1 { font-size: 30px; line-height: 1.25; margin: 4px 0 8px; letter-spacing: -0.02em; text-wrap: balance; }
+  .lede { max-width: 68ch; margin: 0; color: var(--ink); }
+  .fine { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+
+  .top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 32px; align-items: start; margin-bottom: 36px; }
+  @media (max-width: 1000px) { .top { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .panel h2 { font-size: 16px; margin: 0 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 14px; }
+  th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 500; color: var(--muted); font-size: 12.5px; }
+  tr.pick td { font-weight: 700; }
+  tr.pick td:first-child::after { content: "기본"; font-size: 11px; font-weight: 500; color: var(--accent); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 8px; vertical-align: 1px; }
+  .panel p { margin: 10px 0 0; font-size: 13.5px; color: var(--muted); }
+  .panel ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .panel li + li { margin-top: 6px; }
+
+  .screens { display: flex; gap: 28px; overflow-x: auto; padding: 4px 4px 18px; }
+  figure { margin: 0; flex: 0 0 376px; }
+  .cap { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px 4px; }
+  .tag { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 9px; border-radius: 999px; background: var(--tag); color: var(--muted); }
+  .tag.to { background: var(--accent); color: #fff; }
+  .cap b { font-size: 16px; }
+  figcaption ul { margin: 14px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink); }
+  figcaption li + li { margin-top: 5px; }
+  figcaption li::marker { color: var(--accent); }
+
+  /* ───────── 폰(앱 다크 테마 토큰: Color.kt) ───────── */
+  .phone {
+    --a-bg: #0b0b0f; --a-sheet: #15161b; --a-card: #1e212b; --a-hair: rgba(245,242,236,0.09);
+    --a-bone: #f5f2ec; --a-mist: #8a8a93; --a-blood: #c8102e; --a-ash: #3a3a42;
+    position: relative; width: 360px; height: 780px; margin: 8px; border-radius: 38px; overflow: hidden;
+    background: var(--a-bg); color: var(--a-bone);
+    box-shadow: 0 0 0 8px #1c1c20, 0 18px 40px rgba(0,0,0,0.28);
+    font-size: 14px; line-height: 1.45;
+  }
+  .sb { height: 30px; display: flex; justify-content: space-between; align-items: center; padding: 0 22px; font-size: 12.5px; font-weight: 500; }
+  .sb svg { display: block; }
+  .ttl { display: flex; align-items: baseline; gap: 8px; padding: 10px 20px 10px; }
+  .ttl h3 { font-size: 23px; margin: 0; letter-spacing: -0.01em; }
+  .ttl span { font-size: 13px; color: var(--a-mist); }
+  .body { padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+  .sec { font-size: 15.5px; font-weight: 700; margin: 8px 4px 0; display: flex; justify-content: space-between; align-items: baseline; }
+  .sec small { font-size: 12px; font-weight: 400; color: var(--a-mist); }
+  .card { background: var(--a-card); border: 1px solid var(--a-hair); border-radius: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+  .mist { color: var(--a-mist); }
+
+  .field { position: relative; border: 1px solid rgba(245,242,236,0.38); border-radius: 6px; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; }
+  .field label { position: absolute; top: -9px; left: 10px; padding: 0 5px; background: var(--a-bg); font-size: 11.5px; color: var(--a-mist); }
+
+  .pcard { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; position: relative; overflow: hidden; }
+  .pcard::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--belt); }
+  .ava { width: 52px; height: 52px; border-radius: 14px; background: var(--a-ash); flex: none; display: grid; place-items: center; }
+  .pcard .t { flex: 1; min-width: 0; }
+  .pcard b { display: block; font-size: 15.5px; }
+  .pcard .m { font-size: 12px; color: var(--a-mist); }
+  .pcard .r { font-size: 11px; color: var(--a-mist); }
+  .btn { border: 0; border-radius: 999px; height: 38px; padding: 0 18px; font: inherit; font-size: 13.5px; font-weight: 500; background: var(--a-blood); color: #fff; flex: none; }
+  .btn.off { background: rgba(245,242,236,0.12); color: rgba(245,242,236,0.38); }
+  .btn.ton { background: rgba(57,135,229,0.2); color: #8cbcf5; }
+  .btn.out { background: none; border: 1px solid rgba(245,242,236,0.32); color: var(--a-bone); height: 32px; padding: 0 12px; font-size: 12.5px; }
+  .btn.done { background: rgba(200,16,46,0.18); color: #ff8a95; height: 32px; padding: 0 12px; font-size: 12.5px; }
+  .duel { padding: 12px 14px; }
+  .duel b { font-size: 13.5px; }
+  .duel .s { color: #ff6b78; font-size: 12.5px; }
+
+  .seg { display: flex; border: 1px solid rgba(245,242,236,0.3); border-radius: 999px; overflow: hidden; }
+  .seg span { padding: 5px 14px; font-size: 12.5px; }
+  .seg span + span { border-left: 1px solid rgba(245,242,236,0.3); }
+  .seg .on { background: var(--a-blood); color: #fff; font-weight: 500; }
+  .find { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .find .row { display: flex; justify-content: space-between; align-items: center; padding: 0 2px; }
+  .find .row b { font-size: 14px; }
+  .mapbox { border-radius: 12px; overflow: hidden; display: block; }
+  .sum { display: flex; justify-content: space-between; font-size: 12.5px; padding: 0 2px; }
+  .sum b { font-weight: 700; }
+  .legend { display: flex; gap: 12px; font-size: 11.5px; color: var(--a-mist); padding: 0 2px; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; box-shadow: 0 0 0 1.5px #fff; }
+
+  .gym { display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; }
+  .gym .t { flex: 1; min-width: 0; }
+  .gym b { font-size: 14.5px; display: block; }
+  .gym .m { font-size: 12px; color: var(--a-mist); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .list .gym + .gym { border-top: 1px solid var(--a-hair); }
+  .more { text-align: center; font-size: 12.5px; color: var(--a-mist); padding: 9px 0; border-top: 1px solid var(--a-hair); }
+
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--a-sheet); border-radius: 24px 24px 0 0; padding: 10px 20px 24px; box-shadow: 0 -8px 24px rgba(0,0,0,0.45); }
+  .handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(245,242,236,0.25); margin: 0 auto 14px; }
+  .sheet h4 { font-size: 21px; margin: 0; letter-spacing: -0.01em; }
+  .sheet .m { font-size: 13px; color: var(--a-mist); margin-top: 2px; }
+  .note { background: rgba(245,242,236,0.06); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.55; margin-top: 14px; display: flex; gap: 10px; }
+  .note svg { flex: none; margin-top: 2px; }
+  .want { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 14px 0 12px; }
+  .want .n { background: rgba(200,16,46,0.18); color: #ff8a95; font-weight: 700; border-radius: 999px; padding: 1px 9px; font-size: 12.5px; }
+  .big { display: block; width: 100%; height: 50px; border: 0; border-radius: 999px; background: var(--a-blood); color: #fff; font: inherit; font-size: 15px; font-weight: 700; }
+  .link { text-align: center; font-size: 13px; margin-top: 12px; color: var(--a-bone); }
+  .foot { text-align: center; font-size: 11.5px; color: var(--a-mist); margin-top: 8px; }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.6); }
+  .fab { position: absolute; top: 40px; left: 14px; width: 40px; height: 40px; border-radius: 50%; background: var(--a-sheet); display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  .chip-on-map { position: absolute; top: 44px; right: 14px; }
+  .chip-on-map .seg { background: rgba(21,22,27,0.92); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">OctaLink · 교류전 · 디자인 시안 · 2026-10-30</div>
+  <h1>교류전 상대 찾기 지도</h1>
+  <p class="lede">우리 체육관에서 1·2·3km 안의 체육관을 지도로 봅니다. OctaLink에 가입한 체육관이면 관원에게 바로 교류전을 신청하고, 아직 가입 전인 체육관에는 “교류 요청”을 남겨 영입으로 이어지게 합니다.</p>
+  <p class="fine">지도 위 체육관 점은 카카오 로컬 실데이터(강남역 반경), 우리 체육관 위치·가입 체육관 거리·관원 정보는 예시입니다. 폰 화면은 앱 기본(다크) 테마입니다.</p>
+
+  <div class="top" style="margin-top:24px">
+    <section class="panel" aria-labelledby="r-h">
+      <h2 id="r-h">반경 1·2·3km는 적당한가</h2>
+      <table>
+        <thead><tr><th>반경</th><th>서울 중앙값</th><th>적은 동네(하위 10%)</th><th>강남역 기준</th></tr></thead>
+        <tbody>
+          <tr class="pick"><td>1km</td><td>8곳</td><td>3곳</td><td>20곳</td></tr>
+          <tr><td>2km</td><td>25곳</td><td>15곳</td><td>52곳</td></tr>
+          <tr><td>3km</td><td>50곳</td><td>31곳</td><td>88곳</td></tr>
+        </tbody>
+      </table>
+      <p>서울 890곳 각각을 ‘우리 체육관’으로 놓고 반경 안 다른 체육관 수를 셌습니다. 1km는 종로·용산·금천처럼 3~4곳만 잡히는 동네가 있고, 3km는 강남에서 80곳이 넘어 점이 빽빽합니다. 기본은 걸어서 갈 수 있는 1km로 두고, 체육관이 적은 동네에서는 2·3km로 넓혀 봅니다.</p>
+    </section>
+    <section class="panel" aria-labelledby="n-h">
+      <h2 id="n-h">설계 원칙</h2>
+      <ul>
+        <li>기준점은 <b>우리 체육관 위치</b> — 내 GPS를 쓰지 않아 위치 권한이 필요 없습니다.</li>
+        <li><b>가입 체육관은 반경과 상관없이 항상 맨 위</b>에 거리와 함께 보입니다. 지금 가입 2곳은 약 11km 떨어져 있어, 반경만 쓰면 신청할 상대가 0곳으로 나옵니다.</li>
+        <li>점 색은 한 가지씩만 뜻합니다 — <b>빨강 = 우리 체육관</b>, <b>파랑 = 교류전 신청 가능</b>(가입), 회색 = 아직 OctaLink 전.</li>
+        <li>관원 목록·신청·3자 승인 흐름은 지금 것을 그대로 씁니다.</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="screens">
+    <!-- AS-IS -->
+    <figure>
+      <div class="cap"><span class="tag">AS-IS</span><b>지금 교류전</b></div>
+      <div class="phone">
+        <div class="sb" data-sb></div>
+        <div class="ttl"><h3>교류전</h3><span>다른 체육관 관원과 결투</span></div>
+        <div class="body">
+          <div class="sec">다른 체육관 명단</div>
+          <div class="field"><label>상대 체육관</label><span>Octagon MMA · 홍대점</span><svg width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" stroke="#8a8a93" stroke-width="2" fill="none"/></svg></div>
+          <div data-profiles="asis"></div>
+          <div class="sec">교류전 현황</div>
+          <div class="card duel">
+            <b>김태오(teamposse) vs 오세린(octagon)</b>
+            <div class="s">승인 대기</div>
+            <div class="mist" style="font-size:11.5px">승인: 상대 ✓ · 요청측 운영진 ✓ · 상대측 운영진 –</div>
+          </div>
+        </div>
+      </div>
+      <figcaption><ul>
+        <li>체육관 이름만 보고 고릅니다 — 어디에 있는지, 얼마나 먼지 알 수 없습니다.</li>
+        <li>OctaLink 가입 체육관만 보입니다(지금 2곳).</li>
+        <li>근처에 체육관이 더 있어도 알 방법이 없습니다.</li>
+      </ul></figcaption>
+    </figure>
+
+    <!-- TO-BE 1 -->
+    <figure>
+      <div class="cap"><span class="tag to">TO-BE ①</span><b>반경 지도 + 목록</b></div>
+      <div class="phone">
+        <div class="sb" data-sb></div>
+        <div class="ttl"><h3>교류전</h3><span>다른 체육관 관원과 결투</span></div>
+        <div class="body">
+          <div class="card find">
+            <div class="row"><b>우리 체육관에서</b><div class="seg"><span class="on">1km</span><span>2km</span><span>3km</span></div></div>
+            <svg class="mapbox" data-map='{"w":326,"h":236,"scale":104,"radius":1}'></svg>
+            <div class="legend"><span><i style="background:#c8102e"></i>우리 체육관</span><span><i style="background:#3987e5"></i>신청 가능</span><span><i style="background:#5d616c"></i>아직 OctaLink 전</span></div>
+          </div>
+          <div class="sec">신청 가능한 체육관 <small>반경 밖 포함 · 1곳</small></div>
+          <div class="card gym">
+            <span class="dot" style="background:#3987e5"></span>
+            <div class="t"><b>Octagon MMA · 홍대점</b><div class="m">MMA · 11.2km · 반경 밖 · 관원 6명</div></div>
+            <button class="btn ton" type="button" style="height:34px;padding:0 14px;font-size:13px">관원 보기</button>
+          </div>
+          <div class="sec">1km 안 체육관 <small>20곳 · 가까운 순</small></div>
+          <div class="card list">
+            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>강남파이터스클럽</b><div class="m">복싱 · 360m</div></div><button class="btn out" type="button">교류 요청</button></div>
+            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>팀에이치짐</b><div class="m">복싱 · 510m</div></div><button class="btn out" type="button">교류 요청</button></div>
+            <div class="gym"><span class="dot" style="background:#7d818c"></span><div class="t"><b>코리안좀비MMA</b><div class="m">MMA · 630m · 우리 체육관 3명 요청</div></div><button class="btn done" type="button">요청함</button></div>
+          </div>
+        </div>
+      </div>
+      <figcaption><ul>
+        <li>반경 1·2·3km(기본 1km), 반경 밖 점은 흐리게.</li>
+        <li>신청 가능한 가입 체육관은 거리와 상관없이 맨 위.</li>
+        <li>가입 전 체육관은 가까운 순 목록, 목록에서도 바로 “교류 요청”.</li>
+        <li>“교류전 현황”은 지금처럼 이 아래에 이어집니다.</li>
+      </ul></figcaption>
+    </figure>
+
+    <!-- TO-BE 2 -->
+    <figure>
+      <div class="cap"><span class="tag to">TO-BE ②</span><b>아직 OctaLink 전인 체육관</b></div>
+      <div class="phone">
+        <svg data-map='{"w":360,"h":420,"scale":150,"cx":-0.25,"cy":0.18,"radius":1,"focus":[-0.347,-0.092]}' style="position:absolute;top:0;left:0"></svg>
+        <div class="sb" data-sb style="position:relative;color:#1a1a1f"></div>
+        <div class="fab"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M11 3L5 9l6 6" stroke="#f5f2ec" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="chip-on-map"><div class="seg"><span class="on">1km</span><span>2km</span><span>3km</span></div></div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <h4>강남파이터스클럽</h4>
+          <div class="m">복싱 · 서초구 · 우리 체육관에서 360m</div>
+          <div class="m" style="font-size:12.5px">서울 서초구 서초대로 389</div>
+          <div class="note">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="#8a8a93" stroke-width="1.5" fill="none"/><path d="M8 7v4.5M8 4.6v.1" stroke="#8a8a93" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span>아직 OctaLink를 쓰지 않는 체육관이에요. 교류를 요청한 회원이 모이면 OctaLink 팀이 이 체육관에 소개할게요.</span>
+          </div>
+          <div class="want"><span class="n">2명</span><span>교류 요청 · 우리 체육관 2명</span></div>
+          <button class="big" type="button">교류 요청</button>
+          <div class="link">카카오맵에서 보기 ↗</div>
+          <div class="foot">요청한 회원 이름은 체육관에 전달되지 않아요 · 다시 누르면 취소</div>
+        </div>
+      </div>
+      <figcaption><ul>
+        <li>지도 점이나 목록 항목을 누르면 열립니다.</li>
+        <li>“교류 요청”은 익명 숫자로만 모입니다 → 운영자·sales 에이전트가 영입 우선순위로 사용.</li>
+        <li>체육관 상세는 카카오맵 장소 페이지로 연결합니다.</li>
+      </ul></figcaption>
+    </figure>
+
+    <!-- TO-BE 3 -->
+    <figure>
+      <div class="cap"><span class="tag to">TO-BE ③</span><b>가입 체육관 → 관원 신청 (페이지)</b></div>
+      <div class="phone">
+        <div class="sb" data-sb></div>
+        <div class="ttl" style="justify-content:space-between;align-items:center"><h3>교류 신청</h3><svg width="22" height="22" viewBox="0 0 22 22"><path d="M19 11H4M10 5l-6 6 6 6" stroke="#f5f2ec" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="body">
+          <div style="padding:0 4px"><div style="font-size:21px;font-weight:700;letter-spacing:-0.01em">Octagon MMA · 홍대점</div><div class="mist" style="font-size:13px">마포구 · 우리 체육관에서 11km · 관원 6명</div></div>
+          <div style="display:flex;flex-direction:column;gap:10px" data-profiles="tobe"></div>
+          <div class="mist" style="font-size:11.5px;padding:0 4px">신청하면 상대 본인과 양쪽 운영진이 모두 승인해야 확정돼요.</div>
+        </div>
+      </div>
+      <figcaption><ul>
+        <li>“관원 보기”나 파란 점을 누르면 새 페이지로 열리고, 뒤로 가기로 교류전 화면에 돌아옵니다.</li>
+        <li>관원 카드(체급·벨트·경력·전적)와 신청·진행중 버튼은 지금 컴포넌트 그대로.</li>
+        <li>신청 이후 승인·일정·결과 흐름은 바뀌지 않습니다.</li>
+      </ul></figcaption>
+    </figure>
+  </div>
+
+  <section class="panel" style="margin-top:18px" aria-labelledby="i-h">
+    <h2 id="i-h">구현 메모</h2>
+    <ul>
+      <li>카카오 운영정책상 받은 데이터는 사용자 경험 개선 목적으로만 캐시하고 최신으로 유지해야 하며, 사전 승낙 없이 복제·제공할 수 없습니다. 그래서 890곳 목록을 앱 DB에 옮기지 않고, 지도를 열 때 서버 함수가 우리 체육관 좌표·반경으로 카카오 장소 검색을 해서 돌려줍니다(짧은 캐시만).</li>
+      <li>앱 지도는 카카오맵 Android SDK v2(로그인과 같은 네이티브 앱 키). 카카오맵 무료 쿼터는 개발자 계정에서 처음 카카오맵을 켠 앱에만 주어집니다 — 지도 SDK 하루 30만 건, 키워드 장소 검색 하루 10만 건.</li>
+      <li>체육관 데이터에 주소·좌표·카카오 장소 ID를 추가합니다. 가입 체육관은 장소 ID로 검색 결과와 맞춰 빨간 점으로 바꿉니다. “원해요”는 장소 ID·체육관 이름·회원 수만 저장합니다.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function () {
+  // 강남역 기준 실제 체육관 위치(km 오프셋 x=동, y=북) + 대표 종목(0 복싱, 1 주짓수·유도, 2 MMA·킥).
+  const PINS = [[-0.347,-0.092,0],[-0.348,-0.091,0],[0.486,0.138,0],[0.229,-0.468,0],[0.478,-0.415,2],[-0.177,0.736,1],[0.661,0.392,0],[-0.723,-0.31,0],[0.515,-0.624,0],[0.779,-0.29,0],[0.722,0.474,0],[-0.223,0.843,2],[0.739,0.481,1],[-0.572,0.678,2],[0.43,-0.815,2],[0.924,-0.109,0],[-0.863,-0.353,1],[0.756,0.585,2],[0.803,0.538,0],[0.551,-0.827,0],[-0.951,-0.473,0],[-1.075,-0.24,0],[0.992,-0.512,2],[0.06,-1.118,2],[1.054,-0.545,0],[-1.158,-0.345,0],[0.139,-1.215,2],[0.139,-1.213,0],[0.139,-1.213,2],[0.278,-1.21,0],[-0.438,1.264,2],[1.156,0.843,0],[-0.393,1.371,0],[-1.358,-0.557,0],[-0.64,1.331,2],[-1.443,0.348,2],[1.316,0.733,0],[-0.644,1.401,0],[-0.644,1.401,0],[-0.74,-1.394,0],[-1.482,0.607,0],[1.534,0.52,0],[-1.538,0.499,0],[1.602,-0.311,0],[0.953,1.35,0],[1.005,-1.331,0],[0.915,-1.6,0],[-0.85,1.662,1],[1.659,0.856,0],[1.705,0.872,2],[0.989,-1.742,0],[0.959,-1.75,1],[1.542,-1.338,0],[0.654,1.963,0],[1.526,-1.405,0],[2.083,0.289,2],[2.04,0.53,0],[2.15,-0.029,0],[1.575,1.488,2],[1.599,-1.505,1],[2.22,0.144,0],[-0.861,2.068,0],[2.252,0.394,0],[2.248,0.446,1],[2.252,0.39,0],[1.429,1.838,0],[-0.553,2.285,1],[-0.311,2.325,2],[-1.756,-1.636,0],[2.431,0.467,2],[1.081,2.252,0],[1.146,2.227,1],[2.409,0.675,0],[1.919,1.653,0],[2.036,1.563,0],[-2.315,1.255,2],[2.52,-0.797,0],[0.001,2.668,0],[-0.139,2.681,2],[-0.641,2.685,0],[2.73,0.531,0],[2.206,1.708,0],[2.665,0.82,1],[1.345,-2.456,0],[-0.556,2.817,0],[2.835,-0.496,0],[2.887,0.168,0],[1.045,-2.745,0],[2.169,2.088,0],[1.923,2.335,2],[3.067,-0.472,0],[3.093,0.112,0],[0.261,3.097,2],[-2.919,-1.136,0],[-2.972,-0.991,0],[1.075,2.951,0],[-2.885,-1.299,2],[0.978,3.021,0],[-3.057,-0.886,1],[0.857,3.076,2],[-2.874,-1.446,2],[-3.182,-0.533,0],[3.226,0.345,0],[-2.829,-1.589,1],[0.767,3.148,2],[-2.69,-1.803,0],[-2.833,-1.649,0],[1.369,2.979,0],[2.888,-1.642,0],[-3.239,-0.709,1],[2.896,-1.636,0],[1.408,-3.024,2],[2.921,-1.64,0],[0.277,3.339,0],[2.777,1.888,0],[1.201,-3.171,1],[2.986,-1.679,1],[2.996,-1.717,0],[0.961,3.342,0],[0.679,3.427,0]];
+  // 지하철역(대략 위치, km)과 큰 길(모양만 — 시안용 약식 지도).
+  const STATIONS = [['강남', 0, 0], ['역삼', 0.79, 0.30], ['선릉', 1.89, 0.73], ['교대', -1.19, -0.50], ['신논현', -0.23, 0.74], ['논현', -0.55, 1.45], ['양재', 0.59, -1.50], ['매봉', 1.69, -1.22], ['남부터미널', -1.02, -1.43], ['언주', 0.57, 1.03], ['한티', 2.24, -0.18], ['서초', -1.77, -0.68]];
+  const ROADS = [
+    [[-0.05, 0], [3.6, 1.4]], [[0, 0], [-1.19, -0.5], [-1.77, -0.68], [-3.4, -1.2]],
+    [[-0.8, 3.4], [-0.64, 2.05], [-0.55, 1.45], [-0.23, 0.74], [0, 0], [0.3, -0.75], [0.59, -1.5], [0.9, -3.4]],
+    [[-3.4, -1.6], [-1.02, -1.43], [0.59, -1.5], [1.69, -1.22], [3.6, -0.85]],
+    [[-3.4, 2.3], [-0.64, 2.05], [1.5, 2.3], [3.6, 2.65]], [[-0.23, 0.74], [0.57, 1.03], [3.6, 2.1]],
+    [[0.2, 3.4], [0.57, 1.03], [1.0, 0], [1.69, -1.22], [1.95, -3.4]],
+    [[-1.95, 3.4], [-1.6, 1], [-1.4, -0.6], [-1.15, -3.4]], [[1.4, 3.4], [1.89, 0.73], [2.2, -1], [2.45, -3.4]],
+  ];
+  const HIGHWAY = [[-2.7, 3.4], [-2.05, 1.0], [-1.62, -0.4], [-0.45, -2.2], [0.15, -3.4]];
+  const PARKS = [[-1.4, -1.08, 0.48, 0.28, -20], [1.79, 1.2, 0.3, 0.2, 10], [-2.6, 0.2, 0.35, 0.5, 0]];
+  const MEMBER_RED = '#3987e5', OTHER = '#5d616c', BLOOD = '#c8102e';
+  const NS = 'http://www.w3.org/2000/svg';
+
+  function el(tag, attrs, parent) { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+
+  function drawMap(svg) {
+    const o = JSON.parse(svg.dataset.map);
+    const { w, h, scale } = o, cx = o.cx || 0, cy = o.cy || 0;
+    const X = (x) => w / 2 + (x - cx) * scale, Y = (y) => h / 2 - (y - cy) * scale;
+    svg.setAttribute('width', w); svg.setAttribute('height', h); svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', '우리 체육관 주변 체육관 지도(시안)');
+    const id = 'c' + Math.random().toString(36).slice(2, 8);
+    const clip = el('clipPath', { id }, el('defs', {}, svg)); el('rect', { width: w, height: h }, clip);
+    const g = el('g', { 'clip-path': `url(#${id})` }, svg);
+    el('rect', { width: w, height: h, fill: '#ecebe6' }, g);
+    PARKS.forEach(([x, y, rx, ry, rot]) => el('ellipse', { cx: X(x), cy: Y(y), rx: rx * scale, ry: ry * scale, fill: '#d6e6cf', transform: `rotate(${rot} ${X(x)} ${Y(y)})` }, g));
+    // 골목 격자(테헤란로 방향 ~21° 회전).
+    const grid = el('g', { stroke: '#ffffff', 'stroke-width': 1.2, opacity: 0.85, transform: `rotate(-21 ${X(0)} ${Y(0)})` }, g);
+    for (let k = -14; k <= 14; k++) {
+      const d = k * 0.3 * scale;
+      el('line', { x1: X(0) + d, y1: -h, x2: X(0) + d, y2: 2 * h }, grid);
+      el('line', { x1: -w, y1: Y(0) + d, x2: 2 * w, y2: Y(0) + d }, grid);
+    }
+    const line = (pts) => pts.map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join(' ');
+    ROADS.forEach((r) => el('polyline', { points: line(r), fill: 'none', stroke: '#dcd8cf', 'stroke-width': scale > 100 ? 9 : 6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g));
+    el('polyline', { points: line(HIGHWAY), fill: 'none', stroke: '#e3c56a', 'stroke-width': scale > 100 ? 11 : 7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+    ROADS.forEach((r) => el('polyline', { points: line(r), fill: 'none', stroke: '#ffffff', 'stroke-width': scale > 100 ? 6 : 3.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g));
+    el('polyline', { points: line(HIGHWAY), fill: 'none', stroke: '#f6dd8c', 'stroke-width': scale > 100 ? 7 : 4.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+    // 반경 원.
+    el('circle', { cx: X(0), cy: Y(0), r: o.radius * scale, fill: 'rgba(200,16,46,0.07)', stroke: BLOOD, 'stroke-width': 1.6, 'stroke-dasharray': '6 4' }, g);
+    // 역 이름.
+    STATIONS.forEach(([n, x, y]) => {
+      el('circle', { cx: X(x), cy: Y(y), r: 3, fill: '#fff', stroke: '#7b8794', 'stroke-width': 1.4 }, g);
+      const t = el('text', { x: X(x) + 6, y: Y(y) - 5, 'font-size': scale > 100 ? 12 : 9.5, fill: '#4a4a52', stroke: '#ecebe6', 'stroke-width': 3, 'paint-order': 'stroke', 'font-family': 'Noto Sans KR, sans-serif' }, g);
+      t.textContent = n + '역';
+    });
+    // 체육관 점 — 반경 밖은 흐리게.
+    const pr = scale > 100 ? 6.5 : 4.4;
+    PINS.forEach(([x, y]) => {
+      const inR = Math.hypot(x, y) <= o.radius;
+      el('circle', { cx: X(x), cy: Y(y), r: pr, fill: OTHER, stroke: '#fff', 'stroke-width': 1.5, opacity: inR ? 1 : 0.35 }, g);
+    });
+    // 선택된 체육관.
+    if (o.focus) {
+      const [fx, fy] = o.focus;
+      el('circle', { cx: X(fx), cy: Y(fy), r: 17, fill: 'rgba(23,23,27,0.16)' }, g);
+      el('circle', { cx: X(fx), cy: Y(fy), r: 9, fill: '#17171b', stroke: '#fff', 'stroke-width': 2.5 }, g);
+    }
+    // 우리 체육관(예시 위치 = 강남역 근처).
+    el('circle', { cx: X(0.02), cy: Y(-0.03), r: scale > 100 ? 11 : 8.5, fill: BLOOD, stroke: '#fff', 'stroke-width': 3 }, g);
+    const lx = X(0.02), ly = Y(-0.03) - (scale > 100 ? 26 : 21);
+    el('rect', { x: lx - 38, y: ly - 11, width: 76, height: 20, rx: 10, fill: BLOOD }, g);
+    const tl = el('text', { x: lx, y: ly + 3.5, 'font-size': 11, 'font-weight': 700, fill: '#fff', 'text-anchor': 'middle', 'font-family': 'Noto Sans KR, sans-serif' }, g); tl.textContent = '우리 체육관';
+    // 카카오 표기 + 축척.
+    const kk = el('text', { x: 10, y: h - 10, 'font-size': 11, 'font-weight': 700, fill: '#3a3a3a', opacity: 0.75, 'font-family': 'Arial, sans-serif' }, g); kk.textContent = 'kakao';
+    const sx = w - 10 - 0.5 * scale;
+    el('path', { d: `M${sx} ${h - 16}v5h${0.5 * scale}v-5`, stroke: '#3a3a3a', 'stroke-width': 1.4, fill: 'none', opacity: 0.75 }, g);
+    const st = el('text', { x: sx + 0.25 * scale, y: h - 20, 'font-size': 10, fill: '#3a3a3a', 'text-anchor': 'middle', opacity: 0.85, 'font-family': 'Arial, sans-serif' }, g); st.textContent = '500m';
+  }
+
+  // 관원 카드(예시 인물 — 실제 회원 아님). 벨트 색은 BeltColors.kt.
+  const PEOPLE = [
+    { n: '오세린', m: '여 · 페더급 · 화이트 벨트', r: '경력 1년차  ·  0전 0승 0패 0무', belt: '#f5f2ec', b: '진행중' },
+    { n: '한지훈', m: '남 · 라이트급 · 블루 벨트', r: '경력 4년차  ·  3전 2승 1패 0무', belt: '#1976d2', b: '신청' },
+    { n: '최민재', m: '남 · 웰터급 · 퍼플 벨트', r: '경력 6년차  ·  5전 3승 1패 1무', belt: '#7b1fa2', b: '신청' },
+  ];
+  const AVA = '<svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="11" r="6" fill="#8a8a93"/><path d="M4 28c1.5-6 6-9 11-9s9.5 3 11 9" fill="#8a8a93"/></svg>';
+  document.querySelectorAll('[data-profiles]').forEach((box) => {
+    PEOPLE.forEach((p) => {
+      const c = document.createElement('div'); c.className = 'card pcard'; c.style.setProperty('--belt', p.belt);
+      c.innerHTML = '<div class="ava">' + AVA + '</div><div class="t"><b></b><div class="m"></div><div class="r"></div></div><button class="btn" type="button"></button>';
+      c.querySelector('b').textContent = p.n; c.querySelector('.m').textContent = p.m; c.querySelector('.r').textContent = p.r;
+      const btn = c.querySelector('button'); btn.textContent = p.b; if (p.b === '진행중') btn.classList.add('off');
+      box.appendChild(c);
+      if (box.dataset.profiles === 'asis') { const s = document.createElement('div'); s.style.height = '10px'; box.appendChild(s); }
+    });
+  });
+  // 상태 표시줄.
+  document.querySelectorAll('[data-sb]').forEach((sb) => {
+    sb.innerHTML = '<span>13:37</span><svg width="52" height="12" viewBox="0 0 52 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1"/><path d="M19 4.5a9 9 0 0 1 12 0l-1.3 1.4a7 7 0 0 0-9.4 0zM21.6 7.3a5 5 0 0 1 6.8 0L25 11z"/><rect x="36" y="2" width="14" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="38" y="4" width="9" height="4" rx="1"/></svg>';
+  });
+  document.querySelectorAll('svg[data-map]').forEach(drawMap);
+})();
+</script>
+</body>
+</html>

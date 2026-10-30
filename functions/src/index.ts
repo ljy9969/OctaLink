@@ -8,6 +8,10 @@ import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { GoogleGenAI } from "@google/genai";
+import {
+  ALLOWED_RADIUS_KM, NearbyPlace, Requesters, TtlCache,
+  interestSummary, searchNearbyGyms, toggleRequester,
+} from "./nearbyGyms";
 
 /**
  * YouTube Data API v3 key — `search.list` 호출용. Secret Manager 에 미리 저장 필요:
@@ -633,6 +637,122 @@ export const recordDuelResult = onCall({ region: "asia-northeast3" }, async (req
   await batch.commit();
   logger.info("[recordDuelResult] done", { id: matchId, isDraw, winner: winnerMemberId ? maskId(winnerMemberId) : null });
   return { ok: true };
+});
+
+// ══════════════════════════════════════════════════════════════
+// 교류전 지도 — 우리 체육관 반경 1·2·3km 격투기 체육관(카카오 로컬) + 교류 요청.
+// 카카오 결과는 저장하지 않고 요청마다 조회(운영정책) — nearbyGyms.ts 참고.
+// gymInterests/{placeId}: 아직 OctaLink 를 쓰지 않는 체육관에 대한 교류 요청 집계. 서버 전용
+//   (rules 차단) — requesters(uid → gymId, at) 는 서버만 읽고 앱에는 숫자만 내려준다.
+//   운영자·sales 에이전트가 체육관 영입 우선순위로 활용.
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * 카카오 REST API 키 — 로컬(장소) 키워드 검색용. Secret Manager 에 미리 저장 필요:
+ *   firebase functions:secrets:set KAKAO_REST_API_KEY
+ * 카카오맵 무료 쿼터가 적용된 OctaLink 앱(1453976)의 REST API 키를 쓴다.
+ */
+const KAKAO_REST_API_KEY = defineSecret("KAKAO_REST_API_KEY");
+/** 체육관·반경별 검색 결과 10분 캐시 — 화면 재진입·반경 왕복 때 카카오 호출 절약. */
+const nearbyCache = new TtlCache<NearbyPlace[]>(10 * 60 * 1000);
+
+function finiteNum(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * 우리 체육관(gyms/{gymId}.lat·lng) 반경 [radiusKm] 안의 격투기 체육관, 가까운 순.
+ * 체육관 위치가 없으면 `needsLocation: true` 로 빈 목록.
+ * 각 장소에 OctaLink 가입 체육관 연결(memberGymId)과 교류 요청 숫자를 붙여 반환.
+ */
+export const nearbyGyms = onCall(
+  { region: "asia-northeast3", secrets: [KAKAO_REST_API_KEY] },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+    const uid = request.auth.uid;
+    const radiusKm = Number(request.data?.radiusKm);
+    if (!ALLOWED_RADIUS_KM.includes(radiusKm)) {
+      throw new HttpsError("invalid-argument", "반경은 1·2·3km 중에서 골라 주세요.");
+    }
+    const caller = await loadApprovedCaller(uid);
+    const gymId = caller.gymId as string;
+    const db = admin.firestore();
+    const gym = (await db.doc(`gyms/${gymId}`).get()).data();
+    const lat = finiteNum(gym?.lat);
+    const lng = finiteNum(gym?.lng);
+    if (lat == null || lng == null) return { needsLocation: true, radiusKm, places: [] };
+
+    const cacheKey = `${gymId}:${lat},${lng}:${radiusKm}`;
+    let places = nearbyCache.get(cacheKey);
+    if (!places) {
+      try {
+        places = await searchNearbyGyms({
+          lat, lng, radiusKm, key: KAKAO_REST_API_KEY.value(), fetchFn: fetch,
+          excludePlaceId: (gym?.kakaoPlaceId as string | undefined) ?? null,
+        });
+      } catch (e) {
+        logger.error("[nearbyGyms] kakao search failed", { gymId, radiusKm, err: (e as Error).message });
+        throw new HttpsError("unavailable", "주변 체육관을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      }
+      nearbyCache.set(cacheKey, places);
+    }
+
+    const memberGymByPlace = new Map<string, string>();
+    (await db.collection("gyms").get()).forEach((d) => {
+      const pid = d.get("kakaoPlaceId");
+      if (typeof pid === "string" && pid) memberGymByPlace.set(pid, d.id);
+    });
+    const interestSnaps = places.length ?
+      await db.getAll(...places.map((p) => db.doc(`gymInterests/${p.placeId}`))) : [];
+    const requestersByPlace = new Map(
+      interestSnaps.map((s) => [s.id, s.get("requesters") as Requesters | undefined]));
+    return {
+      needsLocation: false,
+      radiusKm,
+      places: places.map((p) => ({
+        ...p,
+        memberGymId: memberGymByPlace.get(p.placeId) ?? null,
+        ...interestSummary(requestersByPlace.get(p.placeId), uid, gymId),
+      })),
+    };
+  },
+);
+
+/**
+ * 아직 OctaLink 를 쓰지 않는 체육관에 교류 요청 토글(이미 요청했으면 취소).
+ * 체육관에 직접 알리지 않고 집계만 — 요청이 모이면 운영자가 영입 연락. 요청한 회원 이름은 전달하지 않음.
+ */
+export const toggleGymInterest = onCall({ region: "asia-northeast3" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const uid = request.auth.uid;
+  const placeId = String(request.data?.placeId ?? "").trim();
+  const name = String(request.data?.name ?? "").trim().slice(0, 80);
+  if (!/^\d{1,20}$/.test(placeId) || !name) {
+    throw new HttpsError("invalid-argument", "체육관 정보가 올바르지 않아요.");
+  }
+  const caller = await loadApprovedCaller(uid);
+  const gymId = caller.gymId as string;
+  const db = admin.firestore();
+  const linked = await db.collection("gyms").where("kakaoPlaceId", "==", placeId).limit(1).get();
+  if (!linked.empty) {
+    throw new HttpsError("failed-precondition", "이미 OctaLink를 쓰는 체육관이에요. 관원에게 바로 교류전을 신청해 주세요.");
+  }
+  const ref = db.doc(`gymInterests/${placeId}`);
+  const result = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const r = toggleRequester(snap.get("requesters") as Requesters | undefined, uid, gymId, Date.now());
+    const count = Object.keys(r.requesters).length;
+    if (count === 0) tx.delete(ref);
+    else {
+      tx.set(ref, {
+        placeId, name, requesters: r.requesters, count,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    return { requested: r.requested, ...interestSummary(r.requesters, uid, gymId) };
+  });
+  logger.info("[toggleGymInterest]", { placeId, by: maskId(uid), requested: result.requested, count: result.count });
+  return result;
 });
 
 /**

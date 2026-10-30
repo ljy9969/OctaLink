@@ -13,6 +13,10 @@ val localProperties = Properties().apply {
 }
 val holidayApiKey: String = localProperties.getProperty("HOLIDAY_API_KEY", "")
 val kakaoNativeAppKey: String = localProperties.getProperty("KAKAO_NATIVE_APP_KEY", "")
+// 카카오맵 SDK 네이티브 앱 키 — 카카오맵 무료 쿼터가 적용된 OctaLink 앱(1453976)의 키.
+// 로그인 키(KAKAO_NATIVE_APP_KEY)는 테스트 앱(1455062, 지도 쿼터 없음)이라 대신 쓰지 않는다.
+// 비어 있으면 교류전 지도 자리에 안내만 표시(주변 체육관 목록은 그대로 동작).
+val kakaoMapAppKey: String = localProperties.getProperty("KAKAO_MAP_NATIVE_APP_KEY", "")
 
 val releaseKeystoreFile: String? = localProperties.getProperty("RELEASE_KEYSTORE_FILE")
 val releaseKeystorePassword: String? = localProperties.getProperty("RELEASE_KEYSTORE_PASSWORD")
@@ -38,6 +42,7 @@ android {
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "HOLIDAY_API_KEY", "\"$holidayApiKey\"")
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoNativeAppKey\"")
+        buildConfigField("String", "KAKAO_MAP_APP_KEY", "\"$kakaoMapAppKey\"")
         // AndroidManifest 의 카카오 AuthCodeHandlerActivity intent-filter scheme 에 주입
         manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = kakaoNativeAppKey
 
@@ -143,8 +148,12 @@ dependencies {
 
     // 카카오 로그인 SDK (v2-user) — Kakao OAuth → Firebase Custom Token 교환 진입점
     implementation("com.kakao.sdk:v2-user:2.20.6")
+    // 카카오맵 SDK v2 — 교류전 지도(우리 체육관 반경 1·2·3km). arm64-v8a·armeabi-v7a 만 지원.
+    implementation("com.kakao.maps.open:android:2.15.2")
     // suspend 코루틴 어댑터용 — Tasks.await() 등에서 사용
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    testImplementation("junit:junit:4.13.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

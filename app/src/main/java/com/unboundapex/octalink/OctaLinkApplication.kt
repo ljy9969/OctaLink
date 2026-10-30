@@ -9,6 +9,7 @@ import com.unboundapex.octalink.data.HolidayRepository
 import com.unboundapex.octalink.data.repo.RepositoryProvider
 import com.unboundapex.octalink.messaging.ClassReminderScheduler
 import com.unboundapex.octalink.messaging.NotificationChannels
+import com.unboundapex.octalink.ui.map.KakaoMapSupport
 
 /**
  * 앱 프로세스 진입점. 초기화는 [onCreate] 에서 1회만 수행.
@@ -28,6 +29,8 @@ class OctaLinkApplication : Application() {
         super.onCreate()
         KakaoSdk.init(this, BuildConfig.KAKAO_NATIVE_APP_KEY)
         Log.d("OctaLink.KeyHash", "Kakao KeyHash to register: ${Utility.getKeyHash(this)}")
+        // 카카오맵 SDK(교류전 지도) — 지도 무료 쿼터 앱 키. 키 없음·미지원 기기면 건너뜀(지도 자리에 안내).
+        KakaoMapSupport.init(this)
         HolidayRepository.init(applicationContext)
         RepositoryProvider.init(applicationContext)
         // FCM 알림 채널 등록 — 알림 표시 자체엔 필수. 권한(POST_NOTIFICATIONS) 은 별도.

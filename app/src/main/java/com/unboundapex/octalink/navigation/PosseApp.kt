@@ -99,6 +99,10 @@ sealed class Route(val path: String, val label: String, val icon: ImageVector) {
     data object AiRoutine : Route("ai_routine", "AI 코치의 맞춤 루틴", Icons.Outlined.CheckCircle)
     data object ShadowCoach : Route("shadow_coach", "AI 쉐도우 코치", Icons.Outlined.SportsMma)
     data object Exchange : Route("exchange", "교류전", Icons.Outlined.SportsMma)
+    /** 교류전 지도·목록에서 가입 체육관 선택 → 관원 신청 페이지. */
+    data object ExchangeGym : Route("exchange_gym/{gymId}", "교류 신청", Icons.Outlined.SportsMma) {
+        fun pathFor(gymId: String) = "exchange_gym/$gymId"
+    }
     data object TournamentHistory : Route("tournament_history", "토너먼트 히스토리", Icons.Outlined.CheckCircle)
     /** 히스토리에서 특정 토너먼트 read-only 진입 — path arg 로 tournamentId 전달. */
     data object BracketView : Route("bracket_view/{tournamentId}", "대진표 보기", Icons.Outlined.CheckCircle) {
@@ -274,6 +278,24 @@ fun PosseApp() {
                         memberId = m.id,
                         myGymId = m.gymId,
                         isStaff = m.role.isStaff,
+                        onOpenGym = { gymId -> navController.navigate(Route.ExchangeGym.pathFor(gymId)) },
+                    )
+                }
+            }
+            composable(
+                route = Route.ExchangeGym.path,
+                arguments = listOf(
+                    androidx.navigation.navArgument("gymId") { type = androidx.navigation.NavType.StringType }
+                ),
+            ) { entry ->
+                val gymId = entry.arguments?.getString("gymId").orEmpty()
+                val exSession by sessionVm.state.collectAsState()
+                exSession.member?.let { m ->
+                    com.unboundapex.octalink.ui.screens.exchange.ExchangeGymScreen(
+                        memberId = m.id,
+                        myGymId = m.gymId,
+                        gymId = gymId,
+                        onBack = { navController.popBackStack() },
                     )
                 }
             }

@@ -409,7 +409,21 @@ data class GymDoc(
     /** 이 체육관의 운영진(MASTER/COACH) member id 목록. CREATOR 가 지정. */
     val staffMemberIds: List<String> = emptyList(),
     val createdAt: Instant,
-)
+    /**
+     * 체육관 위치 — 교류전 지도의 기준점(반경 검색 중심·체육관 간 거리). 없으면 지도 대신 안내.
+     * ops `engine/set-gym-location.mjs` 로 카카오 장소/주소 검색 결과를 넣는다.
+     */
+    val address: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    /** 카카오맵 장소 id — 주변 체육관 검색 결과에서 이 체육관을 'OctaLink 가입'으로 알아보는 키. */
+    val kakaoPlaceId: String? = null,
+) {
+    val hasLocation: Boolean get() = lat != null && lng != null
+
+    /** 표시 이름 "이름 · 지점". */
+    val label: String get() = name + (branch?.let { " · $it" } ?: "")
+}
 
 /**
  * 교류전(다른 체육관 관원과의 결투) 진행 상태.

@@ -14,6 +14,7 @@ import com.unboundapex.octalink.data.repo.firestore.FirestoreSkillScoreRepositor
 import com.unboundapex.octalink.data.repo.firestore.FirestoreTournamentRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreWeeklyMissionRepository
 import com.unboundapex.octalink.data.repo.firestore.FirestoreWeeklyRoutineRepository
+import com.unboundapex.octalink.data.repo.firestore.FunctionsNearbyGymRepository
 import com.unboundapex.octalink.data.repo.kakao.KakaoAuthRepository
 
 /**
@@ -58,6 +59,8 @@ object RepositoryProvider {
         private set
     lateinit var inquiries: InquiryRepository
         private set
+    lateinit var nearbyGyms: NearbyGymRepository
+        private set
 
     @Volatile
     private var initialized: Boolean = false
@@ -81,6 +84,7 @@ object RepositoryProvider {
             weeklyMission = FirestoreWeeklyMissionRepository()
             weeklyRoutine = FirestoreWeeklyRoutineRepository()
             inquiries = FirestoreInquiryRepository()
+            nearbyGyms = FunctionsNearbyGymRepository()
 
             initialized = true
         }
