@@ -96,6 +96,30 @@ test('buildLeadsContext: 누적 저장 → 2회차에 신규·미확인 표시, 
   const sec = parseContextSection(readFileSync(join(ops, 'context', 'sales.md'), 'utf8'), '리드 인벤토리');
   assert.match(sec.body, /서울 격투기 체육관 2곳 · 이번 신규 1곳\*\* · 이번에 안 잡힌 기존 1곳/);
   const rows = sec.body.split('\n').filter((l) => l.startsWith('| '));     // rows[0]=머리글(구분선은 '|-'라 제외)
-  assert.match(rows[1], /^\| 🆕 \| 마포구 \| 새복싱 \|/);                  // 신규가 첫 데이터 행
+  assert.match(rows[1], /^\| 🆕 \| +\| 마포구 \| 새복싱 \|/);              // 신규가 첫 데이터 행(교류 요청 칸은 비어 있음)
   assert.equal(existsSync(r2.csv), true);
+});
+
+test('buildLeadsContext: 교류 요청(앱 회원) 받은 체육관을 맨 위로 — 우선 리드 표·요청 수 칸·CSV 열', async () => {
+  const ops = mkdtempSync(join(tmpdir(), 'ops-leads-int-'));
+  const region = { name: '서울', slug: 'seoul', addressPrefix: '서울', rect: '0,0,1,1' };
+  const pageOf = (docs) => async () => ({ meta: { total_count: docs.length, is_end: true }, documents: docs });
+  const a = doc(1, '런주짓수', '무예 > 격투기', '서울 강서구 x');
+  const b = doc(2, '바디킥짐', '무예 > 격투기 > 무에타이', '서울 강서구 y');
+  const interests = new Map([
+    ['2', { placeId: '2', name: '바디킥짐', count: 3, gyms: 2 }],
+    ['77', { placeId: '77', name: '경기 MMA', count: 1, gyms: 1 }],   // 서울 리드 밖(경기) 요청도 우선 리드에 표시
+  ]);
+  await buildLeadsContext({ opsRoot: ops, region, keywords: ['격투'], fetchPage: pageOf([a, b]), interests, now: () => new Date('2026-10-30T02:00:00Z') });
+
+  const sec = parseContextSection(readFileSync(join(ops, 'context', 'sales.md'), 'utf8'), '리드 인벤토리');
+  assert.match(sec.body, /교류 요청 우선 리드 2곳 · 요청 4건/);
+  assert.match(sec.body, /\| 1 \| 바디킥짐 \| 3 \| 2 \| \[카카오맵\]\(https:\/\/place\.map\.kakao\.com\/2\) \|/);
+  assert.match(sec.body, /\| 2 \| 경기 MMA \| 1 \| 1 \|/);
+  const inv = sec.body.slice(sec.body.indexOf('| 신규 |')).split('\n').filter((l) => l.startsWith('| '));
+  assert.match(inv[1], /^\| 🆕 \| 🤝 3 \| 강서구 \| 바디킥짐 \|/);         // 요청 받은 리드가 신규·구 순서보다 먼저
+  assert.match(inv[2], /^\| 🆕 \| +\| 강서구 \| 런주짓수 \|/);
+  const csv = readFileSync(join(ops, 'exports', 'sales-leads-seoul.csv'), 'utf8');
+  assert.match(csv.split('\r\n')[0], /,교류요청$/);
+  assert.match(csv, /"바디킥짐".*,"3"\r\n/);
 });

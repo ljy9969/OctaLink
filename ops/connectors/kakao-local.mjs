@@ -92,7 +92,9 @@ const csvCell = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
 const cell = (s) => String(s ?? '').replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
 
 // 수집 → 누적 저장(state/sales-leads.json: 처음 발견·마지막 확인) → CSV 내보내기 → context '리드 인벤토리'.
-export async function buildLeadsContext({ opsRoot, agent = 'sales', key, region, keywords, transport, fetchPage, now = () => new Date() }) {
+// interests: 앱 회원의 교류 요청(connectors/gym-interests.mjs, placeId → {name, count, gyms}) —
+//   요청 받은 체육관을 '교류 요청 우선 리드' 표로 맨 위에, 인벤토리에서도 먼저 정렬(영업 연락 1순위).
+export async function buildLeadsContext({ opsRoot, agent = 'sales', key, region, keywords, transport, fetchPage, interests = new Map(), now = () => new Date() }) {
   const at = now().toISOString();
   const { leads, calls, truncated } = await collectLeads({ key, region, keywords, transport, fetchPage });
 
@@ -111,16 +113,18 @@ export async function buildLeadsContext({ opsRoot, agent = 'sales', key, region,
   if (!existsSync(join(opsRoot, 'state'))) mkdirSync(join(opsRoot, 'state'), { recursive: true });
   writeFileSync(storePath, JSON.stringify(store, null, 2));
 
-  // 이번에 확인된 리드: 신규 먼저, 그다음 구·이름순.
+  // 이번에 확인된 리드: 교류 요청 많은 순 → 신규 → 구·이름순.
   const isNew = new Set(fresh);
+  const reqs = (id) => interests.get(id)?.count || 0;
   const current = leads.map((l) => store.leads[l.id])
-    .sort((a, b) => (isNew.has(b.id) - isNew.has(a.id)) || a.district.localeCompare(b.district, 'ko') || a.name.localeCompare(b.name, 'ko'));
+    .sort((a, b) => (reqs(b.id) - reqs(a.id)) || (isNew.has(b.id) - isNew.has(a.id)) ||
+      a.district.localeCompare(b.district, 'ko') || a.name.localeCompare(b.name, 'ko'));
 
   const exportDir = join(opsRoot, 'exports');
   if (!existsSync(exportDir)) mkdirSync(exportDir, { recursive: true });
   const csvName = `${agent}-leads-${region.slug || 'region'}.csv`;
-  const csv = ['구,체육관,업종,주소,카카오맵,경도,위도,신규,처음 발견,마지막 확인',
-    ...current.map((l) => [l.district, l.name, l.category, l.address, l.url, l.lon ?? '', l.lat ?? '', isNew.has(l.id) ? 'Y' : '', l.firstSeen.slice(0, 10), l.lastSeen.slice(0, 10)].map(csvCell).join(','))];
+  const csv = ['구,체육관,업종,주소,카카오맵,경도,위도,신규,처음 발견,마지막 확인,교류요청',
+    ...current.map((l) => [l.district, l.name, l.category, l.address, l.url, l.lon ?? '', l.lat ?? '', isNew.has(l.id) ? 'Y' : '', l.firstSeen.slice(0, 10), l.lastSeen.slice(0, 10), reqs(l.id) || ''].map(csvCell).join(','))];
   writeFileSync(join(exportDir, csvName), '﻿' + csv.join('\r\n') + '\r\n'); // BOM: 엑셀 한글 깨짐 방지
 
   const byDistrict = new Map();
@@ -132,10 +136,17 @@ export async function buildLeadsContext({ opsRoot, agent = 'sales', key, region,
     `구별: ${districts || '-'}`,
   ];
   if (truncated.length) notes.push(`⚠ 구역을 끝까지 나눠도 45곳 상한에 걸린 검색 ${truncated.length}건 — 일부 누락 가능(${truncated.map((t) => `${t.query} ${t.total}곳`).slice(0, 5).join(', ')})`);
-  const rows = current.map((l) => `| ${isNew.has(l.id) ? '🆕' : ''} | ${cell(l.district)} | ${cell(l.name)} | ${cell(l.category)} | [카카오맵](${l.url}) |`);
-  const body = current.length
-    ? `${notes.join('\n')}\n\n| 신규 | 구 | 체육관 | 업종 | 링크 |\n|---|---|---|---|---|\n${rows.join('\n')}`
+  const rows = current.map((l) => `| ${isNew.has(l.id) ? '🆕' : ''} | ${reqs(l.id) ? `🤝 ${reqs(l.id)}` : ''} | ${cell(l.district)} | ${cell(l.name)} | ${cell(l.category)} | [카카오맵](${l.url}) |`);
+  const inventory = current.length
+    ? `${notes.join('\n')}\n\n| 신규 | 교류 요청 | 구 | 체육관 | 업종 | 링크 |\n|---|---|---|---|---|---|\n${rows.join('\n')}`
     : `(확인된 체육관 리드 없음 — 카카오 로컬 결과에 ${region.name} 격투기 업종이 없음)`;
-  writeContextSection({ opsRoot, agent, section: '리드 인벤토리', body, now });
+  // 교류 요청 우선 리드 — 서울 리드 밖(경계 너머) 체육관도 요청이 있으면 포함.
+  const wanted = [...interests.values()].sort((a, b) => (b.count - a.count) || (b.gyms - a.gyms));
+  const priority = wanted.length
+    ? `**교류 요청 우선 리드 ${wanted.length}곳 · 요청 ${wanted.reduce((n, w) => n + w.count, 0)}건** — 앱 회원이 교류전을 원한다고 남긴 체육관(요청 많은 순). 영업 연락 1순위.\n\n` +
+      `| 순위 | 체육관 | 요청 | 요청 체육관 | 링크 |\n|---|---|---|---|---|\n` +
+      wanted.map((w, i) => `| ${i + 1} | ${cell(store.leads[w.placeId]?.name || w.name)} | ${w.count} | ${w.gyms} | [카카오맵](https://place.map.kakao.com/${w.placeId}) |`).join('\n') + '\n\n'
+    : '';
+  writeContextSection({ opsRoot, agent, section: '리드 인벤토리', body: priority + inventory, now });
   return { total: current.length, fresh: fresh.length, missing: missing.length, calls, truncated: truncated.length, csv: join(exportDir, csvName) };
 }

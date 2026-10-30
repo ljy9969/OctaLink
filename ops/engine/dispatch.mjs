@@ -29,8 +29,18 @@ async function defaultRefresh({ opsRoot, agent, env }) {
   const leadKey = leadsCfg && env[leadsCfg.keyEnv || 'KAKAO_REST_API_KEY'];
   let leadsDone = false;
   if (leadKey) {
+    // 앱 회원의 교류 요청(Firestore gymInterests) → 요청 받은 체육관을 리드 맨 위로. 자격증명 없거나 실패하면 없이 진행.
+    let interests;
+    const fbRaw = conn.firebase && env[conn.firebase.credEnv || 'FIREBASE_SERVICE_ACCOUNT'];
+    if (fbRaw) {
+      try {
+        const { loadGymInterests } = await import('../connectors/gym-interests.mjs');
+        const cred = existsSync(fbRaw) ? readFileSync(fbRaw, 'utf8') : fbRaw;
+        interests = await loadGymInterests({ credentialJson: cred, projectId: conn.firebase.projectId });
+      } catch { /* 교류 요청 없이 진행 */ }
+    }
     try {
-      await buildLeadsContext({ opsRoot, agent, key: leadKey, region: leadsCfg.region, keywords: leadsCfg.keywords });
+      await buildLeadsContext({ opsRoot, agent, key: leadKey, region: leadsCfg.region, keywords: leadsCfg.keywords, interests });
       leadsDone = true;
       // 카카오맵 위 체육관 지도도 최신 리드로 다시 생성(exports/gym-map-<지역>.html, KAKAO_JS_KEY 있을 때).
       try { writeLeadsMap({ opsRoot, agent, jsKey: env.KAKAO_JS_KEY, region: leadsCfg.region }); } catch { /* 지도는 부가 */ }
