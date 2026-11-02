@@ -59,6 +59,8 @@ object GymMapColors {
     val OtherGray = Color(0xFF7D818C)
     /** 밝은 지도 바탕 위 회색 점 — 목록 점보다 한 단계 진하게. */
     val OtherGrayOnMap = Color(0xFF5D616C)
+    /** 선택한 체육관 — 회색 점들 사이에서 가장 진하게(Ink). */
+    val Selected = Color(0xFF17171B)
 }
 
 /**
@@ -67,6 +69,7 @@ object GymMapColors {
  * - 스크롤 화면 안에 들어가므로 지도를 만지는 동안 부모 스크롤이 터치를 가로채지 않게 막는다.
  * - MapView 라이프사이클(resume/pause/finish)은 공식 가이드대로 화면 생명주기에 맞춘다.
  * - SDK 를 쓸 수 없거나 인증·로딩이 실패하면 지도 자리에 이유 문구만 보여준다(목록은 화면이 따로 보여줌).
+ * - [selectedKey] 점은 크게·진하게·두꺼운 흰 테두리와 후광으로 강조(선택한 체육관이 어딘지 바로 보이게).
  */
 @Composable
 fun KakaoGymMap(
@@ -77,6 +80,7 @@ fun KakaoGymMap(
     onPinClick: (String) -> Unit,
     primary: Color,
     modifier: Modifier = Modifier,
+    selectedKey: String? = null,
 ) {
     val unavailable = KakaoMapSupport.unavailableReason()
     if (unavailable != null) {
@@ -137,10 +141,15 @@ fun KakaoGymMap(
         }
     }
 
-    // 데이터·반경이 바뀔 때마다 다시 그림(점 수십 개 수준이라 전체 교체).
-    LaunchedEffect(kakaoMap, pins, radiusKm, centerLat, centerLng) {
+    // 반경·중심이 바뀔 때만 원을 다시 그리고 카메라를 맞춤 — 선택만 바뀔 땐 사용자가 옮긴 지도 위치 유지.
+    LaunchedEffect(kakaoMap, radiusKm, centerLat, centerLng) {
         val map = kakaoMap ?: return@LaunchedEffect
-        drawGyms(map, centerLat, centerLng, radiusKm, pins, primary, paddingPx, density)
+        drawRadius(map, centerLat, centerLng, radiusKm, primary, paddingPx)
+    }
+    // 점은 데이터·선택이 바뀔 때마다 전체 교체(수십 개 수준).
+    LaunchedEffect(kakaoMap, pins, selectedKey) {
+        val map = kakaoMap ?: return@LaunchedEffect
+        drawPins(map, pins, selectedKey, primary, density)
     }
 
     if (failed) {
@@ -150,16 +159,30 @@ fun KakaoGymMap(
     }
 }
 
-private fun drawGyms(
-    map: KakaoMap,
-    lat: Double,
-    lng: Double,
-    radiusKm: Int,
-    pins: List<MapPin>,
-    primary: Color,
-    paddingPx: Int,
-    density: Float,
-) {
+private fun drawPins(map: KakaoMap, pins: List<MapPin>, selectedKey: String?, primary: Color, density: Float) {
+    val labels = map.labelManager ?: return
+    val styles = mapOf(
+        PinKind.MY_GYM to dotStyle(18, primary, density),
+        PinKind.MEMBER_GYM to dotStyle(15, GymMapColors.MemberBlue, density),
+        PinKind.OTHER_GYM to dotStyle(11, GymMapColors.OtherGrayOnMap, density),
+    ).mapValues { (_, s) -> labels.addLabelStyles(LabelStyles.from(s)) }
+    val selectedStyle = labels.addLabelStyles(LabelStyles.from(selectedDotStyle(density)))
+    val rank = mapOf(PinKind.MY_GYM to 3L, PinKind.MEMBER_GYM to 2L, PinKind.OTHER_GYM to 1L)
+    val layer = labels.layer ?: return
+    layer.removeAll()
+    for (p in pins) {
+        val selected = p.key == selectedKey
+        layer.addLabel(
+            LabelOptions.from(LatLng.from(p.lat, p.lng))
+                .setStyles(if (selected) selectedStyle else styles.getValue(p.kind))
+                .setRank(if (selected) 4L else rank.getValue(p.kind))
+                .setClickable(p.kind != PinKind.MY_GYM)
+                .setTag(p.key),
+        )
+    }
+}
+
+private fun drawRadius(map: KakaoMap, lat: Double, lng: Double, radiusKm: Int, primary: Color, paddingPx: Int) {
     val center = LatLng.from(lat, lng)
     val radiusM = radiusKm * 1000.0
 
@@ -170,25 +193,6 @@ private fun drawGyms(
                 DotPoints.fromCircle(center, radiusM.toFloat()),
                 PolygonStyles.from(primary.copy(alpha = 0.08f).toArgb(), 2f, primary.copy(alpha = 0.85f).toArgb()),
             ),
-        )
-    }
-
-    val labels = map.labelManager ?: return
-    val styles = mapOf(
-        PinKind.MY_GYM to dotStyle(18, primary, density),
-        PinKind.MEMBER_GYM to dotStyle(15, GymMapColors.MemberBlue, density),
-        PinKind.OTHER_GYM to dotStyle(11, GymMapColors.OtherGrayOnMap, density),
-    ).mapValues { (_, s) -> labels.addLabelStyles(LabelStyles.from(s)) }
-    val rank = mapOf(PinKind.MY_GYM to 3L, PinKind.MEMBER_GYM to 2L, PinKind.OTHER_GYM to 1L)
-    val layer = labels.layer ?: return
-    layer.removeAll()
-    for (p in pins) {
-        layer.addLabel(
-            LabelOptions.from(LatLng.from(p.lat, p.lng))
-                .setStyles(styles.getValue(p.kind))
-                .setRank(rank.getValue(p.kind))
-                .setClickable(p.kind != PinKind.MY_GYM)
-                .setTag(p.key),
         )
     }
 
@@ -220,6 +224,25 @@ private fun dotStyle(sizeDp: Int, fill: Color, density: Float): LabelStyle {
     canvas.drawCircle(r, r, r, paint)
     paint.color = fill.toArgb()
     canvas.drawCircle(r, r, r - 2f * density, paint)
+    return LabelStyle.from(bmp).setAnchorPoint(0.5f, 0.5f)
+}
+
+/**
+ * 선택한 체육관 점 — 일반 회색 점(11dp)보다 크게(흰 테두리 포함 20dp), 진한 Ink 채움(14dp),
+ * 두꺼운 흰 테두리(3dp), 바깥 반투명 후광(30dp) — 회색 점이 몰려 있어도 어느 곳인지 바로 보이게.
+ */
+private fun selectedDotStyle(density: Float): LabelStyle {
+    val px = (30 * density).roundToInt()
+    val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val c = px / 2f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.color = GymMapColors.Selected.copy(alpha = 0.22f).toArgb()
+    canvas.drawCircle(c, c, c, paint)                    // 후광
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(c, c, 10f * density, paint)        // 흰 테두리
+    paint.color = GymMapColors.Selected.toArgb()
+    canvas.drawCircle(c, c, 7f * density, paint)         // 본체
     return LabelStyle.from(bmp).setAnchorPoint(0.5f, 0.5f)
 }
 

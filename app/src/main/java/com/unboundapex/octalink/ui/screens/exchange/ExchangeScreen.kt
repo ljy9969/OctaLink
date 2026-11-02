@@ -118,6 +118,11 @@ fun ExchangeScreen(
     var openPlaceId by remember { mutableStateOf<String?>(null) }
     val openPlace = places.firstOrNull { it.placeId == openPlaceId }
     var showAllNearby by remember(radiusKm) { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    // 목록에서 체육관을 고르면 지도가 화면 밖일 수 있음 → 맨 위로 올려 시트 위로 지도(강조된 점)가 보이게.
+    LaunchedEffect(openPlaceId) {
+        if (openPlaceId != null) scrollState.animateScrollTo(0)
+    }
 
     var proposeTarget by remember { mutableStateOf<ExchangeMatchDoc?>(null) }
     var scheduleTarget by remember { mutableStateOf<ExchangeMatchDoc?>(null) }
@@ -128,7 +133,7 @@ fun ExchangeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -138,6 +143,7 @@ fun ExchangeScreen(
                 onRadius = vm::setRadius,
                 memberGyms = memberGyms,
                 places = places,
+                selectedKey = openPlaceId?.let { PIN_PLACE + it },
                 onPinClick = { key ->
                     when {
                         key.startsWith(PIN_GYM) -> onOpenGym(key.removePrefix(PIN_GYM))
@@ -257,6 +263,8 @@ private fun GymFinderCard(
     onRadius: (Int) -> Unit,
     memberGyms: List<MemberGymRow>,
     places: List<NearbyGym>,
+    /** 상세 시트로 연 체육관의 점 key — 지도에서 강조. */
+    selectedKey: String?,
     onPinClick: (String) -> Unit,
 ) {
     PosseCard(padding = PaddingValues(12.dp)) {
@@ -290,6 +298,7 @@ private fun GymFinderCard(
                     onPinClick = onPinClick,
                     primary = MaterialTheme.colorScheme.primary,
                     modifier = mapModifier,
+                    selectedKey = selectedKey,
                 )
             } else {
                 Box(mapModifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
