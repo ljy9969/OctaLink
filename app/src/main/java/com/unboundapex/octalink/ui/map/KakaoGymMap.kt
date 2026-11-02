@@ -228,21 +228,21 @@ private fun dotStyle(sizeDp: Int, fill: Color, density: Float): LabelStyle {
 }
 
 /**
- * 선택한 체육관 점 — 일반 회색 점(11dp)보다 크게(흰 테두리 포함 20dp), 진한 Ink 채움(14dp),
- * 두꺼운 흰 테두리(3dp), 바깥 반투명 후광(30dp) — 회색 점이 몰려 있어도 어느 곳인지 바로 보이게.
+ * 선택한 체육관 점 — 일반 회색 점(11dp)과 우리 체육관 점(18dp) 사이 크기: 흰 테두리 포함 15dp,
+ * 진한 Ink 채움(11dp), 바깥 반투명 후광(17dp) — 회색 점이 몰려 있어도 어느 곳인지 바로 보이게.
  */
 private fun selectedDotStyle(density: Float): LabelStyle {
-    val px = (30 * density).roundToInt()
+    val px = (17 * density).roundToInt()
     val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
     val c = px / 2f
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    paint.color = GymMapColors.Selected.copy(alpha = 0.22f).toArgb()
+    paint.color = GymMapColors.Selected.copy(alpha = 0.25f).toArgb()
     canvas.drawCircle(c, c, c, paint)                    // 후광
     paint.color = android.graphics.Color.WHITE
-    canvas.drawCircle(c, c, 10f * density, paint)        // 흰 테두리
+    canvas.drawCircle(c, c, 7.5f * density, paint)       // 흰 테두리
     paint.color = GymMapColors.Selected.toArgb()
-    canvas.drawCircle(c, c, 7f * density, paint)         // 본체
+    canvas.drawCircle(c, c, 5.5f * density, paint)       // 본체
     return LabelStyle.from(bmp).setAnchorPoint(0.5f, 0.5f)
 }
 
