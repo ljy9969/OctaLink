@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Shop
 import androidx.compose.material3.AlertDialog
@@ -243,12 +244,25 @@ fun ProfileSettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         SocialCell(
+                            icon = Icons.Outlined.Description,
+                            primary = "이용약관",
+                            secondary = "외부 브라우저로 열기",
+                            onClick = { openExternal(GymInfo.TERMS_URL) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        SocialCell(
                             icon = Icons.Outlined.PrivacyTip,
                             primary = "개인정보처리방침",
                             secondary = "외부 브라우저로 열기",
                             onClick = { openExternal(GymInfo.PRIVACY_POLICY_URL) },
                             modifier = Modifier.weight(1f),
                         )
+                    }
+                    // 두 칸 격자 유지 — 세 번째 칸은 왼쪽 열에 맞추고 오른쪽은 비워 둠
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         SocialCell(
                             icon = Icons.Outlined.Shop,
                             primary = "Play 스토어",
@@ -256,6 +270,7 @@ fun ProfileSettingsScreen(
                             onClick = { openExternal(GymInfo.PLAY_STORE_URL) },
                             modifier = Modifier.weight(1f),
                         )
+                        Spacer(Modifier.weight(1f))
                     }
                 }
             }

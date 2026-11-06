@@ -27,6 +27,10 @@ object GymInfo {
     const val PRIVACY_POLICY_URL: String =
         "https://ljy9969.github.io/OctaLink/privacy-policy.html"
 
+    /** 서비스 이용약관 — 개인정보처리방침과 같은 GitHub Pages(docs/terms.html). */
+    const val TERMS_URL: String =
+        "https://ljy9969.github.io/OctaLink/terms.html"
+
     /** Play Store 출시 후 업데이트 */
     const val PLAY_STORE_URL: String = "https://play.google.com/store/apps/details?id=com.unboundapex.octalink"
 }
